@@ -4,11 +4,17 @@
     <!-- IPTV streaming requires network access. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      usesCleartextTraffic=true is REQUIRED: most IPTV/Xtream panels serve over
+      http://…:8080, which Android 9+ blocks by default. Without it, provider
+      logins fail with an opaque exception. See MOBILE-BAUPLAN.md §10.1.
+    -->
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen">
+        android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen"
+        android:usesCleartextTraffic="true">
 
         <!--
           GameActivity is provided by the `android-game-activity` Rust crate

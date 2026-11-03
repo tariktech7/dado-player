@@ -493,7 +493,7 @@ Icon (D7), Splash, APK/AAB, `arm64-v8a`, Versionierung, „Über"-Seite mit Vers
 **Nicht anfassen / nicht portieren:**
 - [ ] `src/mpv.rs`, `src/video.rs`, `src/sys.rs` — Windows-spezifisch
 - [ ] `src/demo.rs` — nur Dev-Daten
-- [ ] `Cargo.toml`, `.cargo/config.toml`, `target/`, `dist/` — Desktop-Build
+- [ ] `Cargo.toml`, `.cargo/config.toml` — **angepasst** für den Android-cdylib-Build (siehe §15); `target/`, `dist/` bleiben reine Desktop-Build-Artefakte
 
 **Vor dem ersten Commit klären:**
 - [ ] Stack-Entscheidung (§5) mit dem Nutzer
@@ -502,3 +502,44 @@ Icon (D7), Splash, APK/AAB, `arm64-v8a`, Versionierung, „Über"-Seite mit Vers
 - [ ] Ist iOS wirklich geplant? (ändert die Stack-Wahl, nicht das Design)
 
 **Definition of Done für v1.0 Mobile:** M0–M7 abgehakt, Paritätstabelle aus §2 vollständig, auf einem echten Gerät mit einem echten Provider getestet, kein Crash in 30 Minuten Nutzung, APK < 60 MB.
+
+---
+
+## 15. Mobile-Stand: Rust/egui-Port (Abweichung von §5)
+
+> **Entscheidung (mit Nutzer geklärt):** Statt der in §5 empfohlenen Flutter-Variante
+> wurde der **bestehende Rust/egui-Desktop-Code portiert** (kein Rewrite). Die
+> Wiedergabe-Engine bleibt **libmpv** — auf Android jedoch via Rust-FFI
+> (`libloading` + `android-surface`), nicht über Flutters `media_kit`. Provider-
+> Streams verhalten sich damit identisch zum Desktop (§4 nennt libmpv für Android
+> ohnehin als Option; hier nur als Rust-FFI statt Flutter-Binding).
+
+**Was das für §3–§9 bedeutet:**
+- Die Feature-Parität (§2) wird über die *bestehende* `src/`-Struktur erreicht.
+  §3–§9 bleiben als Verhaltens-Vorgabe voll gültig.
+- `src/mpv.rs`, `src/video.rs`, `src/sys.rs` sind **doch portabel** gemacht worden
+  (plattform-neutral via `cfg(...)` + `VideoSurface`-Enum in `src/platform/`),
+  statt — wie in §4 behauptet — weggeworfen. `src/platform/{windows,android,ios}/`
+  kapselt die OS-spezifika; `app.rs` greift plattformneutral zu.
+
+**APK-Bau (CI-only, siehe `.github/workflows/android-apk.yml` + `android/README.md`):**
+- `cargo ndk` → `libdadoplayer.so` (arm64-v8a) + Gradle → APK.
+- `libmpv.so` **samt ffmpeg/c++-Deps** wird im CI automatisch aus dem gepinnten
+  mpv-android Release-APK (arm64-v8a) extrahiert (dlopen braucht die DT_NEEDED-
+  Partner, nicht nur libmpv.so).
+
+**Bereits erledigt (Scaffold):**
+- ✅ Echtes Gradle-8.9-Wrapper, `GameActivity.java`-Glue, `androidx.games:games-activity:2.0.2`.
+- ✅ `android:usesCleartextTraffic="true"` im Manifest (§10.1 — sonst scheitern HTTP-Logins still).
+- ✅ `INTERNET`-Permission (§10.2).
+- ⬜ `store.rs`: Android-Speicherpfade (`filesDir`, §6.1) noch nicht angebunden
+  (nutzt aktuell noch die `directories`-Crate → Windows-Pfade). Muss vor M1 angepasst werden.
+- ⬜ `assets/icon.png` → echtes Launcher-Icon/Banner (aktuell Platzhalter-Vektor).
+- ⬜ Laufzeit-Verhalten aus §10 (Lifecycle, Audio-Fokus, Keep-Screen-On, Bilder-LRU)
+  und M1–M7 sind noch nicht umgesetzt — derzeit steht nur das build-fähige Gerüst.
+
+**Korrektur zu §14 "Nicht anfassen":** `Cargo.toml` und `.cargo/config.toml` wurden
+**bewusst** für den Android-cdylib-Build erweitert (zusätzliches `[lib]` cdylib,
+`android-activity`/`ndk`-Deps, `reqwest` auf `rustls-tls` statt openssl). Sie sind
+Teil des Ports, nicht nur Desktop-Build. `target/` und `dist/` bleiben reine
+Desktop-Artefakte.
