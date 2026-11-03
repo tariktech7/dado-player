@@ -1,0 +1,46 @@
+[package]
+name = "dado-player"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "Dado-Player"
+path = "src/main.rs"
+
+# Android baut diese Crate als `cdylib` -> `libdadoplayer.so` (von cargo ndk in
+# die APK-JNI-Libs kopiert). `rlib` wird von der Desktop-Binary genutzt.
+[lib]
+name = "dadoplayer"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+eframe = "0.27"
+egui = "0.27"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "5"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
+anyhow = "1"
+chrono = "0.4"
+base64 = "0.22"
+libloading = "0.8"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Must match the versions pulled in by `winit`'s `android-game-activity`
+# feature (winit 0.29.15 -> android-activity 0.5.x / ndk 0.8.x). A mismatch
+# would link two copies of `android-activity` and break the `android_main`
+# FFI ABI.
+android-activity = "0.5"
+ndk = "0.8"
+eframe = { version = "0.27", features = ["android-game-activity", "glow"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

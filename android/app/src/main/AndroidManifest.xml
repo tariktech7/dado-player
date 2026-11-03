@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- IPTV streaming requires network access. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen">
+
+        <!--
+          GameActivity is provided by the `android-game-activity` Rust crate
+          (verified by the architect for eframe 0.27.2 + glow renderer).
+          The matching Java class MUST be present - see
+          android/app/src/main/java/android/app/README.md (TODO glue).
+        -->
+        <activity
+            android:name="android.app.GameActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:launchMode="singleTask"
+            android:screenOrientation="fullSensor">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Name of the Rust shared library (without "lib" prefix / ".so" suffix).
+              Must match the file produced by cargo-ndk, i.e. libdadoplayer.so.
+              See android/README.md ("Rust .so naming").
+            -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="dadoplayer" />
+
+            <!-- GameActivity depth buffer (0 = disabled, recommended for egui). -->
+            <meta-data
+                android:name="android.app.game_activity_handle_depth_buffer"
+                android:value="0" />
+        </activity>
+    </application>
+</manifest>

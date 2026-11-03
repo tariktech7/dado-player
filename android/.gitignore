@@ -1,0 +1,15 @@
+# Local SDK path (generated in CI from ANDROID_HOME)
+local.properties
+
+# Gradle / build artifacts
+.gradle/
+build/
+app/build/
+captures/
+
+# Signed outputs
+app/release/
+
+# Signing material - never commit
+*.jks
+*.keystore

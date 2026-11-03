@@ -1,0 +1,67 @@
+plugins {
+    // Android Gradle Plugin. 8.7.0 requires Gradle 8.9+.
+    id 'com.android.application' version '8.7.0'
+}
+
+android {
+    namespace "com.tarik.dadoplayer"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.tarik.dadoplayer"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+
+        // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the
+        // prebuilt libmpv.so fetched from mpv-android). Restricting ABIs here keeps
+        // the APK consistent across our own .so and the AndroidX games-activity
+        // native lib, and avoids mixing in unused x86_64/armeabi-v7a libs.
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    buildTypes {
+        release {
+            // Signing is done post-build via r0adkll/sign-android-release in CI,
+            // so no signingConfig is configured here (keys stay in GitHub Secrets).
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    // The Rust cdylib (.so) is placed here by `cargo ndk` during CI.
+    // This is the standard jniLibs location, declared explicitly for clarity.
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // No NDK block required: the prebuilt .so files are consumed directly from
+    // jniLibs. (If you later compile C/C++ inside the Gradle project, add ndk {}.)
+    packagingOptions {
+        // libmpv.so / libdadoplayer.so are loaded at runtime via the Rust glue.
+        doNotStrip "**/*.so"
+    }
+}
+
+dependencies {
+    // Bridges the AndroidX Games Activity to the Rust `android_main` entry
+    // point. Provides both the Java `GameActivity` base class (subclassed by
+    // android/app/src/main/java/android/app/GameActivity.java) and the native
+    // `libandroid_game_activity.so` that loads `libdadoplayer.so`.
+    // Version 2.0.2 is the one aligned with `android-activity` 0.5's native glue
+    // (newer 3.x/4.x releases changed the native ABI and are not compatible).
+    implementation 'androidx.games:games-activity:2.0.2'
+}

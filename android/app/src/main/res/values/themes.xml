@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Fullscreen, no title bar. GameActivity extends the framework Activity,
+      so a framework Material theme is appropriate for minSdk 24.
+    -->
+    <style name="Theme.DadoPlayer.NoTitleBar.Fullscreen" parent="android:Theme.Material.NoTitleBar.Fullscreen" />
+</resources>
