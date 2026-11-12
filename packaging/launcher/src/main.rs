@@ -877,13 +877,38 @@ fn show_error(msg: &str) {
 // App launch
 // ---------------------------------------------------------------------------
 fn spawn_app(payload: &Path) -> Result<(), String> {
+    let stage = tempfile::Builder::new().prefix("dado-update-").tempdir()
+        .map_err(|e| format!("Temporärer Ordner: {e}"))?;
     let status = std::process::Command::new(payload)
+        .env("DADO_UPDATE_DIR", stage.path())
         .current_dir(payload.parent().unwrap())
-        .status();
-    match status {
-        Ok(s) => std::process::exit(s.code().unwrap_or(0)),
-        Err(e) => Err(format!("Start des extrahierten Programms fehlgeschlagen: {e}")),
+        .status().map_err(|e| format!("Player starten: {e}"))?;
+    let update = stage.path().join("verified.exe");
+    if status.success() && update.is_file() {
+        install_update(&update).map_err(|e| format!("Portables Update: {e}"))?;
     }
+    drop(stage);
+    std::process::exit(status.code().unwrap_or(1))
+}
+
+fn install_update(update: &Path) -> std::io::Result<()> {
+    let exe = std::env::current_exe()?;
+    let parent = exe.parent().unwrap();
+    // Copy to the destination volume before attempting to rename the running launcher.
+    let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+    std::io::copy(&mut std::fs::File::open(update)?, staged.as_file_mut())?;
+    staged.as_file().sync_all()?;
+    let backup = exe.with_extension("exe.previous");
+    std::fs::rename(&exe, &backup)?;
+    if let Err(error) = staged.persist_noclobber(&exe) {
+        std::fs::rename(&backup, &exe)?;
+        return Err(error.error);
+    }
+    if let Err(error) = std::process::Command::new(&exe).spawn() {
+        std::fs::rename(&backup, &exe)?;
+        return Err(error);
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -975,5 +1000,52 @@ fn main() {
     if let Err(msg) = run() {
         show_error(&msg);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    use std::process::Command;
+
+    // Run the production replacement routine against an executing copy of this
+    // harness, so Windows image locks and the original filename are exercised.
+    #[test]
+    fn update_child() {
+        if let Some(candidate) = std::env::var_os("DADO_TEST_CANDIDATE") {
+            let result = install_update(Path::new(&candidate));
+            assert_eq!(result.is_ok(), std::env::var_os("DADO_EXPECT_SUCCESS").is_some());
+        }
+    }
+
+    #[test]
+    fn replaces_a_running_launcher_and_restores_it_on_restart_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("Dado Player.exe");
+        let candidate = dir.path().join("candidate.exe");
+        let marker = dir.path().join("started.txt");
+        let original = std::fs::read(std::env::current_exe().unwrap()).unwrap();
+        std::fs::write(&exe, &original).unwrap();
+        std::fs::write(&candidate, b"invalid executable for rollback test").unwrap();
+        let child = |success: bool| {
+            let mut command = Command::new(&exe);
+            command.args(["--exact","update_tests::update_child"])
+                .env("DADO_TEST_CANDIDATE", &candidate).env("DADO_TEST_MARKER", &marker);
+            if success { command.env("DADO_EXPECT_SUCCESS","1"); }
+            assert!(command.status().unwrap().success());
+        };
+        child(false);
+        assert_eq!(std::fs::read(&exe).unwrap(),original);
+        let source = dir.path().join("replacement.rs");
+        std::fs::write(&source, r#"fn main(){std::fs::write(std::env::var_os("DADO_TEST_MARKER").unwrap(),b"started").unwrap();}"#).unwrap();
+        assert!(Command::new("rustc").arg(&source).arg("-o").arg(&candidate).status().unwrap().success());
+        child(true);
+        for _ in 0..100 {
+            if marker.is_file() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(marker.is_file());
+        assert_eq!(std::fs::read(exe.with_extension("exe.previous")).unwrap(), original);
+        assert_eq!(std::fs::read(exe).unwrap(), std::fs::read(candidate).unwrap());
     }
 }

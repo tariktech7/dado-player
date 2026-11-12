@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 # Pure-Rust zlib inflater (no C toolchain needed). Cached offline.
 miniz_oxide = "0.8"
+tempfile = "3"
 
 # NOTE: the few Win32 calls we need (CreateWindowExW, DrawTextW, MessageBoxW,
 # ...) are declared as raw `extern "system"` FFI against user32/gdi32 below.

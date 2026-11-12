@@ -245,7 +245,9 @@ if [ "$MODE" = "ipa" ]; then
     fi
 
     ( cd "$STAGE" && zip -qry packaged.ipa Payload && unzip -tq packaged.ipa )
-    mv "$STAGE/packaged.ipa" "$ROOT/$IPA"
+    mkdir -p "$ROOT/Releases"
+    mv "$STAGE/packaged.ipa" "$ROOT/Releases/$IPA"
+    cp "$ROOT/Releases/$IPA" "$ROOT/$IPA"
     rm -rf "$STAGE"
 
     echo "==> $IPA"

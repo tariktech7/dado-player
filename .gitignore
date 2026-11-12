@@ -56,3 +56,6 @@ Dado-Player-startup.log
 # ignored, so the launcher's cache was one `git add -A` away from being
 # committed as ~57 files of build noise.
 /packaging/launcher/target/
+
+/Releases/
+__pycache__/

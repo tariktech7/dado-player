@@ -211,12 +211,17 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
                 RichText::new("Dado-Player").size(15.0).strong(),
             ));
             ui.add(egui::Label::new(
-                RichText::new("Version 0.3 · Rust + libmpv · keine Werbung, keine Telemetrie")
-                    .size(11.0)
-                    .weak(),
+                RichText::new(format!(
+                    "Version {} · Rust + libmpv",
+                    include_str!("../../windows/VERSION").trim()
+                ))
+                .size(11.0)
+                .weak(),
             ));
         });
     });
+    #[cfg(target_os = "windows")]
+    crate::platform::windows::update::show(ui);
     ui.add_space(4.0);
     ui.add(egui::Label::new(
         RichText::new("Änderungen werden automatisch gespeichert.")

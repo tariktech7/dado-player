@@ -2,6 +2,7 @@
 
 pub mod entry;
 pub mod sys;
+pub mod update;
 pub mod video_surface;
 
 use eframe::Frame;

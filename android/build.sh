@@ -83,7 +83,9 @@ fi
 echo "==> versionCode / package"
 "$BT/aapt.exe" dump badging "$APK_IN" 2>/dev/null | grep -iE "package:|versionCode" || true
 
-cp "$APK_IN" Dado-Player-arm64-debug.apk
+mkdir -p Releases
+cp "$APK_IN" Releases/Dado-Player-arm64-debug.apk
+cp Releases/Dado-Player-arm64-debug.apk Dado-Player-arm64-debug.apk
 echo "==> Dado-Player-arm64-debug.apk"
 md5sum Dado-Player-arm64-debug.apk
 ls -la Dado-Player-arm64-debug.apk
