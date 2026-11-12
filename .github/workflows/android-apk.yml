@@ -74,6 +74,8 @@ jobs:
 
       - name: Set up Android SDK (cmdline-tools)
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Ensure sdkmanager is on PATH
         run: echo "${ANDROID_HOME}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
@@ -112,7 +114,7 @@ jobs:
 
       - name: Build Rust shared library (.so) via cargo-ndk
         # Output is written directly into the Gradle jniLibs source directory.
-        run: cargo ndk -t arm64-v8a -o ./android/app/src/main/jniLibs build --release
+        run: cargo ndk -t arm64-v8a -o ./android/app/src/main/jniLibs build --locked --release --lib
 
       # ---- libmpv.so + ffmpeg/c++ deps (arm64-v8a) --------------------------
       # Pull a version-pinned, prebuilt libmpv and its runtime dependencies
@@ -205,6 +207,8 @@ jobs:
 
       - name: Set up Android SDK (cmdline-tools)
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Ensure sdkmanager is on PATH
         run: echo "${ANDROID_HOME}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
@@ -242,7 +246,7 @@ jobs:
         run: cargo install cargo-ndk
 
       - name: Build Rust shared library (.so) via cargo-ndk
-        run: cargo ndk -t arm64-v8a -o ./android/app/src/main/jniLibs build --release
+        run: cargo ndk -t arm64-v8a -o ./android/app/src/main/jniLibs build --locked --release --lib
 
       # ---- libmpv.so + ffmpeg/c++ deps (arm64-v8a) --------------------------
       # Keep release packaging identical to debug: fetch the pinned official
