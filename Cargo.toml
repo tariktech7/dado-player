@@ -21,6 +21,9 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 # `platform::ios` and the AVPlayer adapter from rotting on machines without an Apple SDK.
 ios-check = []
 
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+ring = "0.17"
+
 [dependencies]
 egui = "0.27"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }

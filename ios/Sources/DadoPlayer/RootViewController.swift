@@ -90,6 +90,7 @@ final class RootViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.isOpaque = false
+        view.isUserInteractionEnabled = false // Touches belong to the winit surface.
         view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
 
         let center = NotificationCenter.default

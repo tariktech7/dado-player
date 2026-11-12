@@ -79,6 +79,24 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
 
     private static GameActivity sSelf;
 
+    public static int mobileUpdate(int install) {
+        GameActivity activity = sSelf;
+        if (activity == null) return 0;
+        try {
+            android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+            if (install == 1) {
+                java.io.File apk = new java.io.File(activity.getFilesDir(), "updates/Dado-Player.apk");
+                android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(activity, activity.getPackageName() + ".updates", apk);
+                intent.setDataAndType(uri, "application/vnd.android.package-archive");
+                intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } else {
+                intent.setData(android.net.Uri.parse("https://github.com/tariktech7/dado-player/releases/latest"));
+            }
+            activity.startActivity(intent);
+            return 1;
+        } catch (RuntimeException e) { return 0; }
+    }
+
     // ---- external players -------------------------------------------------
     // Wire codes must match PlayerBackend::android_code() in src/types.rs.
     private static final int BACKEND_MX = 0;

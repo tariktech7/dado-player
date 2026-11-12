@@ -257,3 +257,35 @@ pub fn text_focus() -> bool {
 pub fn ime_inset() -> f64 {
     env().ime
 }
+
+#[cfg(target_os = "ios")]
+mod native_fields {
+    use std::ffi::{c_char, CStr, CString};
+    use std::sync::Mutex;
+    static RESULT: Mutex<Option<(u64, String)>> = Mutex::new(None);
+    extern "C" {
+        fn dado_host_edit(id: u64, title: *const c_char, value: *const c_char, kind: i32);
+    }
+    pub fn edit(id: u64, title: &str, value: &str, kind: i32) {
+        if let (Ok(t), Ok(v)) = (CString::new(title), CString::new(value)) {
+            unsafe { dado_host_edit(id, t.as_ptr(), v.as_ptr(), kind) }
+        }
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn dado_app_edited(id: u64, value: *const c_char) {
+        if !value.is_null() {
+            *RESULT.lock().unwrap() =
+                Some((id, CStr::from_ptr(value).to_string_lossy().into_owned()));
+        }
+    }
+    pub fn edited(id: u64) -> Option<String> {
+        let mut slot = RESULT.lock().unwrap();
+        if slot.as_ref().is_some_and(|(key, _)| *key == id) {
+            slot.take().map(|(_, v)| v)
+        } else {
+            None
+        }
+    }
+}
+#[cfg(target_os = "ios")]
+pub use native_fields::{edit, edited};

@@ -965,6 +965,7 @@ dependencies = [
  "ndk",
  "raw-window-handle 0.6.2",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "tokio",

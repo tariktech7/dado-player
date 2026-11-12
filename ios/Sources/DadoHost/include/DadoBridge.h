@@ -111,6 +111,9 @@ int32_t dado_host_eof(void);
 int64_t dado_host_width(void);
 int64_t dado_host_height(void);
 double  dado_host_fps(void);
+void dado_app_edited(uint64_t id, const char *value);
+void dado_host_edit(uint64_t id, const char *title, const char *value, int32_t kind);
+void dado_host_mobile_update(int32_t install);
 
 #ifdef __cplusplus
 }

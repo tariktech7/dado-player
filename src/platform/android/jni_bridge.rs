@@ -771,3 +771,25 @@ pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativeOnTvDevice(
 ) {
     TV_DEVICE.store(is_tv != 0, Ordering::Relaxed);
 }
+
+pub fn mobile_update(install: bool) -> anyhow::Result<()> {
+    use anyhow::{ensure, Context};
+    let app = super::entry::app_handle().context("Android-Activity fehlt")?;
+    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }?;
+    let mut env = vm.attach_current_thread()?;
+    let class = ACTIVITY_CLASS.get().context("Activity-Klasse fehlt")?;
+    let result = env.call_static_method(
+        class,
+        "mobileUpdate",
+        "(I)I",
+        &[jni::objects::JValue::Int(install as i32)],
+    );
+    if result.is_err() {
+        let _ = env.exception_clear();
+    }
+    ensure!(
+        result?.i()? == 1,
+        "Installer oder Browser konnte nicht geöffnet werden"
+    );
+    Ok(())
+}

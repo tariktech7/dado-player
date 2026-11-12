@@ -20,6 +20,8 @@ mod player;
 mod search;
 mod series;
 mod settings;
+#[cfg(any(target_os = "ios", target_os = "android"))]
+mod update;
 
 use egui::{Align, Layout as EguiLayout, Rect};
 use egui::{Context, Frame, TopBottomPanel};

@@ -201,6 +201,8 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         return;
                     }
 
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
+                    super::update::show(ui);
                     // ---- about ----
                     components::section(ui, "Über");
                     ui.label(

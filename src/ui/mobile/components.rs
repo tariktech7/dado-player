@@ -1079,6 +1079,26 @@ pub fn field(
         te = te.password(!*show_password);
     }
     let resp = ui.add_sized([text_w, 24.0], te);
+    #[cfg(target_os = "ios")]
+    {
+        let id = resp.id.value();
+        if let Some(value) = crate::platform::ios::bridge::edited(id) {
+            *text = value;
+        }
+        if resp.clicked() || resp.gained_focus() {
+            let kind = match kb {
+                Kb::Url => 1,
+                Kb::Password => 2,
+                _ => 0,
+            };
+            crate::platform::ios::bridge::edit(
+                id,
+                if label.is_empty() { hint } else { label },
+                text,
+                kind,
+            );
+        }
+    }
     // Focus ring: with no hover on touch, a filled-but-identical box is the only
     // feedback the user gets that the field is the one the keyboard is typing
     // into.
