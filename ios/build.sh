@@ -110,7 +110,8 @@ echo "==> cargo build ($TARGET, release, lib)"
 # `cp` below, so the copy is never reached. The `rm` actively hurt, because
 # cargo does not notice a deleted final artifact and reports "Finished" without
 # relinking — the second local run would then fail with "was not produced".
-cargo build --locked --release --target "$TARGET" --lib
+export IPHONEOS_DEPLOYMENT_TARGET=15.0
+cargo rustc --locked --release --target "$TARGET" --lib --crate-type staticlib
 
 if [ ! -f "$LIB" ]; then
     echo "!! $LIB was not produced" >&2
