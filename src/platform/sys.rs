@@ -1,13 +1,15 @@
-//! Plattform-System-Fassade.
+//! Platform system facade.
 //!
-//! Reale Implementierungen liegen in den OS-spezifischen Modulen
-//! (`windows::sys`); Nicht-Windows-Ziele sind vorerst Stubs und werden im
-//! jeweiligen Port ausgefüllt.
+//! Real implementations live in the OS modules (`windows::sys`, `ios::sys`).
+//! Targets without one fall back to inert stubs so shared code still compiles.
 
 #[cfg(target_os = "windows")]
 pub use super::windows::sys::*;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "ios")]
+pub use super::ios::sys::*;
+
+#[cfg(not(any(target_os = "windows", target_os = "ios")))]
 pub mod stubs {
     pub fn system_dark() -> bool {
         true
@@ -20,5 +22,5 @@ pub mod stubs {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "ios")))]
 pub use stubs::*;

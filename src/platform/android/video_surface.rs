@@ -12,6 +12,10 @@ impl VideoSurface {
 
     pub fn position(&self, _x: i32, _y: i32, _w: i32, _h: i32) {}
 
+    /// Android draws the video through its own GL shape inside egui, so the
+    /// chrome is already painted in front — no native window region needed.
+    pub fn set_overlay_cutouts(&self, _holes: &[(i32, i32, i32, i32)]) {}
+
     pub fn hide(&self) {}
 
     /// Native handle (ANativeWindow-Pointer als `isize`) für libmpv.

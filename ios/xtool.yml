@@ -1,0 +1,17 @@
+# xtool.yml — packaging config for xtool (https://github.com/xtool-org/xtool).
+#
+# xtool builds this SwiftPM package into an .app, signs it and installs it on a
+# device. There is no Xcode project anywhere in this directory.
+#
+# Schema note (verified against Sources/PackLib/PackSchema.swift in xtool):
+# the accepted top-level keys are version, orgID, bundleID, product, infoPath,
+# entitlementsPath, iconPath, resources, extensions, skipLSP. There is NO
+# `displayName` key — the home-screen name comes from CFBundleDisplayName in the
+# Info.plist referenced via `infoPath`.
+
+version: 1
+bundleID: com.tarik.dadoplayer
+
+# Info.plist carries CFBundleDisplayName, ATS (plain-HTTP IPTV panels) and the
+# audio background mode. probe/build_ios.sh --ipa copies it into the bundle.
+infoPath: Info.plist

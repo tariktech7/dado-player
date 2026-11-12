@@ -4,5 +4,33 @@
       Fullscreen, no title bar. GameActivity extends the framework Activity,
       so a framework Material theme is appropriate for minSdk 24.
     -->
-    <style name="Theme.DadoPlayer.NoTitleBar.Fullscreen" parent="android:Theme.Material.NoTitleBar.Fullscreen" />
+    <!--
+      GameActivity extends androidx.appcompat.app.AppCompatActivity, which
+      REQUIRES a Theme.AppCompat descendant (a framework theme would throw
+      "You need to use a Theme.AppCompat theme" at startup). Keep the
+      fullscreen / no-action-bar look the player expects.
+    -->
+    <style name="Theme.DadoPlayer.NoTitleBar.Fullscreen" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowContentOverlay">@null</item>
+        <!--
+          NOT windowFullscreen: the status bar stays visible so the clock is
+          readable on the Live screen (EPG rows are time-based) and so the app
+          looks like an app rather than a kiosk. The surface still spans the
+          whole display and the UI pads itself with `Layout::top_inset`.
+        -->
+        <!--
+          shortEdges: the render surface spans the full display height, so the
+          cutout/status band is ours to paint. Without it GameActivity insets
+          the window at the top and a black seam appears above our #0D1015
+          background.
+        -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!--
+          Paint the system bars in the page colour so the status band is not a
+          separate black slab above the UI. The bars are dark, so the default
+          light icons stay legible.
+        -->
+        <item name="android:statusBarColor">#0D1015</item>
+        <item name="android:navigationBarColor">#0D1015</item>
+    </style>
 </resources>

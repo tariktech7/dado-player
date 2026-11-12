@@ -6,13 +6,15 @@
 use crate::platform::VideoSurface;
 use std::sync::Once;
 
-use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::Graphics::Gdi::CreateSolidBrush;
+use windows_sys::Win32::Foundation::{HWND, RECT};
+use windows_sys::Win32::Graphics::Gdi::{
+    CombineRgn, CreateRectRgn, CreateSolidBrush, DeleteObject, SetWindowRgn, RGN_DIFF,
+};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, SetWindowPos, ShowWindow,
-    CS_HREDRAW, CS_VREDRAW, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WNDCLASSW,
-    WS_CHILD, WS_CLIPCHILDREN,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClassNameW, GetClientRect, RegisterClassW,
+    SetWindowPos, ShowWindow, CS_HREDRAW, CS_VREDRAW, SWP_NOACTIVATE, SWP_NOZORDER, SWP_SHOWWINDOW,
+    SW_HIDE, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
 };
 
 fn wide(s: &str) -> Vec<u16> {
@@ -46,7 +48,12 @@ fn ensure_class() {
 }
 
 impl VideoSurface {
-    pub fn create(parent: HWND) -> Option<Self> {
+    /// `parent` is the application's own main HWND. It is only handed to the
+    /// OS (`CreateWindowExW`), never dereferenced by Rust code, and the only
+    /// caller lives inside this crate — so `pub(crate)` is both sufficient and
+    /// avoids Clippy's `not_unsafe_ptr_arg_deref` false positive for a public
+    /// function taking a raw window handle.
+    pub(crate) fn create(parent: HWND) -> Option<Self> {
         ensure_class();
         let class = class_name();
         let title = wide("");
@@ -89,10 +96,72 @@ impl VideoSurface {
         }
     }
 
+    /// Clip the *visible* part of the video window WITHOUT changing its size.
+    ///
+    /// This HWND is a `WS_CHILD` and therefore paints ON TOP of the egui
+    /// parent surface. mpv re-fits and re-scales the picture whenever the
+    /// window size changes, so the old approach (shrink the HWND whenever
+    /// player chrome appeared, hid or a menu opened) made the image jump on
+    /// every UI action. Now `position_video()` keeps one fixed rect for the
+    /// whole playback and the chrome is expressed as holes in the window
+    /// region: the parent's egui pixels show through there while mpv keeps
+    /// rendering the frame at exactly one scale.
+    ///
+    /// `holes` are `(x, y, w, h)` in HWND CLIENT coordinates (physical
+    /// pixels), relative to the video rect's top-left. An empty slice removes
+    /// the region and restores the full, unclipped surface.
+    pub fn set_overlay_cutouts(&self, holes: &[(i32, i32, i32, i32)]) {
+        let VideoSurface::Hwnd(hwnd) = self;
+        let hwnd = *hwnd as HWND;
+        unsafe {
+            if holes.is_empty() {
+                // A NULL region restores the whole rectangle; the system frees
+                // the previous HRGN itself.
+                SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
+                return;
+            }
+            let mut rc = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            if GetClientRect(hwnd, &mut rc) == 0 || rc.right <= 0 || rc.bottom <= 0 {
+                return;
+            }
+            let full = CreateRectRgn(0, 0, rc.right, rc.bottom);
+            if full.is_null() {
+                return;
+            }
+            for &(hx, hy, hw, hh) in holes {
+                if hw <= 0 || hh <= 0 {
+                    continue;
+                }
+                let cut = CreateRectRgn(hx, hy, hx.saturating_add(hw), hy.saturating_add(hh));
+                if cut.is_null() {
+                    continue;
+                }
+                // RGN_DIFF = full - cut. `CombineRgn` explicitly allows the
+                // destination to also be one of its sources.
+                CombineRgn(full, full, cut, RGN_DIFF);
+                DeleteObject(cut);
+            }
+            // After a successful SetWindowRgn the SYSTEM owns `full` and frees
+            // it together with the window. Deleting it here would corrupt the
+            // live region; only clean up when the call failed.
+            if SetWindowRgn(hwnd, full, 1) == 0 {
+                DeleteObject(full);
+            }
+        }
+    }
+
     pub fn hide(&self) {
         let VideoSurface::Hwnd(hwnd) = self;
         let hwnd = *hwnd as HWND;
         unsafe {
+            // Drop any popover cutout before hiding, so the next stream starts
+            // with a full, unclipped surface.
+            SetWindowRgn(hwnd, std::ptr::null_mut(), 0);
             ShowWindow(hwnd, SW_HIDE);
         }
     }
@@ -108,6 +177,24 @@ impl Drop for VideoSurface {
     fn drop(&mut self) {
         let VideoSurface::Hwnd(h) = self;
         let h = *h as HWND;
+        // Safety net: only ever destroy windows this module created. Wrapping a
+        // foreign handle (e.g. the egui host window) in a `VideoSurface` used to
+        // make `Drop` call `DestroyWindow` on the app's own main window, which
+        // silently killed the surface/GL context a frame later.
+        let mut buf = [0u16; 64];
+        let len = unsafe { GetClassNameW(h, buf.as_mut_ptr(), buf.len() as i32) };
+        if len <= 0 {
+            return;
+        }
+        // `class_name()` ends in a NUL; compare against its exact character
+        // count. A foreign window class can be longer than our buffer/name, so
+        // an unguarded `class_name()[..len]` would panic - and with
+        // `panic = "abort"` that would kill the whole player.
+        let class = class_name();
+        let len = len as usize;
+        if len != class.len() - 1 || len > buf.len() || buf[..len] != class[..len] {
+            return;
+        }
         unsafe {
             DestroyWindow(h);
         }

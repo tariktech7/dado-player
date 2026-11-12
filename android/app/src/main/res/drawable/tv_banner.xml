@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder TV launcher banner (320x180 dp). A vector drawable cannot
+     render text, so this is a simple dark panel with an accent-blue block and
+     a white play triangle. Replace with real artwork before a store release. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Dark background. -->
+    <path
+        android:fillColor="#0D1015"
+        android:pathData="M0,0 H320 V180 H0 Z" />
+    <!-- Accent-blue block, inset to leave a dark frame. -->
+    <path
+        android:fillColor="#3A6FE0"
+        android:pathData="M24,24 H296 V156 H24 Z" />
+    <!-- White play triangle, centered on the banner. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M132,62 L132,118 L188,90 Z" />
+</vector>

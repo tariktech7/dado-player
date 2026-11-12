@@ -1,19 +1,20 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ProfileKind {
+    #[default]
     Xtream,
     M3u,
 }
 
-impl Default for ProfileKind {
-    fn default() -> Self {
-        ProfileKind::Xtream
-    }
-}
-
 /// A saved connection (the user brings their own provider).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Debug` is implemented by hand: the derived version printed the plaintext
+/// password and the full M3U URL (which usually embeds `username`/`password`
+/// as query parameters). Crash dumps, `log::debug!` output and support
+/// screenshots must never contain provider credentials.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub id: String,
     pub name: String,
@@ -27,6 +28,22 @@ pub struct Profile {
     pub m3u_file: String,
     #[serde(default)]
     pub last_channel: Option<String>,
+}
+
+impl fmt::Debug for Profile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Profile")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("kind", &self.kind)
+            .field("host", &self.host)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .field("m3u_url", &"<redacted>")
+            .field("m3u_file", &self.m3u_file)
+            .field("last_channel", &self.last_channel)
+            .finish()
+    }
 }
 
 impl Profile {
@@ -83,6 +100,41 @@ pub enum SettingsMode {
     Expert,
 }
 
+/// Which presentation the library screens use on a TV / set-top box.
+///
+/// `Auto` follows Android's `UiModeManager` (MOBILE-BAUPLAN §23.10). `Always`
+/// and `Never` are real user overrides: many Android TV boxes and HDMI sticks do
+/// not declare `android.software.leanback`, and a phone connected to a TV should
+/// stay touch-first. Keeping the override in settings also makes the 10-foot
+/// layout testable on a normal handset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TvMode {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl TvMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            TvMode::Auto => "Automatisch",
+            TvMode::Always => "Immer",
+            TvMode::Never => "Aus",
+        }
+    }
+    pub fn all() -> [TvMode; 3] {
+        [TvMode::Auto, TvMode::Always, TvMode::Never]
+    }
+    pub fn resolve(self, device_is_tv: bool) -> bool {
+        match self {
+            TvMode::Auto => device_is_tv,
+            TvMode::Always => true,
+            TvMode::Never => false,
+        }
+    }
+}
+
 /// One entry of the "recently watched" history that feeds the Continue view.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistEntry {
@@ -108,6 +160,110 @@ pub enum HwDec {
     D3d11va,
     Nvdec,
     Vulkan,
+}
+
+/// Which app actually plays the stream.
+///
+/// On Android the built-in libmpv build is deliberately conservative (it ships
+/// without several demuxers and hardware decoders), so Live-TS and series
+/// containers can fail while a normal `.mp4` movie plays fine. MX Player is the
+/// default because it brings its own codec set and works on the widest range of
+/// devices. VLC and the system chooser are real alternatives, not aliases, and
+/// the internal player stays selectable for offline/local test patterns.
+///
+/// `MxPlayer` MUST remain the `Default`: `Settings::player_backend` uses
+/// `#[serde(default)]`, so an old settings.json without the field resolves to
+/// this variant. Making `Mpv` the default again would silently restore the
+/// broken behaviour on every upgrade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum PlayerBackend {
+    /// MX Player (free `…ad`, falling back to Pro `…pro`).
+    #[default]
+    MxPlayer,
+    /// VLC for Android.
+    Vlc,
+    /// Android's resolver / chooser — any installed video player.
+    System,
+    /// Built-in libmpv. Also the only backend available on desktop.
+    Mpv,
+    /// MX Player integrated capability - embedded player without needing to install MX Player app.
+    MxPlayerIntegrated,
+    /// MX Player native integration capability - fallback for MX Player when not installed.
+    MxPlayerFallback,
+}
+
+impl PlayerBackend {
+    pub fn label(self) -> &'static str {
+        match self {
+            PlayerBackend::MxPlayer => "MX Player",
+            PlayerBackend::Vlc => "VLC",
+            PlayerBackend::System => "Systemauswahl",
+            PlayerBackend::Mpv => "Integriert",
+            PlayerBackend::MxPlayerIntegrated => "MX Player (integriert)",
+            PlayerBackend::MxPlayerFallback => "MX Player (Fallback)",
+        }
+    }
+    pub fn all() -> [PlayerBackend; 6] {
+        [
+            PlayerBackend::MxPlayer,
+            PlayerBackend::Vlc,
+            PlayerBackend::System,
+            PlayerBackend::Mpv,
+            PlayerBackend::MxPlayerIntegrated,
+            PlayerBackend::MxPlayerFallback,
+        ]
+    }
+    pub fn is_external(self) -> bool {
+        match self {
+            PlayerBackend::Mpv | PlayerBackend::MxPlayerIntegrated => false,
+            PlayerBackend::MxPlayerFallback => true,
+            _ => true,
+        }
+    }
+    /// Wire format for the JNI `openExternalPlayer` call. Keep in sync with the
+    /// `BACKEND_*` constants in GameActivity.java.
+    pub fn android_code(self) -> i32 {
+        match self {
+            PlayerBackend::MxPlayer => 0,
+            PlayerBackend::Vlc => 1,
+            PlayerBackend::System => 2,
+            PlayerBackend::Mpv => 3,
+            PlayerBackend::MxPlayerIntegrated => 4,
+            PlayerBackend::MxPlayerFallback => 5,
+        }
+    }
+}
+
+/// Xtream live streams are served under two different endpoints. `.ts` is a
+/// single continuous MPEG-TS stream; `.m3u8` is an HLS playlist that has to be
+/// fetched and whose segments are fetched again. Panels differ in which one
+/// they actually enable, and the stripped-down libmpv build used on Android
+/// handles raw TS far more reliably. TS is therefore the default, but HLS
+/// stays one tap away because some providers only publish the playlist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum LiveFormat {
+    #[default]
+    Ts,
+    Hls,
+}
+
+impl LiveFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            LiveFormat::Ts => "MPEG-TS (.ts)",
+            LiveFormat::Hls => "HLS (.m3u8)",
+        }
+    }
+    pub fn all() -> [LiveFormat; 2] {
+        [LiveFormat::Ts, LiveFormat::Hls]
+    }
+    /// File suffix used in `/live/<user>/<pass>/<id>.<ext>`.
+    pub fn extension(self) -> &'static str {
+        match self {
+            LiveFormat::Ts => "ts",
+            LiveFormat::Hls => "m3u8",
+        }
+    }
 }
 
 impl HwDec {
@@ -218,15 +374,51 @@ pub struct Settings {
     pub sub_size: f32,
     #[serde(default)]
     pub user_agent: String,
+    /// Verify the provider's TLS certificate for HLS/TS requests.
+    ///
+    /// Defaults to `false` on purpose: most Xtream panels terminate their
+    /// stream port (often a separate `https_port`) with a self-signed or
+    /// hostname-mismatched certificate. libmpv uses curl for those requests,
+    /// and curl aborts before the first byte when verification is on - the
+    /// player then just stays black with no visible error. Users of a panel
+    /// with a real certificate can turn verification back on in expert mode.
+    /// `#[serde(default)]` keeps older settings.json files working: they
+    /// simply get the tolerant behaviour.
+    #[serde(default)]
+    pub tls_verify: bool,
+    /// Which player backend to use for playback. MX Player is the default on
+    /// Android; the internal libmpv stays available as a fallback and is the
+    /// only backend on desktop. See `PlayerBackend` for why the default matters.
+    /// MX Player now supports multiple modes:
+    /// - MxPlayer: Standard MX Player app (requires installation)
+    /// - MxPlayerIntegrated: Embedded player capabilities (no app installation required)
+    /// - MxPlayerFallback: System fallback when MX Player is not available
+    #[serde(default)]
+    pub player_backend: PlayerBackend,
+    /// Container used to build Xtream live URLs. M3U playlists keep whatever
+    /// URL the playlist supplied; only Xtream channels are rebuilt.
+    #[serde(default)]
+    pub live_format: LiveFormat,
+    /// 10-foot TV layout: Auto follows the device, Always/Never override it.
+    #[serde(default)]
+    pub tv_mode: TvMode,
     /// Bumped when defaults change in a way that needs migrating old files.
     #[serde(default)]
     pub settings_version: u32,
 }
 
-fn default_cache() -> u64 { 45 }
-fn default_timeout() -> u64 { 20 }
-fn default_true() -> bool { true }
-fn default_sub_size() -> f32 { 55.0 }
+fn default_cache() -> u64 {
+    45
+}
+fn default_timeout() -> u64 {
+    20
+}
+fn default_true() -> bool {
+    true
+}
+fn default_sub_size() -> f32 {
+    55.0
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -247,7 +439,11 @@ impl Default for Settings {
             audio_normalize: false,
             sub_size: default_sub_size(),
             user_agent: String::new(),
-            settings_version: 1,
+            tls_verify: false,
+            player_backend: PlayerBackend::MxPlayer,
+            live_format: LiveFormat::Ts,
+            tv_mode: TvMode::Auto,
+            settings_version: 2,
         }
     }
 }
@@ -300,11 +496,16 @@ pub struct Category {
 pub struct Channel {
     pub id: u32,
     pub num: u32,
+    /// Optional provider timestamp for recently added channels.
+    pub added: Option<i64>,
     pub name: String,
     pub logo: String,
     pub category_id: String,
     pub epg_channel_id: String,
     pub stream_url: String,
+    /// M3U `radio="true"`: audio-only stream. The player then shows a radio
+    /// card instead of the video surface (IPTVnator parity).
+    pub radio: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -314,6 +515,8 @@ pub struct VodMovie {
     pub cover: String,
     pub category_id: String,
     pub rating: String,
+    /// Provider timestamp for sorting the newest titles first (Unix seconds).
+    pub added: Option<i64>,
     pub container_extension: String,
     pub stream_url: String,
     pub plot: String,
@@ -323,6 +526,8 @@ pub struct VodMovie {
 pub struct Series {
     pub id: u32,
     pub name: String,
+    /// Optional provider timestamp for recently added series.
+    pub added: Option<i64>,
     pub cover: String,
     pub category_id: String,
     pub plot: String,
@@ -347,6 +552,41 @@ pub struct EpgEntry {
     pub end: i64,
 }
 
+/// One of the six Xtream catalogue endpoints. Keeping the area identity (and
+/// not just an error string) lets the UI say *which* part of the library is
+/// incomplete and lets a retry re-request exactly the failed groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CatalogArea {
+    LiveCategories,
+    LiveStreams,
+    MovieCategories,
+    Movies,
+    SeriesCategories,
+    Series,
+}
+
+impl CatalogArea {
+    pub fn label(self) -> &'static str {
+        match self {
+            CatalogArea::LiveCategories => "Live-Kategorien",
+            CatalogArea::LiveStreams => "Senderliste",
+            CatalogArea::MovieCategories => "Film-Kategorien",
+            CatalogArea::Movies => "Filmliste",
+            CatalogArea::SeriesCategories => "Serien-Kategorien",
+            CatalogArea::Series => "Serienliste",
+        }
+    }
+}
+
+/// A non-fatal failure of a single catalogue endpoint. The message is already
+/// credential-safe (`client::network_error` / `api_json` never echo the URL).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogIssue {
+    pub area: CatalogArea,
+    pub message: String,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Library {
     /// Base URL used to build stream URLs (prefers the provider's https_port).
@@ -358,6 +598,23 @@ pub struct Library {
     pub movies: Vec<VodMovie>,
     pub series: Vec<Series>,
     pub loaded: bool,
+    /// Per-area load diagnostics. Empty lists are NOT recorded here: a provider
+    /// that legitimately has no series must not look like a broken login.
+    pub catalog_issues: Vec<CatalogIssue>,
+}
+
+impl Library {
+    /// Human-readable summary for the UI. Lists only genuinely failed areas.
+    pub fn catalog_issue_summary(&self) -> String {
+        if self.catalog_issues.is_empty() {
+            return String::new();
+        }
+        let names: Vec<&str> = self.catalog_issues.iter().map(|i| i.area.label()).collect();
+        format!(
+            "Teile des Katalogs konnten nicht geladen werden: {}.",
+            names.join(", ")
+        )
+    }
 }
 
 /// What the user is currently playing (kept tiny; sent to the player).
@@ -377,6 +634,47 @@ pub enum PlayKind {
     Episode,
 }
 
+/// A single selectable audio or subtitle track reported by mpv.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Track {
+    pub id: i64,
+    pub kind: String,  // "audio" | "sub"
+    pub lang: String,  // e.g. "de", "en"
+    pub title: String, // human title if present
+}
+
+impl Track {
+    /// Display label: "DE · German" / "EN" / "Track 2".
+    pub fn label(&self) -> String {
+        let mut s = String::new();
+        if !self.lang.is_empty() {
+            s.push_str(&self.lang.to_uppercase());
+        }
+        if !self.title.is_empty() {
+            if !s.is_empty() {
+                s.push_str(" · ");
+            }
+            s.push_str(&self.title);
+        }
+        if s.is_empty() {
+            s.push_str(&format!("Track {}", self.id));
+        }
+        s
+    }
+}
+
+/// Live stream / video metadata shown in the corner overlay.
+#[derive(Debug, Clone, Default)]
+pub struct StreamInfo {
+    pub width: i64,
+    pub height: i64,
+    pub fps: f64,
+    pub video_codec: String,
+    pub audio_codec: String,
+    /// Container format (mp4, mkv, ts, …); mostly meaningful for VOD/Series.
+    pub container: String,
+}
+
 /// Small helper to generate a unique id without extra deps.
 pub fn uuid_v4() -> String {
     let nanos = std::time::SystemTime::now()
@@ -387,4 +685,45 @@ pub fn uuid_v4() -> String {
     h ^= nanos as u64;
     h = h.wrapping_mul(0x0000_0100_0000_01b3);
     format!("{:016x}", h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_debug_never_leaks_credentials() {
+        let mut p = Profile::new("Mein Anbieter", ProfileKind::Xtream);
+        p.host = "http://panel.example:8080".to_string();
+        p.username = "alice".to_string();
+        p.password = "super-secret-42".to_string();
+        p.m3u_url =
+            "http://panel.example/get.php?username=alice&password=super-secret-42".to_string();
+
+        let rendered = format!("{:?}", p);
+        assert!(!rendered.contains("super-secret-42"), "{rendered}");
+        assert!(!rendered.contains("get.php"), "{rendered}");
+        assert!(rendered.contains("redacted"));
+        // Non-secret fields stay useful for diagnosing a bad profile.
+        assert!(rendered.contains("alice"));
+        assert!(rendered.contains("panel.example"));
+    }
+
+    #[test]
+    fn catalog_issue_summary_names_only_failed_areas() {
+        let mut lib = Library::default();
+        assert!(
+            lib.catalog_issue_summary().is_empty(),
+            "empty lists are not errors"
+        );
+
+        lib.catalog_issues.push(CatalogIssue {
+            area: CatalogArea::Series,
+            message: "Zeitüberschreitung".to_string(),
+            elapsed_ms: 20000,
+        });
+        let summary = lib.catalog_issue_summary();
+        assert!(summary.contains("Serienliste"), "{summary}");
+        assert!(!summary.contains("Senderliste"), "{summary}");
+    }
 }

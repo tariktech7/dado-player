@@ -2,14 +2,59 @@ use crate::types::{Profile, Settings};
 use anyhow::Result;
 use directories::ProjectDirs;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set when the most recent write to disk failed, cleared by the next one that
+/// succeeds. Read once per frame by the phone UI and shown as a banner.
+///
+/// It lives here rather than at the five `save_*` call sites because
+/// `write_json` is the single choke point they all share — one place, every
+/// file, and any future save inherits it. The alternative (a subtraction at ten
+/// call sites) is how a silent failure stays silent.
+static STORAGE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Did the last write fail? Call once per frame, not per write.
+pub fn storage_failed() -> bool {
+    STORAGE_FAILED.load(Ordering::Relaxed)
+}
 
 fn app_dir() -> PathBuf {
-    let dir = ProjectDirs::from("com", "Tarik", "Dado-Player")
-        .map(|d| d.config_dir().to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+    let resolved =
+        ProjectDirs::from("com", "Tarik", "Dado-Player").map(|d| d.config_dir().to_path_buf());
+    let dir = resolved.clone().unwrap_or_else(|| {
+        // A silent fallback to a directory that cannot be written is worse than
+        // an error: everything downstream looks like it worked. Say it once.
+        warn_fallback();
+        PathBuf::from(".")
+    });
+    log_resolved_once(&dir);
+    // The legacy project names are desktop-only. On Android there is no older
+    // install to migrate from, and resolving three project dirs per call is
+    // pointless work on a path that runs for every read and write.
+    #[cfg(not(target_os = "android"))]
     migrate_legacy(&dir);
     dir
+}
+
+/// Print the resolved data directory once, so a failed save can be diagnosed
+/// from logcat instead of guessed at.
+fn log_resolved_once(dir: &Path) {
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        eprintln!("dado: data dir = {}", dir.display());
+    }
+}
+
+fn warn_fallback() {
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        eprintln!(
+            "dado: no config directory could be resolved; falling back to the \
+             process working directory. Nothing will persist unless HOME or \
+             XDG_CONFIG_HOME is set (see jni_bridge::apply_storage_env)."
+        );
+    }
 }
 
 /// The app was renamed twice. Copy any existing data forward once so saved
@@ -46,18 +91,51 @@ fn migrate_legacy(new_dir: &PathBuf) {
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Option<T> {
-    std::fs::read(path)
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
+    // A missing file is the normal first-start case. A *corrupt* file is not:
+    // silently falling back to defaults used to look like "all my profiles are
+    // gone" with no clue in the log. Say so once, without echoing file contents
+    // (profiles.json contains plaintext credentials).
+    let bytes = std::fs::read(path).ok()?;
+    match serde_json::from_slice(&bytes) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            eprintln!(
+                "dado: {} contains invalid JSON; starting with defaults for this file",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            );
+            None
+        }
+    }
 }
 
 fn write_json<T: serde::Serialize + ?Sized>(path: &PathBuf, value: &T) -> Result<()> {
+    let r = write_json_inner(path, value);
+    // Every `save_*` in this module routes through here, so this one line makes
+    // a failure anywhere visible and gives any future save the same behaviour
+    // for free. A successful write clears it: the banner describes the last
+    // attempt, not a permanent state.
+    STORAGE_FAILED.store(r.is_err(), Ordering::Relaxed);
+    r
+}
+
+fn write_json_inner<T: serde::Serialize + ?Sized>(path: &PathBuf, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let data = serde_json::to_vec_pretty(value)?;
-    std::fs::write(path, data)?;
-    Ok(())
+    // Write-then-rename: a crash, a killed process or a full disk must never
+    // leave a half-written profiles.json. `fs::rename` replaces the target on
+    // Windows as well (MoveFileEx with MOVEFILE_REPLACE_EXISTING), so upgrades
+    // overwrite the previous file atomically.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, data)?;
+    match std::fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e.into())
+        }
+    }
 }
 
 pub fn load_profiles() -> Vec<Profile> {
@@ -81,6 +159,18 @@ pub fn load_settings() -> Settings {
     if s.settings_version < 1 {
         s.theme = crate::types::Theme::System;
         s.settings_version = 1;
+    }
+    // v2: MX Player became the default. v1 wrote `player_backend` to disk on
+    // every save even when nobody touched the setting, and its default was
+    // `Mpv`. `#[serde(default)]` only helps files that are MISSING the key,
+    // not files that contain `"player_backend":"Mpv"`, so a one-time switch is
+    // needed. Users who deliberately chose the internal player can re-select
+    // it in Einstellungen → Player; the bumped version means this runs once.
+    if s.settings_version < 2 {
+        if s.player_backend == crate::types::PlayerBackend::Mpv {
+            s.player_backend = crate::types::PlayerBackend::MxPlayer;
+        }
+        s.settings_version = 2;
     }
     s
 }
@@ -125,4 +215,58 @@ pub fn save_history(h: &[crate::types::HistEntry]) -> Result<()> {
     let mut dir = app_dir();
     dir.push("history.json");
     write_json(&dir, h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_file(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "dado-store-{}-{}-{}.json",
+            std::process::id(),
+            label,
+            nanos
+        ))
+    }
+
+    #[test]
+    fn missing_file_is_a_normal_first_start() {
+        let path = temp_file("missing");
+        let _ = std::fs::remove_file(&path);
+        let parsed: Option<Vec<String>> = read_json(&path);
+        assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn corrupted_json_falls_back_without_panicking() {
+        let path = temp_file("corrupt");
+        std::fs::write(&path, b"{\"profiles\": [ this is not json").unwrap();
+        let parsed: Option<Vec<String>> = read_json(&path);
+        assert!(parsed.is_none());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn writes_are_atomic_and_can_overwrite_an_existing_file() {
+        let path = temp_file("roundtrip");
+        let tmp = path.with_extension("json.tmp");
+
+        write_json(&path, &vec!["a".to_string(), "b".to_string()]).unwrap();
+        let loaded: Vec<String> = read_json(&path).unwrap();
+        assert_eq!(loaded, vec!["a".to_string(), "b".to_string()]);
+        assert!(!tmp.exists(), "temporary file must be renamed away");
+
+        write_json(&path, &vec!["c".to_string()]).unwrap();
+        let loaded: Vec<String> = read_json(&path).unwrap();
+        assert_eq!(loaded, vec!["c".to_string()]);
+        assert!(!tmp.exists());
+
+        let _ = std::fs::remove_file(&path);
+    }
 }

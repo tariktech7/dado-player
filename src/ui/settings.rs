@@ -7,6 +7,63 @@ use egui::{RichText, Ui};
 /// whole window on wide screens.
 const COL_W: f32 = 720.0;
 
+/// Every settings section with the words that should find it. One table so the
+/// filter and the section headers can never drift apart.
+const SECTIONS: &[(&str, &str)] = &[
+    (
+        "Darstellung",
+        "design farbschema theme dunkel hell system dark light aussehen appearance",
+    ),
+    (
+        "Wiedergabe",
+        "wiedergabe playback preset standard schwacher pc beste qualität profil",
+    ),
+    ("Puffer", "puffer cache buffering sekunden vorladen"),
+    ("Start", "start autoplay zuletzt kanal automatisch"),
+    (
+        "Schnellauswahl",
+        "schnellauswahl preset standard schonmodus qualität profile",
+    ),
+    (
+        "Bild & Decoder",
+        "bild decoder hwdec hardware video vo ausgabe vsync synchronisation interpolation deband",
+    ),
+    (
+        "Ton",
+        "ton audio wasapi exklusiv passthrough surround ac3 dts normalisieren lautstärke",
+    ),
+    ("Untertitel", "untertitel subtitles schrift größe font size"),
+    (
+        "Netzwerk & Puffer",
+        "netzwerk timeout user agent tls zertifikat puffer cache http",
+    ),
+    ("Allgemein", "allgemein autoplay letzten kanal start"),
+];
+
+fn keywords(title: &str) -> &'static str {
+    SECTIONS
+        .iter()
+        .find(|(t, _)| *t == title)
+        .map(|(_, k)| *k)
+        .unwrap_or("")
+}
+
+fn hits(q: &str, title: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    title.to_lowercase().contains(q) || keywords(title).contains(q)
+}
+
+/// Draws the section header when it matches the filter; returns whether it did.
+fn sec(ui: &mut Ui, q: &str, title: &str) -> bool {
+    if !hits(q, title) {
+        return false;
+    }
+    section(ui, title);
+    true
+}
+
 pub fn show(app: &mut App, ui: &mut Ui) {
     let mut player_changed = false;
     let mut theme_changed = false;
@@ -43,7 +100,48 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
     ui.add(egui::Label::new(
         RichText::new("Einstellungen").size(22.0).strong(),
     ));
+    ui.add_space(8.0);
+
+    // ---------- filter ----------
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut app.settings_q)
+                .hint_text("Einstellung suchen… (z. B. Puffer, Ton, Decoder)")
+                .desired_width(330.0),
+        );
+        if !app.settings_q.is_empty() && ui.button("×").clicked() {
+            app.settings_q.clear();
+        }
+    });
+
+    // Read after the field so the list filters on the same frame as the input.
+    let q_owned = app.settings_q.trim().to_lowercase();
+    let q = q_owned.as_str();
+
+    ui.horizontal(|ui| {
+        if !q.is_empty() {
+            let n = SECTIONS.iter().filter(|(t, _)| hits(q, t)).count();
+            ui.add(egui::Label::new(
+                RichText::new(format!("{} passende Bereiche", n))
+                    .size(11.0)
+                    .weak(),
+            ));
+        }
+    });
     ui.add_space(10.0);
+
+    if !q.is_empty() && !SECTIONS.iter().any(|(t, _)| hits(q, t)) {
+        ui.add_space(8.0);
+        ui.add(egui::Label::new(
+            RichText::new(format!("Nichts gefunden für „{}“.", app.settings_q.trim()))
+                .size(13.0)
+                .weak(),
+        ));
+        ui.add_space(6.0);
+        if ui.button("Filter löschen").clicked() {
+            app.settings_q.clear();
+        }
+    }
 
     // ---------- easy / expert ----------
     let mode = app.settings.settings_mode;
@@ -72,33 +170,34 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
         .weak(),
     ));
 
-    // ---------- appearance (always visible) ----------
-    section(ui, "Darstellung");
-    ui.horizontal(|ui| {
-        ui.add_sized(
-            [170.0, 24.0],
-            egui::Label::new(RichText::new("Farbschema").size(13.0)),
-        );
-        let cur = Theme::all()
-            .iter()
-            .position(|t| *t == app.settings.theme)
-            .unwrap_or(0);
-        if let Some(i) = ui::segmented(ui, "theme", &["System", "Dunkel", "Hell"], cur) {
-            app.settings.theme = Theme::all()[i];
-            *theme_changed = true;
-        }
-    });
-    ui.add_space(2.0);
-    ui.add(egui::Label::new(
-        RichText::new("„System“ übernimmt automatisch die Windows-Einstellung.")
-            .size(10.5)
-            .weak(),
-    ));
+    // ---------- appearance ----------
+    if sec(ui, q, "Darstellung") {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::Label::new(RichText::new("Farbschema").size(13.0)),
+            );
+            let cur = Theme::all()
+                .iter()
+                .position(|t| *t == app.settings.theme)
+                .unwrap_or(0);
+            if let Some(i) = ui::segmented(ui, "theme", &["System", "Dunkel", "Hell"], cur) {
+                app.settings.theme = Theme::all()[i];
+                *theme_changed = true;
+            }
+        });
+        ui.add_space(2.0);
+        ui.add(egui::Label::new(
+            RichText::new("„System“ übernimmt automatisch die Windows-Einstellung.")
+                .size(10.5)
+                .weak(),
+        ));
+    }
 
     if app.settings.settings_mode == SettingsMode::Easy {
-        easy(app, ui, player_changed);
+        easy(app, ui, q, player_changed);
     } else {
-        expert(app, ui, player_changed);
+        expert(app, ui, q, player_changed);
     }
 
     ui.add_space(18.0);
@@ -112,11 +211,9 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
                 RichText::new("Dado-Player").size(15.0).strong(),
             ));
             ui.add(egui::Label::new(
-                RichText::new(
-                    "Version 0.3 · Rust + libmpv · keine Werbung, keine Telemetrie",
-                )
-                .size(11.0)
-                .weak(),
+                RichText::new("Version 0.3 · Rust + libmpv · keine Werbung, keine Telemetrie")
+                    .size(11.0)
+                    .weak(),
             ));
         });
     });
@@ -131,57 +228,61 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
 
 // ---------------------------------------------------------------- easy
 
-fn easy(app: &mut App, ui: &mut Ui, changed: &mut bool) {
-    section(ui, "Wiedergabe");
-    ui.horizontal_wrapped(|ui| {
-        if ui
-            .button("Standard")
-            .on_hover_text("Läuft auf fast jedem Gerät")
-            .clicked()
-        {
-            app.settings.preset_standard();
-            *changed = true;
-        }
-        if ui
-            .button("Schwacher PC")
-            .on_hover_text("Wenig GPU-Last, kleinerer Puffer")
-            .clicked()
-        {
-            app.settings.preset_light();
-            *changed = true;
-        }
-        if ui
-            .button("Beste Qualität")
-            .on_hover_text("Ruhigeres Bild, mehr GPU-Last")
-            .clicked()
-        {
-            app.settings.preset_quality();
-            *changed = true;
-        }
-    });
+fn easy(app: &mut App, ui: &mut Ui, q: &str, changed: &mut bool) {
+    if sec(ui, q, "Wiedergabe") {
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .button("Standard")
+                .on_hover_text("Läuft auf fast jedem Gerät")
+                .clicked()
+            {
+                app.settings.preset_standard();
+                *changed = true;
+            }
+            if ui
+                .button("Schwacher PC")
+                .on_hover_text("Wenig GPU-Last, kleinerer Puffer")
+                .clicked()
+            {
+                app.settings.preset_light();
+                *changed = true;
+            }
+            if ui
+                .button("Beste Qualität")
+                .on_hover_text("Ruhigeres Bild, mehr GPU-Last")
+                .clicked()
+            {
+                app.settings.preset_quality();
+                *changed = true;
+            }
+        });
+    }
 
-    section(ui, "Puffer");
-    ui.horizontal(|ui| {
-        ui.add_sized(
-            [170.0, 24.0],
-            egui::Label::new(RichText::new("Puffergröße").size(13.0)),
-        );
-        if ui
-            .add(egui::Slider::new(&mut app.settings.cache_secs, 10..=120).suffix(" s"))
-            .on_hover_text("Mehr Puffer = stabiler bei schwacher Leitung, aber langsamerer Start.")
+    if sec(ui, q, "Puffer") {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::Label::new(RichText::new("Puffergröße").size(13.0)),
+            );
+            if ui
+                .add(egui::Slider::new(&mut app.settings.cache_secs, 10..=120).suffix(" s"))
+                .on_hover_text(
+                    "Mehr Puffer = stabiler bei schwacher Leitung, aber langsamerer Start.",
+                )
+                .changed()
+            {
+                *changed = true;
+            }
+        });
+    }
+
+    if sec(ui, q, "Start")
+        && ui
+            .checkbox(
+                &mut app.settings.auto_play_last,
+                "Zuletzt gesehenen Kanal beim Start öffnen",
+            )
             .changed()
-        {
-            *changed = true;
-        }
-    });
-
-    section(ui, "Start");
-    if ui
-        .checkbox(
-            &mut app.settings.auto_play_last,
-            "Zuletzt gesehenen Kanal beim Start öffnen",
-        )
-        .changed()
     {
         app.save_settings_now();
     }
@@ -189,174 +290,220 @@ fn easy(app: &mut App, ui: &mut Ui, changed: &mut bool) {
 
 // ---------------------------------------------------------------- expert
 
-fn expert(app: &mut App, ui: &mut Ui, changed: &mut bool) {
+fn expert(app: &mut App, ui: &mut Ui, q: &str, changed: &mut bool) {
     // ---------- presets ----------
-    section(ui, "Schnellauswahl");
-    ui.horizontal_wrapped(|ui| {
-        if ui.button("Standard").clicked() {
-            app.settings.preset_standard();
-            *changed = true;
-        }
-        if ui
-            .button("Schonmodus (schwacher PC)")
-            .on_hover_text("Wenig GPU-Last, kleiner Puffer")
-            .clicked()
-        {
-            app.settings.preset_light();
-            *changed = true;
-        }
-        if ui
-            .button("Maximale Qualität")
-            .on_hover_text("Interpolation + Debanding, größerer Puffer")
-            .clicked()
-        {
-            app.settings.preset_quality();
-            *changed = true;
-        }
-    });
+    if sec(ui, q, "Schnellauswahl") {
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Standard").clicked() {
+                app.settings.preset_standard();
+                *changed = true;
+            }
+            if ui
+                .button("Schonmodus (schwacher PC)")
+                .on_hover_text("Wenig GPU-Last, kleiner Puffer")
+                .clicked()
+            {
+                app.settings.preset_light();
+                *changed = true;
+            }
+            if ui
+                .button("Maximale Qualität")
+                .on_hover_text("Interpolation + Debanding, größerer Puffer")
+                .clicked()
+            {
+                app.settings.preset_quality();
+                *changed = true;
+            }
+        });
+    }
 
     // ---------- picture / decoder ----------
-    section(ui, "Bild & Decoder");
-    combo_row(ui, "Hardware-Dekodierung", "hwdec", |ui| {
-        egui::ComboBox::from_id_source("hwdec")
-            .selected_text(app.settings.hwdec.label())
-            .width(230.0)
-            .show_ui(ui, |cb| {
-                for v in [
-                    HwDec::AutoSafe,
-                    HwDec::Auto,
-                    HwDec::Off,
-                    HwDec::D3d11va,
-                    HwDec::Nvdec,
-                    HwDec::Vulkan,
-                ] {
-                    if cb
-                        .selectable_value(&mut app.settings.hwdec, v, v.label())
-                        .clicked()
-                    {
-                        *changed = true;
+    if sec(ui, q, "Bild & Decoder") {
+        combo_row(ui, "Hardware-Dekodierung", "hwdec", |ui| {
+            egui::ComboBox::from_id_source("hwdec")
+                .selected_text(app.settings.hwdec.label())
+                .width(230.0)
+                .show_ui(ui, |cb| {
+                    for v in [
+                        HwDec::AutoSafe,
+                        HwDec::Auto,
+                        HwDec::Off,
+                        HwDec::D3d11va,
+                        HwDec::Nvdec,
+                        HwDec::Vulkan,
+                    ] {
+                        if cb
+                            .selectable_value(&mut app.settings.hwdec, v, v.label())
+                            .clicked()
+                        {
+                            *changed = true;
+                        }
                     }
-                }
-            });
-    });
-    ui.add(egui::Label::new(
-        RichText::new(
-            "Bei Problemen: „Aus (nur CPU)“ ist am kompatibelsten, braucht aber mehr Leistung.",
-        )
-        .size(10.5)
-        .weak(),
-    ));
+                });
+        });
+        ui.add(egui::Label::new(
+            RichText::new(
+                "Bei Problemen: „Aus (nur CPU)“ ist am kompatibelsten, braucht aber mehr Leistung.",
+            )
+            .size(10.5)
+            .weak(),
+        ));
 
-    combo_row(ui, "Video-Ausgabe", "vo", |ui| {
-        egui::ComboBox::from_id_source("vo")
-            .selected_text(app.settings.vo.label())
-            .width(230.0)
-            .show_ui(ui, |cb| {
-                for v in [VideoOut::Gpu, VideoOut::GpuNext, VideoOut::Direct3d] {
-                    if cb
-                        .selectable_value(&mut app.settings.vo, v, v.label())
-                        .clicked()
-                    {
-                        *changed = true;
+        combo_row(ui, "Video-Ausgabe", "vo", |ui| {
+            egui::ComboBox::from_id_source("vo")
+                .selected_text(app.settings.vo.label())
+                .width(230.0)
+                .show_ui(ui, |cb| {
+                    for v in [VideoOut::Gpu, VideoOut::GpuNext, VideoOut::Direct3d] {
+                        if cb
+                            .selectable_value(&mut app.settings.vo, v, v.label())
+                            .clicked()
+                        {
+                            *changed = true;
+                        }
                     }
-                }
-            });
-    });
+                });
+        });
 
-    combo_row(ui, "Bildsynchronisation", "vsync", |ui| {
-        egui::ComboBox::from_id_source("vsync")
-            .selected_text(app.settings.video_sync.label())
-            .width(230.0)
-            .show_ui(ui, |cb| {
-                for v in [VideoSync::Audio, VideoSync::DisplayResample] {
-                    if cb
-                        .selectable_value(&mut app.settings.video_sync, v, v.label())
-                        .clicked()
-                    {
-                        *changed = true;
+        combo_row(ui, "Bildsynchronisation", "vsync", |ui| {
+            egui::ComboBox::from_id_source("vsync")
+                .selected_text(app.settings.video_sync.label())
+                .width(230.0)
+                .show_ui(ui, |cb| {
+                    for v in [VideoSync::Audio, VideoSync::DisplayResample] {
+                        if cb
+                            .selectable_value(&mut app.settings.video_sync, v, v.label())
+                            .clicked()
+                        {
+                            *changed = true;
+                        }
                     }
-                }
-            });
-    });
+                });
+        });
 
-    *changed |= ui
-        .checkbox(
-            &mut app.settings.interpolation,
-            "Interpolation (flüssigere Bewegung, mehr GPU-Last)",
-        )
-        .changed();
-    *changed |= ui
-        .checkbox(&mut app.settings.deband, "Debanding (weniger Farbstufen)")
-        .changed();
+        *changed |= ui
+            .checkbox(
+                &mut app.settings.interpolation,
+                "Interpolation (flüssigere Bewegung, mehr GPU-Last)",
+            )
+            .changed();
+        *changed |= ui
+            .checkbox(&mut app.settings.deband, "Debanding (weniger Farbstufen)")
+            .changed();
+    }
 
     // ---------- audio ----------
-    section(ui, "Ton");
-    *changed |= ui
-        .checkbox(
-            &mut app.settings.audio_exclusive,
-            "Exklusiver Audio-Modus (WASAPI)",
-        )
-        .on_hover_text("Direkter Zugriff auf die Soundkarte. Kann besser klingen, aber andere Apps verlieren den Ton.")
-        .changed();
-    *changed |= ui
-        .checkbox(
-            &mut app.settings.audio_passthrough,
-            "Surround durchreichen (AC3/DTS/TrueHD)",
-        )
-        .on_hover_text("Nur sinnvoll mit AV-Receiver über HDMI.")
-        .changed();
-    *changed |= ui
-        .checkbox(&mut app.settings.audio_normalize, "Lautstärke normalisieren")
-        .on_hover_text("Gleicht leise und laute Sender an.")
-        .changed();
+    if sec(ui, q, "Ton") {
+        *changed |= ui
+            .checkbox(
+                &mut app.settings.audio_exclusive,
+                "Exklusiver Audio-Modus (WASAPI)",
+            )
+            .on_hover_text("Direkter Zugriff auf die Soundkarte. Kann besser klingen, aber andere Apps verlieren den Ton.")
+            .changed();
+        *changed |= ui
+            .checkbox(
+                &mut app.settings.audio_passthrough,
+                "Surround durchreichen (AC3/DTS/TrueHD)",
+            )
+            .on_hover_text("Nur sinnvoll mit AV-Receiver über HDMI.")
+            .changed();
+        *changed |= ui
+            .checkbox(
+                &mut app.settings.audio_normalize,
+                "Lautstärke normalisieren",
+            )
+            .on_hover_text("Gleicht leise und laute Sender an.")
+            .changed();
+    }
 
     // ---------- subtitles ----------
-    section(ui, "Untertitel");
-    ui.horizontal(|ui| {
-        ui.add(egui::Label::new(RichText::new("Schriftgröße").size(13.0)));
-        *changed |= ui
-            .add(egui::Slider::new(&mut app.settings.sub_size, 20.0..=120.0))
-            .changed();
-    });
+    if sec(ui, q, "Untertitel") {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::Label::new(RichText::new("Schriftgröße").size(13.0)),
+            );
+            *changed |= ui
+                .add(egui::Slider::new(&mut app.settings.sub_size, 20.0..=120.0))
+                .changed();
+        });
+    }
 
     // ---------- network ----------
-    section(ui, "Netzwerk & Puffer");
-    ui.horizontal(|ui| {
+    if sec(ui, q, "Netzwerk & Puffer") {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::Label::new(RichText::new("Puffer (Sekunden)").size(13.0)),
+            );
+            if ui
+                .add(egui::Slider::new(&mut app.settings.cache_secs, 5..=180))
+                .on_hover_text(
+                    "Mehr Puffer = stabiler bei schwacher Leitung, aber langsamerer Start.",
+                )
+                .changed()
+            {
+                *changed = true;
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::Label::new(RichText::new("Netzwerk-Timeout").size(13.0)),
+            );
+            *changed |= ui
+                .add(egui::Slider::new(&mut app.settings.network_timeout_s, 5..=60).suffix(" s"))
+                .changed();
+        });
+        ui.add_space(4.0);
         ui.add(egui::Label::new(
-            RichText::new("Puffer (Sekunden)").size(13.0),
+            RichText::new("User-Agent (leer = Standard)")
+                .size(11.5)
+                .weak(),
         ));
         if ui
-            .add(egui::Slider::new(&mut app.settings.cache_secs, 5..=180))
-            .on_hover_text("Mehr Puffer = stabiler bei schwacher Leitung, aber langsamerer Start.")
+            .add(
+                egui::TextEdit::singleline(&mut app.settings.user_agent)
+                    .hint_text("z.B. VLC/3.0.20 LibVLC/3.0.20")
+                    .desired_width(360.0),
+            )
             .changed()
         {
             *changed = true;
         }
-    });
-    ui.horizontal(|ui| {
+        *changed |= ui
+            .checkbox(
+                &mut app.settings.tls_verify,
+                "TLS-Zertifikat des Anbieters streng prüfen",
+            )
+            .on_hover_text(
+                "Standardmäßig aus: viele IPTV-Anbieter nutzen selbstsignierte \
+                 Zertifikate auf ihrem Stream-Port. Mit aktivierter Prüfung bleibt \
+                 der Player dann schwarz. Nur einschalten, wenn der Anbieter ein \
+                 gültiges Zertifikat hat.",
+            )
+            .changed();
         ui.add(egui::Label::new(
-            RichText::new("Netzwerk-Timeout").size(13.0),
+            RichText::new(
+                "Bei selbstsignierten Anbieter-Zertifikaten (häufig bei IPTV) muss diese Option aus bleiben.",
+            )
+            .size(10.5)
+            .weak(),
         ));
-        ui.add(
-            egui::Slider::new(&mut app.settings.network_timeout_s, 5..=60).suffix(" s"),
-        );
-    });
-    ui.add_space(4.0);
-    ui.add(egui::Label::new(
-        RichText::new("User-Agent (leer = Standard)").size(11.5).weak(),
-    ));
-    ui.add(
-        egui::TextEdit::singleline(&mut app.settings.user_agent)
-            .hint_text("z.B. VLC/3.0.20 LibVLC/3.0.20")
-            .desired_width(360.0),
-    );
+    }
 
     // ---------- general ----------
-    section(ui, "Allgemein");
-    ui.checkbox(
-        &mut app.settings.auto_play_last,
-        "Letzten Kanal beim Start automatisch abspielen",
-    );
+    if sec(ui, q, "Allgemein")
+        && ui
+            .checkbox(
+                &mut app.settings.auto_play_last,
+                "Letzten Kanal beim Start automatisch abspielen",
+            )
+            .changed()
+    {
+        app.save_settings_now();
+    }
 }
 
 fn section(ui: &mut Ui, title: &str) {

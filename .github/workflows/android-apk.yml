@@ -5,9 +5,10 @@
 # Gradle. No local NDK required; everything runs in GitHub Actions (ubuntu-latest).
 #
 # Triggers:
-#   - push to main / tags (v*)        -> builds Debug AND Release (Release signed)
-#   - pull_request to main            -> builds Debug only (no secrets available)
-#   - workflow_dispatch               -> manual run
+#   - push to master/main             -> builds Debug APK
+#   - push of a v* tag                -> builds Debug AND signed Release APK
+#   - pull_request to master/main     -> builds Debug only (no secrets available)
+#   - workflow_dispatch               -> manual run (Debug; Release needs secrets)
 #
 # Required repository secrets for the Release job:
 #   SIGNING_KEY         base64-encoded Java keystore (.jks / .keystore)
@@ -19,11 +20,13 @@
 #   - libmpv.so: fetched from the pinned mpv-android release APK (arm64-v8a),
 #       including libmpv's runtime dependencies (libav*, libc++_shared, ...).
 #   - GameActivity.java glue: committed at
-#       android/app/src/main/java/android/app/GameActivity.java
+#       android/app/src/main/java/com/tarik/dadoplayer/GameActivity.java
 #   - gradlew: real Gradle 8.9 wrapper committed (gradle-wrapper.jar + scripts).
 #   - Rust .so naming: Cargo.toml [lib] name="dadoplayer" -> libdadoplayer.so,
 #       matching android.app.lib_name="dadoplayer".
 #
+# MPV_ANDROID_TAG "2026-09-17" was verified against the upstream releases API;
+# that release ships exactly one arm64-v8a APK asset (app-default-arm64-v8a-release.apk).
 # NOTE: Action versions and Android/Gradle/NDK versions below should be verified
 # against current upstream docs before production use.
 # =============================================================================
@@ -32,10 +35,11 @@ name: Android APK Build
 
 on:
   push:
-    branches: [main]
+    # The local repository uses `master`; keep `main` for forks/mirrors.
+    branches: [master, main]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master, main]
   workflow_dispatch:
 
 permissions:
@@ -130,6 +134,7 @@ jobs:
           TMP="$(mktemp -d)"
           unzip -o -q /tmp/mpv-android.apk "lib/arm64-v8a/*" -d "$TMP"
           cp "$TMP/lib/arm64-v8a/"*.so "$TARGET_DIR/"
+          test -s "$TARGET_DIR/libmpv.so"
           echo "Installed native libs:"; ls -1 "$TARGET_DIR"
       # -----------------------------------------------------------------------
 
@@ -153,21 +158,41 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Verify APK ABI + native library inventory
+        # Catches the classic "APK builds but crashes on device" class of bugs:
+        # missing libmpv.so, wrong ABI, or native libs silently dropped by Gradle.
+        run: |
+          set -euo pipefail
+          APK="$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)"
+          unzip -l "$APK" 'lib/*' > native-libs.txt
+          cat native-libs.txt
+          test "$(grep -c 'lib/arm64-v8a/' native-libs.txt || true)" -gt 0
+          grep -q 'lib/arm64-v8a/libdadoplayer.so' native-libs.txt
+          grep -q 'lib/arm64-v8a/libmpv.so' native-libs.txt
+          if grep -qE 'lib/(armeabi-v7a|x86|x86_64)/' native-libs.txt; then
+            echo "Unexpected ABI found in APK"; exit 1
+          fi
+          sha256sum "$APK" > dado-player-debug.apk.sha256
+          cat dado-player-debug.apk.sha256
+
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: dado-player-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            dado-player-debug.apk.sha256
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # Release build (signed). Runs only on push / dispatch, never on PRs
-  # (repository secrets are not available in pull requests).
+  # Release build (signed). Only tag pushes / manual dispatch: repository
+  # secrets are unavailable in PRs, and an unsigned "release" on every push
+  # would just produce a permanently red job on any fork without secrets.
   # ---------------------------------------------------------------------------
   build-release:
     name: Build & Sign Release APK
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -219,18 +244,25 @@ jobs:
       - name: Build Rust shared library (.so) via cargo-ndk
         run: cargo ndk -t arm64-v8a -o ./android/app/src/main/jniLibs build --release
 
-      # ---- PREBUILT-TODO: libmpv.so (arm64-v8a) -----------------------------
-      - name: "PREBUILT-TODO: Provide libmpv.so (arm64-v8a)"
+      # ---- libmpv.so + ffmpeg/c++ deps (arm64-v8a) --------------------------
+      # Keep release packaging identical to debug: fetch the pinned official
+      # mpv-android APK and extract every native dependency, not just libmpv.so.
+      - name: "Fetch prebuilt libmpv (arm64-v8a) from mpv-android"
+        env:
+          MPV_ANDROID_TAG: "2026-09-17"
         run: |
           set -euo pipefail
           TARGET_DIR="android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$TARGET_DIR"
-          # TODO(android-engineer): obtain libmpv.so
-          #   curl -fSL "<STABLE_LIBMPV_ARM64_URL>" -o "$TARGET_DIR/libmpv.so"
-          if [ ! -f "$TARGET_DIR/libmpv.so" ]; then
-            echo "::error::PREBUILT-TODO: libmpv.so missing at $TARGET_DIR/libmpv.so"
-            exit 1
-          fi
+          API="https://api.github.com/repos/mpv-android/mpv-android/releases/tags/${MPV_ANDROID_TAG}"
+          APK_URL="$(curl -sSL "$API" | python3 -c "import sys,json; d=json.load(sys.stdin); print([a['browser_download_url'] for a in d['assets'] if 'arm64-v8a' in a['name'] and a['name'].endswith('.apk')][0])")"
+          echo "Downloading $APK_URL"
+          curl -fSL -o /tmp/mpv-android.apk "$APK_URL"
+          TMP="$(mktemp -d)"
+          unzip -o -q /tmp/mpv-android.apk "lib/arm64-v8a/*" -d "$TMP"
+          cp "$TMP/lib/arm64-v8a/"*.so "$TARGET_DIR/"
+          test -s "$TARGET_DIR/libmpv.so"
+          echo "Installed native libs:"; ls -1 "$TARGET_DIR"
       # -----------------------------------------------------------------------
 
       - name: Generate local.properties from ANDROID_HOME

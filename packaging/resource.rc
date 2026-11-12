@@ -1,0 +1,3 @@
+// Windows executable icon resource for Dado Player.
+// Build with: rc.exe /nologo /fo dado-icon.res resource.rc
+1 ICON "C:\Users\Tarik\WorkBuddy AI\IPTV App\assets\icon.ico"

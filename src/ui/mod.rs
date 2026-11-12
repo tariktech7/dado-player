@@ -1,7 +1,10 @@
 pub mod continue_watching;
 pub mod favorites;
+pub mod home;
 pub mod live;
 pub mod login;
+pub mod mobile;
+pub mod palette;
 pub mod player;
 pub mod search;
 pub mod series;
@@ -19,6 +22,40 @@ pub const CARD_W: f32 = 148.0;
 pub const CARD_IMG: Vec2 = Vec2::new(132.0, 190.0);
 /// Height of one channel row.
 pub const ROW_H: f32 = 58.0;
+
+/// Non-blocking status banner for a partial catalogue load.
+///
+/// A single failing Xtream endpoint used to abort the whole login. Now the
+/// working areas are shown immediately; this banner names what is missing and
+/// offers a one-tap refresh instead of the "log out and back in ten times"
+/// workaround. It also shows the in-flight state while that refresh runs.
+pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
+    let summary = if app.busy {
+        "Katalog wird erneut geladen…".to_string()
+    } else {
+        app.library.catalog_issue_summary()
+    };
+    if summary.is_empty() {
+        return;
+    }
+
+    egui::Frame::none()
+        .fill(ui.visuals().widgets.noninteractive.bg_fill)
+        .rounding(Rounding::same(8.0))
+        .stroke(Stroke::new(1.0_f32, theme::RATING))
+        .inner_margin(egui::Margin::symmetric(12.0, 9.0))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("!").size(13.0).strong().color(theme::RATING));
+                ui.add(egui::Label::new(RichText::new(&summary).size(11.5)).wrap(true));
+                if !app.busy && ui.button("Erneut laden").clicked() {
+                    app.refresh_catalog();
+                    ui.ctx().request_repaint();
+                }
+            });
+        });
+    ui.add_space(8.0);
+}
 
 /// A small star toggle bound to a favorite key.
 pub fn fav_button(app: &mut App, ui: &mut Ui, key: &str) {
@@ -47,7 +84,8 @@ pub fn image_or_placeholder(app: &mut App, ui: &mut Ui, key: &str, url: &str, si
 }
 
 fn placeholder_rect(ui: &Ui, rect: egui::Rect) {
-    ui.painter().rect_filled(rect, Rounding::same(8.0), ui.visuals().faint_bg_color);
+    ui.painter()
+        .rect_filled(rect, Rounding::same(8.0), ui.visuals().faint_bg_color);
     ui.painter().text(
         rect.center(),
         Align2::CENTER_CENTER,
@@ -59,6 +97,18 @@ fn placeholder_rect(ui: &Ui, rect: egui::Rect) {
 
 /// Clickable 2:3 poster used by the movie and series grids.
 pub fn poster(app: &mut App, ui: &mut Ui, key: &str, url: &str, selected: bool) -> Response {
+    poster_badge(app, ui, key, url, selected, None)
+}
+
+/// Poster with an optional corner badge (used for the rating on movies).
+pub fn poster_badge(
+    app: &mut App,
+    ui: &mut Ui,
+    key: &str,
+    url: &str,
+    selected: bool,
+    badge: Option<&str>,
+) -> Response {
     let (rect, resp) = ui.allocate_exact_size(CARD_IMG, Sense::click());
     let rounding = Rounding::same(10.0);
 
@@ -93,12 +143,37 @@ pub fn poster(app: &mut App, ui: &mut Ui, key: &str, url: &str, selected: bool) 
         );
     }
 
+    // Corner pill, e.g. "★ 7.8". Painted over the artwork, dark enough to stay
+    // readable on bright covers.
+    if let Some(text) = badge.filter(|b| !b.trim().is_empty()) {
+        let galley = ui.painter().layout_no_wrap(
+            text.to_string(),
+            FontId::proportional(10.5),
+            theme::RATING,
+        );
+        let pad = Vec2::new(6.0, 3.0);
+        let size = galley.size() + pad * 2.0;
+        let pill = egui::Rect::from_min_size(
+            egui::pos2(rect.right() - size.x - 6.0, rect.top() + 6.0),
+            size,
+        );
+        ui.painter().rect_filled(
+            pill,
+            Rounding::same(size.y * 0.5),
+            Color32::from_black_alpha(175),
+        );
+        ui.painter().galley(pill.min + pad, galley, theme::RATING);
+    }
+
     if selected {
         ui.painter()
-            .rect_stroke(rect, rounding, Stroke::new(2.0_f32, theme::ACCENT));
+            .rect_stroke(rect, rounding, Stroke::new(2.0_f32, theme::accent(ui)));
     } else if resp.hovered() {
-        ui.painter()
-            .rect_stroke(rect, rounding, Stroke::new(2.0_f32, theme::ACCENT.gamma_multiply(0.8)));
+        ui.painter().rect_stroke(
+            rect,
+            rounding,
+            Stroke::new(2.0_f32, theme::accent(ui).gamma_multiply(0.8)),
+        );
     }
 
     if resp.hovered() {
@@ -137,7 +212,11 @@ pub fn pager(ui: &mut Ui, page: &mut usize, pages: usize, count: usize, noun: &s
             *page += 1;
         }
         ui.add_space(10.0);
-        ui.label(RichText::new(format!("{} {}", count, noun)).weak().size(13.0));
+        ui.label(
+            RichText::new(format!("{} {}", count, noun))
+                .weak()
+                .size(13.0),
+        );
     });
 }
 
@@ -145,7 +224,7 @@ pub fn pager(ui: &mut Ui, page: &mut usize, pages: usize, count: usize, noun: &s
 pub fn brand_mark(ui: &mut Ui, size: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
     let r = Rounding::same(size * 0.30);
-    ui.painter().rect_filled(rect, r, theme::ACCENT);
+    ui.painter().rect_filled(rect, r, theme::accent_fill(ui));
     ui.painter()
         .rect_stroke(rect, r, Stroke::new(1.0_f32, Color32::from_white_alpha(34)));
     ui.painter().text(
@@ -164,11 +243,8 @@ pub fn segmented(ui: &mut Ui, id: &str, labels: &[&str], current: usize) -> Opti
     let cell_w = 104.0;
     let total = cell_w * labels.len() as f32 + pad * 2.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, h), Sense::hover());
-    ui.painter().rect_filled(
-        rect,
-        Rounding::same(h * 0.5),
-        ui.visuals().faint_bg_color,
-    );
+    ui.painter()
+        .rect_filled(rect, Rounding::same(h * 0.5), ui.visuals().faint_bg_color);
     let mut picked = None;
     let mut x = rect.left() + pad;
     for (i, label) in labels.iter().enumerate() {
@@ -178,8 +254,11 @@ pub fn segmented(ui: &mut Ui, id: &str, labels: &[&str], current: usize) -> Opti
         );
         let resp = ui.interact(cell, ui.id().with((id, i)), Sense::click());
         if i == current {
-            ui.painter()
-                .rect_filled(cell, Rounding::same(cell.height() * 0.5), theme::ACCENT);
+            ui.painter().rect_filled(
+                cell,
+                Rounding::same(cell.height() * 0.5),
+                theme::accent_fill(ui),
+            );
         }
         let color = if i == current {
             Color32::WHITE

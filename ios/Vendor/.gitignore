@@ -1,0 +1,3 @@
+# libdadoplayer.a is produced by probe/build_ios.sh and must never be committed
+# (it is a ~100 MB build artifact and is target-specific).
+*.a

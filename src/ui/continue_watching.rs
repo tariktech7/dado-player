@@ -6,15 +6,16 @@ use egui::{RichText, Sense, Ui, Vec2};
 pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.add(egui::Label::new(RichText::new("Fortsetzen").size(22.0).strong()));
+        ui.add(egui::Label::new(
+            RichText::new("Fortsetzen").size(22.0).strong(),
+        ));
         ui.add_space(14.0);
         let cur = match app.continue_tab {
             ContinueTab::Live => 0,
             ContinueTab::Movies => 1,
             ContinueTab::Series => 2,
         };
-        if let Some(i) = ui::segmented(ui, "continue_tab", &["Live-TV", "Filme", "Serien"], cur)
-        {
+        if let Some(i) = ui::segmented(ui, "continue_tab", &["Live-TV", "Filme", "Serien"], cur) {
             app.continue_tab = match i {
                 0 => ContinueTab::Live,
                 1 => ContinueTab::Movies,
@@ -28,6 +29,108 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ContinueTab::Live => live_tab(app, ui),
         ContinueTab::Movies => movies_tab(app, ui),
         ContinueTab::Series => series_tab(app, ui),
+    }
+    resume_dialog(app, ui);
+}
+
+fn resume_dialog(app: &mut App, ui: &mut Ui) {
+    let Some((key, item, pos)) = app.pending_resume.clone() else {
+        return;
+    };
+    let screen = ui.ctx().screen_rect();
+    let mut resume = false;
+    let mut restart = false;
+    let mut cancel = false;
+    egui::Area::new(egui::Id::new("continue-resume-dialog"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(screen.min)
+        .show(ui.ctx(), |ui| {
+            ui.set_min_size(screen.size());
+            let scrim = ui.interact(screen, ui.id().with("resume-scrim"), Sense::click());
+            ui.painter()
+                .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(170));
+            let w = 420.0f32.min(screen.width() - 32.0).max(280.0);
+            let fill = if ui.visuals().dark_mode {
+                crate::theme::PANEL_DARK
+            } else {
+                crate::theme::PANEL_LIGHT
+            };
+
+            // Position centered
+            let card_rect = egui::Rect::from_center_size(screen.center(), Vec2::new(w, 220.0));
+            let mut child = ui.child_ui(card_rect, egui::Layout::top_down(egui::Align::Min));
+            egui::Frame::none()
+                .fill(fill)
+                .stroke(egui::Stroke::new(
+                    1.0_f32,
+                    if ui.visuals().dark_mode {
+                        egui::Color32::from_white_alpha(24)
+                    } else {
+                        egui::Color32::from_black_alpha(20)
+                    },
+                ))
+                .rounding(egui::Rounding::same(14.0))
+                .inner_margin(egui::Margin::same(20.0))
+                .show(&mut child, |ui| {
+                    ui.set_width(w - 40.0);
+                    ui.add(egui::Label::new(
+                        RichText::new("Wiedergabe fortsetzen?").size(18.0).strong(),
+                    ));
+                    ui.add_space(8.0);
+                    ui.add(
+                        egui::Label::new(RichText::new(&item.title).size(14.0).strong()).wrap(true),
+                    );
+                    ui.add_space(2.0);
+                    ui.add(egui::Label::new(
+                        RichText::new(format!("Zuletzt gesehen bei {}", ui::fmt_time(pos as f64)))
+                            .size(12.5)
+                            .color(crate::theme::muted(ui)),
+                    ));
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        let btn_w = (ui.available_width() - 10.0) / 2.0;
+                        if ui
+                            .add_sized(
+                                [btn_w, 36.0],
+                                egui::Button::new("Fortsetzen").fill(crate::theme::accent_fill(ui)),
+                            )
+                            .clicked()
+                        {
+                            resume = true;
+                        }
+                        if ui
+                            .add_sized([btn_w, 36.0], egui::Button::new("Von vorne beginnen"))
+                            .clicked()
+                        {
+                            restart = true;
+                        }
+                    });
+                });
+
+            if scrim.clicked() {
+                cancel = true;
+            }
+        });
+    let escape = ui.ctx().input(|i| i.key_pressed(egui::Key::Escape));
+    if resume {
+        app.pending_resume = None;
+        app.play(item);
+    } else if restart {
+        app.pending_resume = None;
+        app.progress.remove(&key);
+        let _ = crate::store::save_progress(&app.progress);
+        app.play(item);
+    } else if cancel || escape {
+        app.pending_resume = None;
+    }
+}
+
+fn play_or_ask(app: &mut App, item: PlayItem) {
+    let pos = app.get_progress(&item.progress_key);
+    if pos > 1 {
+        app.pending_resume = Some((item.progress_key.clone(), item, pos));
+    } else {
+        app.play(item);
     }
 }
 
@@ -56,21 +159,17 @@ fn live_tab(app: &mut App, ui: &mut Ui) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             for (key, title) in keys {
-                let id: Option<u32> = key
-                    .strip_prefix("live:")
-                    .and_then(|s| s.parse().ok());
-                let ch = id.and_then(|id| app.library.channels.iter().find(|c| c.id == id).cloned());
+                let id: Option<u32> = key.strip_prefix("live:").and_then(|s| s.parse().ok());
+                let ch =
+                    id.and_then(|id| app.library.channels.iter().find(|c| c.id == id).cloned());
 
                 let (rect, resp) = ui.allocate_exact_size(
                     Vec2::new(ui.available_width(), ui::ROW_H),
                     Sense::click(),
                 );
                 if resp.hovered() {
-                    ui.painter().rect_filled(
-                        rect,
-                        10.0,
-                        ui.visuals().widgets.hovered.weak_bg_fill,
-                    );
+                    ui.painter()
+                        .rect_filled(rect, 10.0, ui.visuals().widgets.hovered.weak_bg_fill);
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
                 let mut row = ui.child_ui(rect, egui::Layout::left_to_right(egui::Align::Center));
@@ -86,9 +185,9 @@ fn live_tab(app: &mut App, ui: &mut Ui) {
                 row.add_space(10.0);
                 row.vertical(|ui| {
                     ui::one_line(ui, &title, 15.0, true);
-                    ui.add(
-                        egui::Label::new(RichText::new("Live-TV · zuletzt gesehen").size(11.5).weak()),
-                    );
+                    ui.add(egui::Label::new(
+                        RichText::new("Live-TV · zuletzt gesehen").size(11.5).weak(),
+                    ));
                 });
                 row.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(8.0);
@@ -143,17 +242,21 @@ fn movies_tab(app: &mut App, ui: &mut Ui) {
             for chunk in keys.chunks(per_row) {
                 ui.horizontal_top(|ui| {
                     for (key, title) in chunk {
-                        let id: Option<u32> =
-                            key.strip_prefix("vod:").and_then(|s| s.parse().ok());
-                        let movie = id.and_then(|id| {
-                            app.library.movies.iter().find(|m| m.id == id).cloned()
-                        });
+                        let id: Option<u32> = key.strip_prefix("vod:").and_then(|s| s.parse().ok());
+                        let movie = id
+                            .and_then(|id| app.library.movies.iter().find(|m| m.id == id).cloned());
                         let cover = movie.as_ref().map(|m| m.cover.clone()).unwrap_or_default();
                         let at = app.progress.get(key).copied().unwrap_or(0);
 
                         ui.vertical(|ui| {
                             ui.set_width(ui::CARD_W);
-                            let resp = ui::poster(app, ui, &format!("cover:{}", id.unwrap_or(0)), &cover, false);
+                            let resp = ui::poster(
+                                app,
+                                ui,
+                                &format!("cover:{}", id.unwrap_or(0)),
+                                &cover,
+                                false,
+                            );
                             if resp.clicked() {
                                 if let Some(m) = &movie {
                                     play = Some(PlayItem {
@@ -165,12 +268,15 @@ fn movies_tab(app: &mut App, ui: &mut Ui) {
                                 }
                             }
                             ui.add_space(4.0);
-                            ui::one_line(ui, &title, 13.0, false);
+                            ui::one_line(ui, title, 13.0, false);
                             if at > 0 {
                                 ui.add(egui::Label::new(
-                                    RichText::new(format!("Weiter bei {}", ui::fmt_time(at as f64)))
-                                        .size(11.0)
-                                        .color(crate::theme::ACCENT),
+                                    RichText::new(format!(
+                                        "Weiter bei {}",
+                                        ui::fmt_time(at as f64)
+                                    ))
+                                    .size(11.0)
+                                    .color(crate::theme::accent_text(ui)),
                                 ));
                             }
                         });
@@ -182,7 +288,7 @@ fn movies_tab(app: &mut App, ui: &mut Ui) {
         });
 
     if let Some(item) = play {
-        app.play(item);
+        play_or_ask(app, item);
     }
 }
 
@@ -209,20 +315,19 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
             for chunk in entries.chunks(per_row) {
                 ui.horizontal_top(|ui| {
                     for (key, title, sub) in chunk {
-                        let parts: Vec<&str> = key.strip_prefix("ep:").unwrap_or("").split(':').collect();
+                        let parts: Vec<&str> =
+                            key.strip_prefix("ep:").unwrap_or("").split(':').collect();
                         let sid = parts.first().and_then(|s| s.parse::<u32>().ok());
                         let eid = parts.get(1).and_then(|s| s.parse::<u32>().ok());
                         let series = sid.and_then(|sid| {
                             app.library.series.iter().find(|s| s.id == sid).cloned()
                         });
                         let cover = series.as_ref().map(|s| s.cover.clone()).unwrap_or_default();
-                        let episode = sid
-                            .zip(eid)
-                            .and_then(|(sid, eid)| {
-                                app.series_episodes
-                                    .get(&sid)
-                                    .and_then(|v| v.iter().find(|e| e.id == eid).cloned())
-                            });
+                        let episode = sid.zip(eid).and_then(|(sid, eid)| {
+                            app.series_episodes
+                                .get(&sid)
+                                .and_then(|v| v.iter().find(|e| e.id == eid).cloned())
+                        });
 
                         ui.vertical(|ui| {
                             ui.set_width(ui::CARD_W);
@@ -251,7 +356,7 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
                             ui.add(egui::Label::new(
                                 RichText::new(sub)
                                     .size(11.0)
-                                    .color(crate::theme::ACCENT),
+                                    .color(crate::theme::accent_text(ui)),
                             ));
                         });
                         ui.add_space(gap);
@@ -262,7 +367,7 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
         });
 
     if let Some(item) = play {
-        app.play(item);
+        play_or_ask(app, item);
     } else if let Some(sid) = open_detail {
         app.selected_series = Some(sid);
         app.series_season = 0;

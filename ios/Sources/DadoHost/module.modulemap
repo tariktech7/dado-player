@@ -1,0 +1,13 @@
+// DadoBridge — module map for the C ABI header.
+//
+// Makes `import DadoBridge` work from Swift without an Xcode project. The
+// header path is relative to this file (the target root, which is
+// Sources/DadoHost); publicHeadersPath in Package.swift is "include".
+//
+// DadoBridge.h is immutable: it is the single source of truth for the boundary
+// and is mirrored by src/platform/ios/bridge.rs on the Rust side.
+
+module DadoBridge {
+    header "include/DadoBridge.h"
+    export *
+}

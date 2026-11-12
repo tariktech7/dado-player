@@ -1,0 +1,24 @@
+[package]
+name = "dado-launcher"
+version = "0.1.0"
+edition = "2021"
+description = "Self-extracting single-file launcher for Dado Player (Windows)."
+
+[[bin]]
+name = "dado-launcher"
+path = "src/main.rs"
+
+[dependencies]
+# Pure-Rust zlib inflater (no C toolchain needed). Cached offline.
+miniz_oxide = "0.8"
+
+# NOTE: the few Win32 calls we need (CreateWindowExW, DrawTextW, MessageBoxW,
+# ...) are declared as raw `extern "system"` FFI against user32/gdi32 below.
+# Those are system DLLs present on every Windows 10/11, so we avoid a
+# windows-sys version/feature dependency that could break the build.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

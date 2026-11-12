@@ -9,12 +9,20 @@ path = "src/main.rs"
 
 # Android baut diese Crate als `cdylib` -> `libdadoplayer.so` (von cargo ndk in
 # die APK-JNI-Libs kopiert). `rlib` wird von der Desktop-Binary genutzt.
+# iOS braucht `staticlib` -> `libdadoplayer.a`, die die Swift-Host-App linkt;
+# iOS erlaubt keine dynamischen Bibliotheken ausserhalb von Frameworks.
 [lib]
 name = "dadoplayer"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[features]
+# Compiles the iOS-only modules on a non-iOS host for type checking. Wires
+# nothing up: `cargo check --features ios-check` is the guard that keeps
+# `platform::ios` and `mpv_ios.rs` from rotting on machines without an Apple SDK.
+ios-check = []
 
 [dependencies]
-eframe = "0.27"
+eframe = { version = "0.27", features = ["wgpu"] }
 egui = "0.27"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "rustls-tls"] }
@@ -23,10 +31,11 @@ serde_json = "1"
 directories = "5"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
 anyhow = "1"
+log = "0.4"
 chrono = "0.4"
 base64 = "0.22"
 libloading = "0.8"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "android")'.dependencies]
@@ -35,8 +44,32 @@ raw-window-handle = "0.6"
 # would link two copies of `android-activity` and break the `android_main`
 # FFI ABI.
 android-activity = "0.5"
+# JNI calls from Rust (soft keyboard, insets) - already in the tree via
+# android-activity, listed explicitly because we use it directly.
+jni = "0.21"
 ndk = "0.8"
+# Required so we can call `EventLoopBuilderExtAndroid::with_android_app` from
+# android_main (winit 0.29 panics at EventLoop::build() on Android without it).
+# Version is pinned to the one eframe/egui-winit already use (0.29.15); the
+# `android-game-activity` feature is additive across the graph.
+winit = { version = "0.29", features = ["android-game-activity"] }
 eframe = { version = "0.27", features = ["android-game-activity", "glow"] }
+# NOTE: the global eframe dependency above also enables `wgpu`, so on Android
+# both renderer features are on and `Renderer::default()` would pick wgpu.
+# `src/platform/android/entry.rs` therefore pins `Renderer::Glow` explicitly.
+# The paint callback that composites mpv's video into egui's frame. Version
+# must match the `egui_glow` eframe already pulls in (0.27.2): `CallbackFn` is
+# downcast against *that* crate instance, and a second copy would silently fail
+# the downcast with "Unsupported render callback" and draw nothing.
+egui_glow = "0.27"
+
+# On Windows, force wgpu to compile a real D3D12/Vulkan backend. eframe's own
+# `wgpu` feature disables wgpu default features and only enables `metal`+`webgpu`
+# (neither is a Windows GPU backend), which leaves wgpu with no adapter on
+# Windows. This direct dependency unifies the feature set so the dx12 + vulkan
+# backends and wgsl shader support are actually built into the wgpu we ship.
+[target.'cfg(target_os = "windows")'.dependencies]
+wgpu = { version = "0.19.1", default-features = false, features = ["dx12", "vulkan-portability", "wgsl", "metal", "webgpu", "fragile-send-sync-non-atomic-wasm"] }
 
 [profile.release]
 opt-level = 3

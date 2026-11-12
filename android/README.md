@@ -102,7 +102,7 @@ Lokal ist libmpv.so **nicht** nötig (die APK wird ausschließlich in CI gebaut)
 
 ---
 
-## 5. Weitere TODOs, die vor dem ersten erfolgreichen CI-Lauf nachgeliefert werden müssen
+## 5. Verbleibende Release-Readiness-Aufgaben
 
 1. **GameActivity.java Glue** — ✅ erledigt:
    `android/app/src/main/java/android/app/GameActivity.java` existiert und
@@ -124,6 +124,8 @@ Lokal ist libmpv.so **nicht** nötig (die APK wird ausschließlich in CI gebaut)
    Action-Tags (`android-actions/setup-android@v3`, `r0adkll/sign-android-release@v1`,
    `dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2`) gegen aktuelle
    Upstream-Docs prüfen, bevor produktiv gebaut wird.
+6. **Geräteabnahme** - echte Android-Geräte für Login, Tastatur, EPG, Kategorienwechsel,
+   Videooberfläche, Drehung, Hintergrund-/Fortsetzenverhalten und Signed-Release testen.
 
 ---
 

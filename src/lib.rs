@@ -8,18 +8,41 @@
 //! (`Dado-Player`) genutzt.
 
 pub mod app;
-pub mod platform;
 pub mod client;
 pub mod demo;
+pub mod fonts;
+// iOS has no libmpv; the AVPlayer shim implements the same public surface.
+// Aliasing the *module* keeps `app.rs` free of platform branches.
+#[cfg(not(target_os = "ios"))]
 pub mod mpv;
+#[cfg(target_os = "ios")]
+#[path = "mpv_ios.rs"]
+pub mod mpv;
+pub mod platform;
+pub mod player;
 pub mod store;
+pub mod test_pattern;
 pub mod theme;
 pub mod types;
 pub mod ui;
-pub mod player;
 
-/// Desktop-Einstieg (Windows). Andere Desktop-OS sind nicht Zielplattform.
+/// Type-check-only build of the iOS shim on a non-iOS host.
+///
+/// The real iOS build needs an Apple SDK, which most development machines (and
+/// CI runners without a macOS job) do not have. Without this, `mpv_ios.rs` and
+/// `platform::ios` would never be compiled anywhere and would rot silently.
+/// Enabled by `--features ios-check`; it wires nothing up, it only compiles.
+#[cfg(all(feature = "ios-check", not(target_os = "ios")))]
+#[path = "mpv_ios.rs"]
+pub mod mpv_ios;
+
+/// Desktop entry (Windows). Other desktop OSes are not a target.
 #[cfg(target_os = "windows")]
 pub fn run() -> eframe::Result<()> {
     crate::platform::windows::entry::run()
 }
+
+/// iOS entry. Called from the Swift host (`ios/Sources/DadoPlayer/main.swift`)
+/// through the C symbol `dado_app_start`.
+#[cfg(target_os = "ios")]
+pub use platform::ios::entry::dado_app_start;

@@ -11,3 +11,48 @@ Thumbs.db
 
 # WorkBuddy project data (memory, logs) — not part of the source
 .workbuddy-ai/
+
+# Prebuilt native libs (libmpv + ffmpeg/c++ deps) are fetched at build time
+# (CI) or extracted locally into jniLibs — never committed.
+android/app/src/main/jniLibs/**/*.so
+
+# Release signing material. A private key in git cannot be revoked from the
+# history, so these patterns are deliberately broad and live at repo root.
+*.pk8
+*.pk8.der
+*.x509.pem
+*.pem
+*.jks
+*.keystore
+*.p12
+*.pfx
+android/app/*release*
+# Local QA / release artefacts — reproducible from source, never committed.
+/packaging/out/
+*.apk
+*.aab
+/probe/*.png
+/probe/*.jpg
+/probe/*.log
+/probe/*.mp4
+/probe/out/
+Dado-Player-startup.log
+
+# iOS build artefacts. ios/Vendor/libdadoplayer.a is a copy of the cargo output
+# (probe/build_ios.sh), ios/.build is SwiftPM's scratch dir, and the .ipa is the
+# packaged result. All three are reproducible from source; committing the static
+# library would put a ~100 MB binary in git and silently shadow the real build.
+/ios/Vendor/*.a
+/ios/.build/
+*.ipa
+
+# Third-party reference material (IPTVnator source drop). Kept on disk as a
+# design reference but not redistributed through this repo. It is also a nested
+# git repository, so adding it produces a gitlink that a fresh clone cannot
+# resolve — a submodule pointer without the submodule.
+/references/iptvnator/
+
+# Cargo build cache of the portable launcher. Only the top-level /target was
+# ignored, so the launcher's cache was one `git add -A` away from being
+# committed as ~57 files of build noise.
+/packaging/launcher/target/

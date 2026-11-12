@@ -9,31 +9,103 @@
       http://…:8080, which Android 9+ blocks by default. Without it, provider
       logins fail with an opaque exception. See MOBILE-BAUPLAN.md §10.1.
     -->
+
+    <!-- TV: the app works without a touchscreen; leanback is optional so the
+         same APK still installs on phones (MOBILE-BAUPLAN §23.4 P0). -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!--
+      Android 11+ (API 30) hides other apps unless they are declared here.
+      Without these entries PackageManager.resolveActivity() returns null even
+      when MX Player/VLC IS installed, so the default external player would
+      always fail with "nicht installiert" and silently fall back to libmpv.
+      The generic video/* intent covers the system chooser and other players.
+    -->
+        <queries>
+            <package android:name="com.mxtech.videoplayer.ad" />
+            <package android:name="com.mxtech.videoplayer.pro" />
+            <package android:name="org.videolan.vlc" />
+            <intent>
+                <action android:name="android.intent.action.VIEW" />
+                <data android:mimeType="video/*" />
+            </intent>
+        </queries>
+
+        <!-- Additional query for MX Player integration capabilities -->
+        <queries>
+            <intent>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent>
+        </queries>
+
+    <!-- Profiles include provider credentials; do not expose app-private data to Android backup/transfer. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:installLocation="auto">
+        <!--
+          extractNativeLibs=false: the 41 MB of native libraries stay inside
+          the APK and are mmap'd from there. Without this the installer copies
+          every .so to /data/app before the first launch, which is slow and
+          fails outright on devices that do not have ~150 MB free during
+          install. Requires the libs to be stored uncompressed and aligned;
+          see `packaging { jniLibs { useLegacyPackaging = false } }`.
+
+          installLocation="auto": lets Android place the app on external
+          storage when internal memory is tight, instead of failing with
+          INSTALL_FAILED_INSUFFICIENT_STORAGE.
+        -->
 
         <!--
           GameActivity is provided by the `android-game-activity` Rust crate
           (verified by the architect for eframe 0.27.2 + glow renderer).
-          The matching Java class MUST be present - see
-          android/app/src/main/java/android/app/README.md (TODO glue).
+          The matching Java class is com.tarik.dadoplayer.GameActivity.
+        -->
+        <!--
+          fullUser: the phone UI is portrait-first (bottom tabs + vertical
+          lists) and rotates to landscape for the player. See MOBILE-BAUPLAN.md
+          §18. Do NOT lock this to landscape any more - that was a workaround
+          for the desktop layout.
+        -->
+        <!--
+          configChanges must cover EVERY configuration change Android can send,
+          because this activity owns a native Rust main loop that is destroyed
+          in `onDestroy` (games-activity calls `terminateNativeCode()` there).
+
+          Any unhandled change relaunches the activity: onDestroy tears the
+          native loop down, onCreate immediately runs `android_main` again, and
+          the new thread deadlocks against the not-yet-joined old one — the
+          process ANRs ("Input dispatching timed out", 5 s) and is killed.
+
+          `uiMode` alone fires on dark-mode toggle, desk/undock, TV mode and
+          car mode; `density`/`fontScale` fire when the user changes display
+          size or system font size in Settings. See MOBILE-BAUPLAN.md §15.
         -->
         <activity
-            android:name="android.app.GameActivity"
+            android:name="com.tarik.dadoplayer.GameActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
             android:launchMode="singleTask"
-            android:screenOrientation="fullSensor">
+            android:enableOnBackInvokedCallback="true"
+            android:screenOrientation="fullUser">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
 
             <!--

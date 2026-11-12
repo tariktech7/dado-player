@@ -1,9 +1,7 @@
 //! Small Windows system helpers (theme, cursor, DPI).
 
 use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
-use windows_sys::Win32::System::Registry::{
-    RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
-};
+use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
 
 fn wide(s: &str) -> Vec<u16> {

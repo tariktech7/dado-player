@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Dado Player — iOS bundle metadata.
+
+  Referenced from ios/xtool.yml via `infoPath`. Without this file there is no
+  bundle to package, which is why the IPA step could not exist before.
+
+  Two entries are product requirements rather than boilerplate:
+
+  * NSAppTransportSecurity / NSAllowsArbitraryLoads — the Android build sets
+    usesCleartextTraffic="true" for the same reason: most IPTV/Xtream panels are
+    served over plain HTTP on port 8080. iOS blocks that by default. Narrowing
+    this to per-domain exceptions is not possible because the user supplies an
+    arbitrary provider host at runtime; the alternative is "the app cannot log
+    in on most panels".
+
+  * UIBackgroundModes / audio — an IPTV player that stops when the screen locks
+    is broken. Requires an AVAudioSession category set in the host, which is
+    still outstanding (see README.iOS.md §8).
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>de</string>
+    <key>CFBundleDisplayName</key>
+    <string>Dado Player</string>
+    <key>CFBundleExecutable</key>
+    <string>DadoPlayer</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.tarik.dadoplayer</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>DadoPlayer</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+        <integer>2</integer>
+    </array>
+    <key>UILaunchScreen</key>
+    <dict>
+        <key>UIColorName</key>
+        <string></string>
+    </dict>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    </array>
+</dict>
+</plist>

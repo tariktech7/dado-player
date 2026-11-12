@@ -9,7 +9,9 @@ const PER_PAGE: usize = 48;
 pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.add(egui::Label::new(RichText::new("Serien").size(22.0).strong()));
+        ui.add(egui::Label::new(
+            RichText::new("Serien").size(22.0).strong(),
+        ));
         ui.add_space(8.0);
 
         let selected = if app.series_cat == "all" {
@@ -53,12 +55,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .series
         .iter()
         .enumerate()
-        .filter(|(_, s)| cat.as_ref().map_or(true, |id| &s.category_id == id))
+        .filter(|(_, s)| cat.as_ref().is_none_or(|id| &s.category_id == id))
         .map(|(i, _)| i)
         .collect();
 
     let total = idx.len();
-    let pages = (total + PER_PAGE - 1) / PER_PAGE;
+    let pages = total.div_ceil(PER_PAGE);
     let page = app.series_page.min(pages.saturating_sub(1));
     app.series_page = page;
     let start = page * PER_PAGE;
@@ -84,13 +86,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         ui.vertical(|ui| {
                             ui.set_width(ui::CARD_W);
                             let selected = app.selected_series == Some(s.id);
-                            let resp = ui::poster(
-                                app,
-                                ui,
-                                &format!("cover:{}", s.id),
-                                &s.cover,
-                                selected,
-                            );
+                            let resp =
+                                ui::poster(app, ui, &format!("cover:{}", s.id), &s.cover, selected);
                             if resp.clicked() {
                                 select = Some(s.id);
                             }
@@ -101,6 +98,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     }
                 });
                 ui.add_space(10.0);
+            }
+            if pages > 1 {
+                ui.add_space(12.0);
+                ui::pager(ui, &mut app.series_page, pages, total, "Serien");
+                ui.add_space(16.0);
             }
         });
 
@@ -185,10 +187,29 @@ pub fn detail_panel(app: &mut App, ui: &mut Ui) {
 
     let eps_opt = app.series_episodes_for(id).cloned();
     match eps_opt {
+        None if app.series_failed(id) => {
+            // A failed request is not "no episodes". Show the real cause and a
+            // retry, otherwise the series looks permanently empty.
+            ui.add(egui::Label::new(
+                RichText::new("Episoden konnten nicht geladen werden.")
+                    .size(12.5)
+                    .color(muted),
+            ));
+            if let Some(detail) = app.series_error.clone() {
+                ui.add(egui::Label::new(RichText::new(detail).size(11.0).weak()).wrap(true));
+            }
+            ui.add_space(6.0);
+            if ui.button("Erneut versuchen").clicked() {
+                app.retry_series(id);
+                ui.ctx().request_repaint();
+            }
+        }
         None => {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.add(egui::Label::new(RichText::new("Lade Episoden…").size(12.5).color(muted)));
+                ui.add(egui::Label::new(
+                    RichText::new("Lade Episoden…").size(12.5).color(muted),
+                ));
             });
         }
         Some(eps) if eps.is_empty() => {
@@ -240,23 +261,25 @@ pub fn detail_panel(app: &mut App, ui: &mut Ui) {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
 
-                        let mut row =
-                            ui.child_ui(rect, Layout::left_to_right(Align::Center));
-                        row.add_space(8.0);
+                        let mut row = ui.child_ui(rect, Layout::left_to_right(egui::Align::Center));
+                        row.add_space(10.0);
                         row.add(egui::Label::new(
-                            RichText::new(format!("E{:02}", e.episode)).size(12.0).color(muted),
+                            RichText::new(format!("E{:02}", e.episode))
+                                .size(12.0)
+                                .color(muted),
                         ));
-                        row.add_space(8.0);
+                        row.add_space(10.0);
+                        let title_w = (rect.width() - 120.0).max(60.0);
                         row.allocate_ui_with_layout(
-                            Vec2::new((rect.width() - 60.0).max(60.0), 42.0),
-                            Layout::left_to_right(Align::Center),
+                            Vec2::new(title_w, 42.0),
+                            Layout::left_to_right(egui::Align::Center),
                             |ui| {
                                 ui::one_line(ui, &e.title, 13.0, false);
                             },
                         );
-                        row.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.add_space(8.0);
-                            if ui.button("▶").clicked() {
+                        row.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.add_space(10.0);
+                            if ui.button("▶").on_hover_text("Episode abspielen").clicked() {
                                 play = Some(PlayItem {
                                     title: e.title.clone(),
                                     url: e.stream_url.clone(),
@@ -264,6 +287,7 @@ pub fn detail_panel(app: &mut App, ui: &mut Ui) {
                                     progress_key: key.clone(),
                                 });
                             }
+                            ui.add_space(10.0);
                         });
 
                         if resp.clicked() {

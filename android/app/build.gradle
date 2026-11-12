@@ -11,8 +11,12 @@ android {
         applicationId "com.tarik.dadoplayer"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "0.1.0"
+        // Bump this on every build that is handed to a tester. Android only
+        // treats an APK as an *update* when versionCode grows; with a frozen
+        // value the installer keeps reporting the same version and some OEM
+        // installers refuse the package outright.
+        versionCode 2
+        versionName "0.1.1"
 
         // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the
         // prebuilt libmpv.so fetched from mpv-android). Restricting ABIs here keeps
@@ -23,15 +27,46 @@ android {
         }
     }
 
+    // ---- signing -------------------------------------------------------
+    //
+    // The app is NOT signed here. Final signing is done once, by
+    // `probe/build_apk.sh`, with a STABLE project-owned key
+    // (android/app/dadoplayer-release.pk8 + .x509.pem) via `apksigner`.
+    //
+    // WHY NOT THE DEFAULT DEBUG KEY:
+    // Gradle's implicit debug signing uses `~/.android/debug.keystore`, which
+    // is generated *per machine* (and is recreated whenever that folder is
+    // cleared). A build produced with a different certificate cannot be
+    // installed over an existing one -> INSTALL_FAILED_UPDATE_INCOMPATIBLE,
+    // which testers see as "the APK does not install at all, I have to
+    // uninstall first". Pointing every shipped APK at one fixed key makes
+    // updates always succeed. The key is a throwaway test key, not a secret.
+    //
+    // Because signing lives in build_apk.sh, `assembleDebug`/`assembleRelease`
+    // here run unsigned-or-debug and are safe to call directly during dev; the
+    // APK is re-signed at the end of build_apk.sh.
+
     buildTypes {
         release {
-            // Signing is done post-build via r0adkll/sign-android-release in CI,
-            // so no signingConfig is configured here (keys stay in GitHub Secrets).
-            minifyEnabled false
+            // Shrinking is the single biggest lever on install time after the
+            // native libraries: it cuts classes.dex and removes the debug
+            // metadata the ART verifier otherwise walks during install. Only
+            // enabled here for the release variant; see proguard-rules.pro for
+            // the JNI keep rules that make this safe.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             debuggable true
+            // R8 + shrinkResources: der eigentliche Install-Hänger.
+            // classes.dex ist 6,3 MB ohne R8 (~20k Klassen aus
+            // games-activity + appcompat + kotlin-stdlib). R8 schneidet
+            // das auf ~1,8-2,2 MB und der ART-Verifier muss bei jedem
+            // Installation weniger verifizieren.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
@@ -50,13 +85,30 @@ android {
 
     // No NDK block required: the prebuilt .so files are consumed directly from
     // jniLibs. (If you later compile C/C++ inside the Gradle project, add ndk {}.)
-    packagingOptions {
-        // libmpv.so / libdadoplayer.so are loaded at runtime via the Rust glue.
+    packaging {
+        jniLibs {
+            // Keep the .so files STORED (uncompressed) and page-aligned inside
+            // the APK. Combined with android:extractNativeLibs="false" in the
+            // manifest this makes Android mmap the libraries straight out of
+            // the APK. With legacy packaging the installer has to copy all
+            // 41 MB to /data/app before the app can start, which is the bulk
+            // of the "installing takes forever" complaint.
+            useLegacyPackaging = false
+        }
+        // libmpv.so / libdadoplayer.so are already stripped (verified with
+        // llvm-strip: stripping them again saves 8 bytes). Do not let the
+        // build strip them a second time.
         doNotStrip "**/*.so"
     }
 }
 
 dependencies {
+    // Align all Kotlin stdlib artifacts to one version. Since Kotlin 1.8 the
+    // kotlin-stdlib-jdk7/jdk8 modules are empty shims folded into
+    // kotlin-stdlib; leaving them at 1.6.21 (pulled transitively) duplicates
+    // classes and breaks checkDebugDuplicateClasses.
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
+
     // Bridges the AndroidX Games Activity to the Rust `android_main` entry
     // point. Provides both the Java `GameActivity` base class (subclassed by
     // android/app/src/main/java/android/app/GameActivity.java) and the native
@@ -64,4 +116,10 @@ dependencies {
     // Version 2.0.2 is the one aligned with `android-activity` 0.5's native glue
     // (newer 3.x/4.x releases changed the native ABI and are not compatible).
     implementation 'androidx.games:games-activity:2.0.2'
+    // com.google.androidgamesdk.GameActivity extends AppCompatActivity and
+    // implements androidx.core.view.OnApplyWindowInsetsListener, so the app
+    // needs appcompat (which transitively brings androidx.core) on the
+    // compile/runtime classpath. The POM of games-activity declares no
+    // dependencies, so this must be added explicitly.
+    implementation 'androidx.appcompat:appcompat:1.7.0'
 }
