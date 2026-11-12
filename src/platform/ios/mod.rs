@@ -7,17 +7,12 @@
 //! The playback engine is deliberately **not** libmpv. iOS has no shipped libmpv
 //! binary, no `libloading` story, and licensing/packaging cost that AVPlayer
 //! avoids. `crate::mpv` is aliased to an AVPlayer shim on this target (see
-//! `src/mpv_ios.rs`) so the shared app code keeps one player shape.
+//! `src/platform/ios/avplayer.rs`) so the shared app code keeps one player shape.
 
 pub mod bridge;
 pub mod sys;
 
-// Target-only. These implement `VideoSurface` / `eframe::App` wiring, which
-// would collide with the Windows implementations when the module is compiled on
-// a non-iOS host for the `ios-check` type check. The ABI layer (`bridge`) and
-// the player shim (`mpv_ios`) are the parts that need the check; they live
-// above and stay host-independent.
-#[cfg(target_os = "ios")]
+// The host-side ios-check also checks the eframe startup API.
 pub mod entry;
 #[cfg(target_os = "ios")]
 pub mod video_surface;

@@ -13,5 +13,5 @@ version: 1
 bundleID: com.tarik.dadoplayer
 
 # Info.plist carries CFBundleDisplayName, ATS (plain-HTTP IPTV panels) and the
-# audio background mode. probe/build_ios.sh --ipa copies it into the bundle.
+# audio background mode. ios/build.sh --ipa copies it into the bundle.
 infoPath: Info.plist

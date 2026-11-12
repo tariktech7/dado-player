@@ -2,8 +2,7 @@
 //!
 //! Bündelt alles, was sich zwischen Desktop (Windows), Android und iOS
 //! unterscheidet: die Video-Ausgabefläche, die Engine-Auswahl und kleine
-//! System-Helfer. In v1 ist nur Windows real implementiert; Android/iOS sind
-//! per `cfg(...)` abgetrennt und werden vom jeweiligen Port ausgefüllt.
+//! System-Helfer. Die Zielplattform wählt per `cfg` den passenden Adapter.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

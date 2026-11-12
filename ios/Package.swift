@@ -15,7 +15,7 @@
 //               The UIKit host: main.swift (top-level entry), AppDelegate,
 //               RootViewController, VideoView, HostBridge.
 //
-// The Rust core is NOT built by SwiftPM. `probe/build_ios.sh` builds
+// The Rust core is NOT built by SwiftPM. `ios/build.sh` builds
 // libdadoplayer.a for aarch64-apple-ios and copies it into ios/Vendor/; the
 // linker settings below pick it up by name. There is deliberately no
 // .xcodeproj — xtool drives SwiftPM directly.
@@ -57,7 +57,7 @@ let package = Package(
             dependencies: ["DadoBridge"],
             path: "Sources/DadoPlayer",
             linkerSettings: [
-                // libdadoplayer.a, copied here by probe/build_ios.sh.
+                // libdadoplayer.a, copied here by ios/build.sh.
                 .unsafeFlags(["-L\(vendorPath)", "-ldadoplayer"]),
 
                 // Frameworks the Swift host references, plus the ones the Rust

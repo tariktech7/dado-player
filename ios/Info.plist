@@ -17,7 +17,7 @@
 
   * UIBackgroundModes / audio — an IPTV player that stops when the screen locks
     is broken. Requires an AVAudioSession category set in the host, which is
-    still outstanding (see README.iOS.md §8).
+    still outstanding (see docs/history/README.iOS.md §8).
 -->
 <plist version="1.0">
 <dict>

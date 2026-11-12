@@ -18,11 +18,10 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 [features]
 # Compiles the iOS-only modules on a non-iOS host for type checking. Wires
 # nothing up: `cargo check --features ios-check` is the guard that keeps
-# `platform::ios` and `mpv_ios.rs` from rotting on machines without an Apple SDK.
+# `platform::ios` and the AVPlayer adapter from rotting on machines without an Apple SDK.
 ios-check = []
 
 [dependencies]
-eframe = { version = "0.27", features = ["wgpu"] }
 egui = "0.27"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "rustls-tls"] }
@@ -35,8 +34,14 @@ log = "0.4"
 chrono = "0.4"
 base64 = "0.22"
 libloading = "0.8"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
 raw-window-handle = "0.6"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+eframe = { version = "0.27", features = ["wgpu"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# AVPlayer supplies the video layer. Only Metal/wgpu renders the egui host.
+eframe = { version = "0.27", default-features = false, features = ["default_fonts", "wgpu"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Must match the versions pulled in by `winit`'s `android-game-activity`
@@ -53,8 +58,8 @@ ndk = "0.8"
 # Version is pinned to the one eframe/egui-winit already use (0.29.15); the
 # `android-game-activity` feature is additive across the graph.
 winit = { version = "0.29", features = ["android-game-activity"] }
-eframe = { version = "0.27", features = ["android-game-activity", "glow"] }
-# NOTE: the global eframe dependency above also enables `wgpu`, so on Android
+eframe = { version = "0.27", features = ["android-game-activity", "glow", "wgpu"] }
+# NOTE: the Android build retains `wgpu` for compatibility, so
 # both renderer features are on and `Renderer::default()` would pick wgpu.
 # `src/platform/android/entry.rs` therefore pins `Renderer::Glow` explicitly.
 # The paint callback that composites mpv's video into egui's frame. Version
@@ -69,6 +74,7 @@ egui_glow = "0.27"
 # Windows. This direct dependency unifies the feature set so the dx12 + vulkan
 # backends and wgsl shader support are actually built into the wgpu we ship.
 [target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }
 wgpu = { version = "0.19.1", default-features = false, features = ["dx12", "vulkan-portability", "wgsl", "metal", "webgpu", "fragile-send-sync-non-atomic-wasm"] }
 
 [profile.release]

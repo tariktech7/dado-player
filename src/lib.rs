@@ -16,7 +16,7 @@ pub mod fonts;
 #[cfg(not(target_os = "ios"))]
 pub mod mpv;
 #[cfg(target_os = "ios")]
-#[path = "mpv_ios.rs"]
+#[path = "platform/ios/avplayer.rs"]
 pub mod mpv;
 pub mod platform;
 pub mod player;
@@ -29,11 +29,11 @@ pub mod ui;
 /// Type-check-only build of the iOS shim on a non-iOS host.
 ///
 /// The real iOS build needs an Apple SDK, which most development machines (and
-/// CI runners without a macOS job) do not have. Without this, `mpv_ios.rs` and
+/// CI runners without a macOS job) do not have. Without this, `platform/ios/avplayer.rs` and
 /// `platform::ios` would never be compiled anywhere and would rot silently.
 /// Enabled by `--features ios-check`; it wires nothing up, it only compiles.
 #[cfg(all(feature = "ios-check", not(target_os = "ios")))]
-#[path = "mpv_ios.rs"]
+#[path = "platform/ios/avplayer.rs"]
 pub mod mpv_ios;
 
 /// Desktop entry (Windows). Other desktop OSes are not a target.

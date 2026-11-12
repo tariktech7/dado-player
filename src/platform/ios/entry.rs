@@ -40,14 +40,15 @@ pub extern "C" fn dado_app_start() {
 }
 
 fn run() -> eframe::Result<()> {
-    let mut native_options = eframe::NativeOptions::default();
-    native_options.renderer = IOS_RENDERER;
-
     // The video view is a native `AVPlayerLayer` owned by the Swift host, placed
     // by `dado_host_video_frame`. egui draws on top of it. That means the egui
     // window must be transparent where the video shows through — the host sets
     // the video view behind the UI, so the UI simply does not paint there.
-    native_options.transparent = true;
+    let native_options = eframe::NativeOptions {
+        renderer: IOS_RENDERER,
+        viewport: egui::ViewportBuilder::default().with_transparent(true),
+        ..Default::default()
+    };
 
     eframe::run_native(
         "Dado Player",

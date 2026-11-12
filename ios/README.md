@@ -57,51 +57,8 @@ which is the layout above. If SwiftPM ever fails to resolve the module, move
 `module.modulemap` into `include/` and change the header line to
 `header "DadoBridge.h"`.
 
-## Build flow
+## Build
 
-Rust is not built by SwiftPM. `probe/build_ios.sh` is expected to:
+Run `bash ios/build.sh --ipa` from the repository root with the Apple device SDK, Swift, and the Rust target aarch64-apple-ios installed. The script builds the Rust archive, links the Swift host and packages Payload/DadoPlayer.app. Info.plist supplies the bundle metadata. Package.swift resolves Vendor relative to its own location.
 
-1. `cargo build --target aarch64-apple-ios --release` (staticlib, not cdylib),
-2. copy the result to `ios/Vendor/libdadoplayer.a`.
-
-`Package.swift` then links it with `.unsafeFlags(["-LVendor", "-ldadoplayer"])`.
-Note that `-L` is relative to the linker's working directory (the package root
-when xtool drives the build).
-
-`probe/build_ios.sh` does exactly this, plus a preflight that refuses to run
-without an Apple SDK and an `nm` check of the ABI. Build it from the project
-root:
-
-Then, from this directory:
-
-```bash
-bash ../probe/build_ios.sh            # Rust staticlib + ABI check
-bash ../probe/build_ios.sh --deploy   # ... then xtool dev (sign + install)
-```
-
-`xtool setup` is the one-time prerequisite (Darwin SDK + Apple sign-in).
-`xtool new` is not needed — the package already exists. `xtool.yml` only sets
-`version` and `bundleID`; the schema has no `displayName` key (the home-screen
-name comes from an Info.plist referenced via `infoPath`, which we do not ship
-yet). Verify any extra key against `xtool help` before adding it.
-
-## Status: not compiled
-
-This host has **never been compiled on this machine** — there is no Apple SDK,
-no Swift toolchain for iOS and no `libdadoplayer.a` here, so nothing in this
-directory has been type-checked against a real SDK.
-
-First validation step, in this order:
-
-1. `bash probe/build_ios.sh` → produces `ios/Vendor/libdadoplayer.a`.
-2. The script's own `nm` gate: the three `dado_app_*` symbols must be **defined**
-   (T) and the sixteen `dado_host_*` symbols must be **undefined** (U), which
-   proves the two halves agree.
-3. `xtool dev` → expect the first real compile. The likely first failures are
-   (a) further frameworks the Rust static library pulls in (CoreAudio, AudioToolbox,
-   Foundation) — add them to `linkerSettings` in `Package.swift`, and
-   (b) Swift 6 strict-concurrency diagnostics if the tools version is ever raised
-   above 5.9.
-4. On device: if the screen is black during playback, the video layer is behind
-   an opaque egui surface — that is a Rust-side clear-colour/cutout issue, not a
-   host issue.
+The ios.yml workflow runs the device build and uploads Dado-Player-unsigned.ipa on success. Windows can type-check the Rust bridge, AVPlayer adapter and startup API with `cargo check --features ios-check --lib`. Device linking, signing and playback need separate validation.

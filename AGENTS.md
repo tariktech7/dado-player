@@ -1,0 +1,9 @@
+# Arbeitsrichtlinien für Dado Player
+
+Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
+
+- Gemeinsame Funktionen in src/ entwickeln. Betriebssystem-Aufrufe in src/platform/windows, android oder ios kapseln. Native Hosts, Signierung und Paketierung gehören zum jeweiligen Ziel. Die gemeinsamen Benutzerabläufe über die Plattform-Fassade anbinden.
+- Ein Build-Einstieg pro Ziel gemäß README.md. Bestehende Aufrufe unter probe/ sind Weiterleitungen für ältere Werkzeuge. Bei Änderungen an Pfaden, SDKs, Artefakten oder Voraussetzungen im selben Änderungssatz README, CI und aufrufende Skripte abgleichen.
+- Gemeinsame Rust-Änderungen mit cargo fmt --all -- --check und cargo test --locked --all-targets auf Windows prüfen. Für Android den Gradle-/NDK-Build, für iOS den Geräte-Build mit Apple-SDK prüfen. cargo check --features ios-check --lib deckt nur einen Teil des iOS-Codes ab.
+- Bei iOS-ABI-Änderungen Header, Rust-Bridge und Swift-Host zusammen ändern. Einen erfolgreichen Paketbuild, eine gültige Gerätesignatur und einen Wiedergabetest auf Hardware getrennt protokollieren.
+- Vor Umstrukturierungen den Git-Stand prüfen. Bestehende APKs, portable Pakete, lokale Signierschlüssel und Referenzdaten erhalten. Zugangsdaten, Schlüssel und generierte Pakete nicht committen. Historische Prüfberichte mit ihrem ursprünglichen Stand aufbewahren.
