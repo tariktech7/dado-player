@@ -687,6 +687,10 @@ fn favorite_epg(app: &mut App, ui: &mut Ui) {
             continue;
         }
         app.request_epg(channel.id);
+        if app.epg_pending(channel.id) {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(250));
+        }
         let current = app
             .epg_for(channel.id)
             .and_then(|entries| entries.iter().find(|e| e.start <= now && now < e.end))
