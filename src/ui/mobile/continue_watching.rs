@@ -4,7 +4,7 @@ use egui::{Align2, Color32, FontId, Rect, Sense, Ui, Vec2};
 
 use super::components::{self, Icon, Row};
 use super::focus;
-use super::tokens::{GAP, NAV_H};
+use super::tokens::GAP;
 use super::Layout;
 use crate::app::App;
 
