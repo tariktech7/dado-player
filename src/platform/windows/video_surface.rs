@@ -4,6 +4,7 @@
 //! `STATIC` class paints white, which flashes while a stream is still loading.
 
 use crate::platform::VideoSurface;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 
 use windows_sys::Win32::Foundation::{HWND, RECT};
@@ -33,7 +34,7 @@ fn ensure_class() {
         let brush = CreateSolidBrush(0x0000_0000); // COLORREF black
         let wc = WNDCLASSW {
             style: CS_HREDRAW | CS_VREDRAW,
-            lpfnWndProc: Some(DefWindowProcW),
+            lpfnWndProc: Some(video_window_proc),
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: GetModuleHandleW(std::ptr::null()),
@@ -199,4 +200,20 @@ impl Drop for VideoSurface {
             DestroyWindow(h);
         }
     }
+}
+
+static VIDEO_CLICKED: AtomicBool = AtomicBool::new(false);
+pub fn take_click() -> bool {
+    VIDEO_CLICKED.swap(false, Ordering::Relaxed)
+}
+unsafe extern "system" fn video_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: usize,
+    lparam: isize,
+) -> isize {
+    if message == windows_sys::Win32::UI::WindowsAndMessaging::WM_LBUTTONUP {
+        VIDEO_CLICKED.store(true, Ordering::Relaxed);
+    }
+    DefWindowProcW(hwnd, message, wparam, lparam)
 }

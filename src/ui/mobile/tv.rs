@@ -174,6 +174,10 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
             draw_headers(app, &mut hui, &mut metas);
 
             let mut cui = ui.child_ui(g.content, egui::Layout::top_down(Align::LEFT));
+            if app.view == crate::app::View::Live {
+                crate::ui::live::show(app, &mut cui);
+                return;
+            }
             let hero_rect = draw_content(app, &mut cui, &g, &mut metas);
 
             // Painted last: only now are all `metas` (in registration order)

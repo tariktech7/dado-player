@@ -610,6 +610,10 @@ impl App {
         if crate::platform::ios::bridge::take_player_closed() {
             self.stop_play();
         }
+        #[cfg(target_os = "windows")]
+        if crate::platform::windows::video_surface::take_click() && self.preview.is_some() {
+            self.promote_preview(false);
+        }
         let now = ctx.input(|i| i.time);
 
         // Cold-start guard. eframe is reactive: on slow GL drivers the very
@@ -823,7 +827,21 @@ impl App {
         // ---- D-pad / TV-remote focus (touch UI only) ----
         // Drain unconditionally so the native key queue never backs up on the
         // desktop UI, where there is nothing to focus.
-        let keys = crate::platform::drain_remote_keys();
+        let mut keys = crate::platform::drain_remote_keys();
+        if self.tv && keys.is_empty() {
+            use crate::platform::RemoteKey;
+            for (key, remote) in [
+                (egui::Key::ArrowUp, RemoteKey::Up),
+                (egui::Key::ArrowDown, RemoteKey::Down),
+                (egui::Key::ArrowLeft, RemoteKey::Left),
+                (egui::Key::ArrowRight, RemoteKey::Right),
+                (egui::Key::Enter, RemoteKey::Ok),
+            ] {
+                if ctx.input(|i| i.key_pressed(key)) {
+                    keys.push(remote);
+                }
+            }
+        }
         // Any interaction with the player brings the chrome back and restarts
         // the auto-hide timer. Remote keys are drained here, before `draw()`,
         // so the player UI can no longer see them itself. Without this a TV
@@ -1020,15 +1038,6 @@ impl App {
             .default_width(224.0)
             .min_width(186.0)
             .show(ctx, |ui| ui::sidebar::show(self, ui));
-
-        if self.view == View::Live && self.preview.is_some() {
-            egui::SidePanel::right("preview")
-                .resizable(true)
-                .default_width(440.0)
-                .min_width(300.0)
-                .max_width(780.0)
-                .show(ctx, |ui| ui::live::preview_panel(self, ui));
-        }
 
         if self.view == View::Series && self.selected_series.is_some() {
             egui::SidePanel::right("series_detail")
@@ -1756,6 +1765,14 @@ impl App {
     }
 
     /// Start (or switch) the inline preview while the channel list stays visible.
+    pub fn select_live_channel(&mut self, item: PlayItem) {
+        if self.is_previewing(&item.progress_key) {
+            self.promote_preview(false);
+        } else {
+            self.start_preview(item);
+        }
+    }
+
     pub fn start_preview(&mut self, item: PlayItem) {
         if item.kind == PlayKind::Live {
             let key = item.progress_key.clone();
@@ -1778,13 +1795,14 @@ impl App {
         {
             let backend = self.settings.player_backend;
             // For MX Player integrated capability, use it directly without app installation
-            if backend == crate::types::PlayerBackend::MxPlayerIntegrated {
+            if !self.tv && backend == crate::types::PlayerBackend::MxPlayerIntegrated {
                 if crate::platform::open_external(&item.url, &item.title, backend).is_ok() {
                     self.preview = None;
                     self.record_history(&item);
                     return;
                 }
-            } else if backend.is_external()
+            } else if !self.tv
+                && backend.is_external()
                 && crate::platform::open_external(&item.url, &item.title, backend).is_ok()
             {
                 self.preview = None;
@@ -1855,6 +1873,9 @@ impl App {
         if let Some(item) = self.preview.take() {
             self.previous_view = View::Live;
             self.current_play = Some(item);
+            self.last_video_rect = None;
+            self.last_video_cutouts = None;
+            self.ui_activity = -1.0;
             self.view = View::Player;
             if fullscreen {
                 self.pending_fullscreen = Some(true);
@@ -1996,7 +2017,7 @@ impl App {
         }
 
         // Enter moves the running preview into the big player.
-        if enter && has_preview && !in_player {
+        if enter && has_preview && !in_player && !self.tv {
             self.promote_preview(false);
             return;
         }
@@ -2032,14 +2053,8 @@ impl App {
         }
 
         // ---- arrows ----
-        // Main menu: ↑/↓ (and ←/→) zap through the channels and load the preview.
+        // Column widgets and spatial TV focus own browse navigation.
         if in_live_list && !in_player {
-            if up || left {
-                self.step_channel(-1);
-            }
-            if down || right {
-                self.step_channel(1);
-            }
             return;
         }
 
@@ -2707,8 +2722,35 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn channel_selection_previews_then_promotes_only_the_same_channel() {
+        let mut app = App::test_app();
+        app.view = View::Live;
+        let item = PlayItem {
+            title: "Channel".into(),
+            url: "https://example.invalid/live.m3u8".into(),
+            kind: PlayKind::Live,
+            progress_key: "live:1".into(),
+        };
+        app.select_live_channel(item.clone());
+        assert!(app.view == View::Live);
+        assert!(app.is_previewing("live:1"));
+        let mut second = item.clone();
+        second.progress_key = "live:2".into();
+        second.url = "https://example.invalid/second.m3u8".into();
+        app.select_live_channel(second);
+        assert!(app.view == View::Live);
+        assert!(app.is_previewing("live:2"));
+        app.select_live_channel(item.clone());
+        assert!(app.view == View::Live);
+        app.select_live_channel(item);
+        assert!(app.view == View::Player);
+        assert!(app.preview.is_none());
+        assert_eq!(app.current_play.as_ref().unwrap().progress_key, "live:1");
+    }
+
     use super::{App, AppEvent, ImageState, View, MAX_DETAIL_CACHE_ITEMS, MAX_DETAIL_ROWS};
-    use crate::types::{EpgEntry, Episode, Library, Profile, ProfileKind};
+    use crate::types::{EpgEntry, Episode, Library, PlayItem, PlayKind, Profile, ProfileKind};
 
     #[test]
     fn texture_budget_eviction_and_replacement_keep_accounting_consistent() {

@@ -423,7 +423,13 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
     if FREE_PENDING.swap(false, Ordering::SeqCst) {
         if let Ok(mut slot) = CTX.lock() {
             if let Some(c) = slot.take() {
-                unsafe { (c.fns.free)(c.ctx) };
+                unsafe {
+                    (c.fns.free)(c.ctx);
+                    if let Some(t) = TARGET.lock().unwrap().take() {
+                        gl.delete_framebuffer(t.fbo);
+                        gl.delete_renderbuffer(t.color);
+                    }
+                };
             }
         }
         READY.store(false, Ordering::SeqCst);
@@ -467,12 +473,70 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
     // harmless. Its return value is deliberately NOT a gate — see above.
     unsafe { (c.fns.update)(c.ctx) };
 
-    // FBO 0: egui_glow's `intermediate_fbo()` is `None`, so the default
-    // framebuffer is what is bound here.
+    let viewport = info.viewport_in_pixels();
+    let partial = viewport.width_px != sw || viewport.height_px != sh;
+    let mut target = TARGET.lock().unwrap();
+    if partial {
+        if viewport.width_px <= 0 || viewport.height_px <= 0 {
+            return;
+        }
+        if target
+            .as_ref()
+            .is_none_or(|t| t.width != viewport.width_px || t.height != viewport.height_px)
+        {
+            unsafe {
+                if let Some(old) = target.take() {
+                    gl.delete_framebuffer(old.fbo);
+                    gl.delete_renderbuffer(old.color);
+                }
+                let Ok(fbo) = gl.create_framebuffer() else {
+                    set_err("Vorschau-Framebuffer fehlt".into());
+                    return;
+                };
+                let Ok(color) = gl.create_renderbuffer() else {
+                    gl.delete_framebuffer(fbo);
+                    set_err("Vorschau-Puffer fehlt".into());
+                    return;
+                };
+                gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
+                gl.bind_renderbuffer(glow::RENDERBUFFER, Some(color));
+                gl.renderbuffer_storage(
+                    glow::RENDERBUFFER,
+                    glow::RGBA8,
+                    viewport.width_px,
+                    viewport.height_px,
+                );
+                gl.framebuffer_renderbuffer(
+                    glow::FRAMEBUFFER,
+                    glow::COLOR_ATTACHMENT0,
+                    glow::RENDERBUFFER,
+                    Some(color),
+                );
+                let valid =
+                    gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
+                gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+                gl.bind_renderbuffer(glow::RENDERBUFFER, None);
+                if !valid {
+                    gl.delete_framebuffer(fbo);
+                    gl.delete_renderbuffer(color);
+                    set_err("Vorschau-Framebuffer unvollständig".into());
+                    return;
+                }
+                *target = Some(Target {
+                    fbo,
+                    color,
+                    width: viewport.width_px,
+                    height: viewport.height_px,
+                });
+            }
+        }
+    }
+    let selected = if partial { target.as_ref() } else { None };
+    let (render_width, render_height) = selected.map(|t| (t.width, t.height)).unwrap_or((sw, sh));
     let mut fbo = OpenglFbo {
-        fbo: 0,
-        w: sw,
-        h: sh,
+        fbo: selected.map(|t| t.fbo.0.get() as i32).unwrap_or(0),
+        w: render_width,
+        h: render_height,
         internal_format: 0,
     };
     // OpenGL's framebuffer origin is bottom-left and mpv's is top-left.
@@ -507,7 +571,7 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
 
         // Full framebuffer, matching fbo.w/h. Whether mpv sets its own
         // viewport from those dimensions or honours this one, both agree.
-        gl.viewport(0, 0, sw, sh);
+        gl.viewport(0, 0, render_width, render_height);
         gl.disable(glow::SCISSOR_TEST);
         gl.disable(glow::DEPTH_TEST);
         gl.disable(glow::BLEND);
@@ -519,6 +583,23 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
             *slot = None;
         }
 
+        if let Some(t) = selected {
+            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(t.fbo));
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, None);
+            gl.blit_framebuffer(
+                0,
+                0,
+                t.width,
+                t.height,
+                viewport.left_px,
+                viewport.from_bottom_px,
+                viewport.left_px + viewport.width_px,
+                viewport.from_bottom_px + viewport.height_px,
+                glow::COLOR_BUFFER_BIT,
+                glow::LINEAR,
+            );
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+        }
         gl.viewport(old_vp[0], old_vp[1], old_vp[2], old_vp[3]);
         gl.scissor(
             old_scissor_box[0],
@@ -552,3 +633,11 @@ pub fn shape(rect: egui::Rect) -> egui::Shape {
         callback: Arc::new(egui_glow::CallbackFn::new(paint)),
     })
 }
+
+struct Target {
+    fbo: glow::NativeFramebuffer,
+    color: glow::NativeRenderbuffer,
+    width: i32,
+    height: i32,
+}
+static TARGET: Mutex<Option<Target>> = Mutex::new(None);
