@@ -109,8 +109,10 @@ final class VideoHost {
 
     func setVisible(_ visible: Bool) {
         withView { view in
-            if view.isHidden == !visible { return }
-            view.isHidden = !visible
+            if visible, let host=view.superview, let root=host.superview {
+                root.bringSubviewToFront(host)
+            }
+            if view.isHidden != !visible { view.isHidden = !visible }
         }
     }
 

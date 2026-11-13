@@ -165,6 +165,8 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     });
 
     if let Some(e) = err {
+        #[cfg(target_os = "ios")]
+        crate::platform::ios::bridge::video_visible(false);
         let text = format!("Wiedergabe nicht möglich\n{}", e);
         ui.painter().text(
             video.center(),

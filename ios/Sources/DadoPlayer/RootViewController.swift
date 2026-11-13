@@ -70,9 +70,11 @@ final class RootViewController: UIViewController {
             // Normal path: winit already installed a root controller. Become its
             // child and sit underneath its content.
             root.addChild(self)
-            view.frame = root.view.bounds
+            view.frame = window.bounds
             view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            root.view.insertSubview(view, at: 0)
+            // wgpu can install a Metal-backed subview after the first frame.
+            // Host the noninteractive video plane above that root surface.
+            window.addSubview(view)
             didMove(toParent: root)
         } else if window.rootViewController == nil {
             // Early launch: nobody owns the window yet. Take it, winit will not
