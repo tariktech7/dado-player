@@ -144,10 +144,8 @@ fn channels(app: &mut App, ui: &mut Ui) {
         [ui.available_width(), if tv { 42.0 } else { 30.0 }],
         egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
     );
-    if tv {
-        if focus::clicked(ui, &query) {
-            query.request_focus();
-        }
+    if tv && focus::clicked(ui, &query) {
+        query.request_focus();
     }
     let search = app.live_q.trim().to_lowercase();
     let indices: Vec<_> = app
