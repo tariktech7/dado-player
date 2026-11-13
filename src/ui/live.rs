@@ -297,14 +297,13 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     let w = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
     ui.painter().rect_filled(rect, 8.0, Color32::BLACK);
-    #[cfg(target_os = "android")]
-    {
-        app.position_preview(rect, ui.ctx().pixels_per_point());
+    let visible = rect.intersect(ui.clip_rect());
+    if visible.is_positive() {
+        app.position_preview(visible, ui.ctx().pixels_per_point());
+        #[cfg(target_os = "android")]
         ui.painter()
-            .add(crate::platform::android::render::shape(rect));
+            .add(crate::platform::android::render::shape(visible));
     }
-    #[cfg(not(target_os = "android"))]
-    app.position_preview(rect, ui.ctx().pixels_per_point());
     let promote = activated(ui, &response, tv);
     ui.add_space(8.0);
     ui.horizontal_wrapped(|ui| {
