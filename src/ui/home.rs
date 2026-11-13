@@ -10,7 +10,7 @@ const POSTER_H: f32 = 166.0;
 
 /// Full-width content dashboard inspired by the supplied reference capture.
 pub fn show(app: &mut App, ui: &mut Ui) {
-    let desktop = cfg!(target_os = "windows") && !mobile_active(ui.ctx());
+    let desktop = cfg!(target_os = "windows");
     if desktop && ui.available_width() >= 940.0 {
         let gap = 20.0;
         let right = (ui.available_width() * 0.28).clamp(280.0, 340.0);
