@@ -65,7 +65,6 @@ fn sec(ui: &mut Ui, q: &str, title: &str) -> bool {
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
-    crate::fonts::license(ui);
     let mut player_changed = false;
     let mut theme_changed = false;
 
@@ -223,6 +222,7 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
     });
     #[cfg(target_os = "windows")]
     crate::platform::windows::update::show(ui);
+    crate::fonts::license(ui);
     ui.add_space(4.0);
     ui.add(egui::Label::new(
         RichText::new("Änderungen werden automatisch gespeichert.")
