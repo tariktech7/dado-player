@@ -606,6 +606,10 @@ impl App {
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        #[cfg(target_os = "ios")]
+        if crate::platform::ios::bridge::take_player_closed() {
+            self.stop_play();
+        }
         let now = ctx.input(|i| i.time);
 
         // Cold-start guard. eframe is reactive: on slow GL drivers the very

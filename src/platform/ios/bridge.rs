@@ -383,3 +383,12 @@ mod native_fields {
 }
 #[cfg(target_os = "ios")]
 pub use native_fields::{edit, edited, end_frame};
+
+static PLAYER_CLOSED: AtomicBool = AtomicBool::new(false);
+#[no_mangle]
+pub extern "C" fn dado_app_player_closed() {
+    PLAYER_CLOSED.store(true, Ordering::Relaxed);
+}
+pub fn take_player_closed() -> bool {
+    PLAYER_CLOSED.swap(false, Ordering::Relaxed)
+}

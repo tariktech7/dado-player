@@ -2,10 +2,7 @@ use crate::app::{App, View};
 use crate::theme;
 use crate::types::{PlayItem, PlayKind};
 use crate::ui;
-use crate::ui::mobile::{
-    active as mobile_active,
-    tokens::{GAP, NAV_H},
-};
+use crate::ui::mobile::{active as mobile_active, tokens::GAP};
 use egui::{Align, Color32, Layout, RichText, Sense, Stroke, Ui, Vec2};
 
 const POSTER_W: f32 = 112.0;
@@ -84,7 +81,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             // central panel, so leave a full nav-height + gap of clearance so
             // the last rail can scroll clear instead of straddling the tabs.
             if mobile_active(ui.ctx()) {
-                ui.add_space(NAV_H + GAP);
+                ui.add_space(GAP);
             } else {
                 ui.add_space(20.0);
             }

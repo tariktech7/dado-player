@@ -149,7 +149,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 );
             }
             // Mobile: clear the bottom nav bar (NAV_H) plus a gap.
-            ui.add_space(NAV_H + GAP);
+            ui.add_space(GAP);
         });
 
     if let Some(item) = play {

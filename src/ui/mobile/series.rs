@@ -101,7 +101,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     // Mobile: clear the bottom nav bar (NAV_H) plus a gap.
-                    ui.add_space(NAV_H + GAP);
+                    ui.add_space(GAP);
                     let r = components::button(ui, "Mehr laden", l.content_w(), false, true);
                     if focus::clicked(ui, &r) {
                         load_more = true;
@@ -109,7 +109,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 });
             }
             // Mobile: clear the bottom nav bar (NAV_H) plus a gap.
-            ui.add_space(NAV_H + GAP);
+            ui.add_space(GAP);
         });
 
     if load_more {
@@ -213,7 +213,7 @@ fn detail(app: &mut App, ui: &mut Ui, l: &Layout) {
             ui.add_space(12.0);
             ui.horizontal(|ui| {
                 // Mobile: clear the bottom nav bar (NAV_H) plus a gap.
-                ui.add_space(NAV_H + GAP);
+                ui.add_space(GAP);
                 let cover_w = if compact { COVER_W_COMPACT } else { COVER_W };
                 let (rect, _) =
                     ui.allocate_exact_size(vec2(cover_w, cover_w * 1.5), Sense::hover());
@@ -366,7 +366,7 @@ fn detail(app: &mut App, ui: &mut Ui, l: &Layout) {
                 }
             }
             // Mobile: clear the bottom nav bar (NAV_H) plus a gap.
-            ui.add_space(NAV_H + GAP);
+            ui.add_space(GAP);
         });
 
     if let Some(item) = play {

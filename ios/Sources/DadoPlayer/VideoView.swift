@@ -27,7 +27,7 @@ final class VideoView: UIView {
         return layer as! AVPlayerLayer
     }
 
-    private let player = AVPlayer()
+    let player = AVPlayer()
     private var itemObservers: [NSKeyValueObservation] = []
     private var endObserver: NSObjectProtocol?
 
@@ -65,6 +65,10 @@ final class VideoView: UIView {
         playerLayer.player = player
         playerLayer.videoGravity = .resizeAspect
         player.actionAtItemEnd = .pause
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch { NSLog("Dado: audio session unavailable") }
     }
 
     // MARK: - Control
@@ -89,8 +93,7 @@ final class VideoView: UIView {
         #if targetEnvironment(simulator)
         if ProcessInfo.processInfo.environment["DADO_VIDEO_SMOKE"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now()+4) { [weak self] in
-                guard let self = self, self.playerLayer.isReadyForDisplay, self.player.currentTime().seconds > 0.5,
-                      self.window != nil, !self.isHidden, self.bounds.width > 20 else { return }
+                guard let self = self, self.player.currentItem?.status == .readyToPlay, self.player.currentTime().seconds > 0.5 else { return }
                 FileManager.default.createFile(atPath: NSHomeDirectory()+"/Documents/video-ready", contents: Data())
             }
         }
@@ -209,6 +212,7 @@ final class VideoView: UIView {
                 code = -1
             }
             errorCode = code
+            VideoHost.shared.showError(code)
             NSLog("%@", "Dado: video item failed (code \(code))")
         default:
             break

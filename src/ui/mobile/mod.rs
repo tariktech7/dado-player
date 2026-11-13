@@ -97,7 +97,9 @@ impl Layout {
         let r = ctx.screen_rect();
         let ppp = ctx.pixels_per_point().max(0.1);
         let ins = crate::platform::insets();
-        let (top, bottom, ime) = (ins.top / ppp, ins.bottom / ppp, ins.ime / ppp);
+        let top = (ins.top / ppp).clamp(0.0, r.height() * 0.2);
+        let ime = (ins.ime / ppp).clamp(0.0, r.height());
+        let bottom = (ins.bottom / ppp).clamp(0.0, r.height());
         let side = ins.left.max(ins.right) / ppp;
         // Breakpoint on *usable* height: a 412 dp landscape phone loses ~48 dp
         // to the navigation bar and must switch to list mode.
@@ -150,7 +152,7 @@ impl Layout {
 
     /// Width available for content.
     pub fn content_w(&self) -> f32 {
-        (self.w - 2.0 * self.pad).max(120.0)
+        (self.w - 2.0 * self.pad).max(1.0)
     }
 
     /// Number of columns for cards at least `min_w` wide.

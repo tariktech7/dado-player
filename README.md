@@ -33,3 +33,6 @@ Bei jedem mobilen Release die native Buildnummer und die entsprechende Buildnumm
 Die Zeichenform in assets/d7.svg ist die Vorlage für App-Icons und das gemeinsame Markenzeichen. Die Farbpalette liegt in src/theme.rs. Telefone verwenden die untere Navigation, breite mobile Fenster die Seitenleiste. Nach der Anmeldung öffnet die App beim nächsten Start das letzte Profil. Abmelden setzt diesen Wiedereinstieg aus.
 
 Auf iOS laufen Streams mit AVPlayer. Xtream verwendet zunächst HLS, bereitgestellte M3U-URLs bleiben erhalten. Der lokale Wiedergabetest nutzt ein mitgeliefertes H.264/AAC-MP4. Der macOS-Workflow baut die Geräte-IPA und startet zusätzlich einen Simulator mit diesem Clip. Für eine Freigabe auf Hardware Live-HLS, VOD, Ton, Rotation und Eingabe auf einem iPhone prüfen.
+
+### iOS 0.2.1
+Die Paketierung kompiliert einen Launchscreen für die native Geräteauflösung. Die Wiedergabe verwendet die AVKit-Vollbildsteuerung mit Audio, Spulen und Schließen. Der iOS-Client behält die eingegebene Anbieterbasis bei, statt auf einen ungeprüften HTTPS-Port umzuschreiben. Xtream wird einmalig auf HLS umgestellt. Inhaltsseiten reservieren am Ende nur den Seitenabstand, da die Navigation bereits aus der verfügbaren Fläche entfernt wurde.

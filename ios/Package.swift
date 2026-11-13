@@ -69,6 +69,7 @@ let package = Package(
                 //   CoreVideo        AVPlayerLayer pixel buffers
                 .linkedFramework("UIKit"),
                 .linkedFramework("AVFoundation"),
+                .linkedFramework("AVKit"),
                 .linkedFramework("QuartzCore"),
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("Metal"),

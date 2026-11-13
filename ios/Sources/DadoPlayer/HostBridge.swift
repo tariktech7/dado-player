@@ -23,6 +23,8 @@
 //
 
 import UIKit
+import AVKit
+import DadoBridge
 
 /// Owns the single VideoView instance for the process.
 final class VideoHost {
@@ -34,6 +36,7 @@ final class VideoHost {
     /// Rust calls `dado_host_attach` on every frame (`acquire_surface`), so a
     /// naive retry would start a new 50-step chain each frame while no window
     /// exists yet. This collapses them into one in-flight attempt.
+    private var playbackController: PlaybackController?
     private var attachPending = false
     private var pending: [(VideoView) -> Void] = []
 
@@ -109,12 +112,48 @@ final class VideoHost {
     }
 
     func setVisible(_ visible: Bool) {
-        withView { view in
+        withView { [weak self] view in
+            guard let self=self else {return}
+            if self.playbackController != nil {view.isHidden=true;return}
             if visible, let window=view.window {
                 window.bringSubviewToFront(view)
             }
             if view.isHidden != !visible { view.isHidden = !visible }
         }
+    }
+
+    func presentPlayer() {
+        guard playbackController == nil, let window=Self.keyWindow(), let root=window.rootViewController, let video=view else { return }
+        let controller=PlaybackController()
+        controller.player=video.player
+        controller.modalPresentationStyle = .fullScreen
+        controller.onClose = { [weak self] in
+            self?.playbackController=nil
+            dado_app_player_closed()
+        }
+        playbackController=controller
+        video.isHidden=true
+        root.present(controller,animated:true)
+    }
+
+    func showError(_ code: Int) {
+        guard let controller=playbackController, controller.presentedViewController == nil else {return}
+        let hint = [-1200,-1202,-1203].contains(code) ? "Der Anbieter meldet ein ungültiges HTTPS-Zertifikat." :
+            "Der Stream konnte nicht geladen werden. Prüfe HLS-Format und Anbieteradresse."
+        let alert=UIAlertController(title:"Wiedergabe fehlgeschlagen",message:"\(hint) Fehler \(code).",preferredStyle:.alert)
+        alert.addAction(UIAlertAction(title:"Zurück",style:.default){[weak self] _ in
+            self?.view?.stop()
+            self?.dismissPlayer()
+            dado_app_player_closed()
+        })
+        controller.present(alert,animated:true)
+    }
+
+    func dismissPlayer() {
+        guard let controller=playbackController else {return}
+        controller.onClose=nil
+        playbackController=nil
+        controller.dismiss(animated:true)
     }
 
     private func performOnMain(_ work: @escaping () -> Void) {
@@ -175,6 +214,7 @@ public func dado_host_load(_ url: UnsafePointer<CChar>?) {
     }
     VideoHost.shared.withView { view in
         view.load(url: parsed)
+        VideoHost.shared.presentPlayer()
     }
 }
 
@@ -183,6 +223,7 @@ public func dado_host_load(_ url: UnsafePointer<CChar>?) {
 public func dado_host_stop() {
     VideoHost.shared.withView { view in
         view.stop()
+        VideoHost.shared.dismissPlayer()
     }
 }
 
@@ -262,3 +303,11 @@ private func int64Size(_ value: CGFloat?) -> Int64 {
 
 @_cdecl("dado_host_error_code")
 public func dadoHostErrorCode() -> Int32 { Int32(clamping: VideoHost.shared.view?.errorCode ?? 0) }
+
+private final class PlaybackController: AVPlayerViewController {
+    var onClose: (() -> Void)?
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed || presentingViewController == nil { onClose?(); onClose=nil }
+    }
+}

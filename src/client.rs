@@ -279,7 +279,7 @@ pub async fn xtream_login(host: &str, user: &str, pass: &str, timeout_s: u64) ->
         return Err(anyhow!("Anmeldung fehlgeschlagen (auth={})", auth));
     }
     let mut stream_base = base.clone();
-    if let Some(si) = v.server_info {
+    if let Some(si) = v.server_info.filter(|_| !cfg!(target_os = "ios")) {
         // Panels usually serve the API on plain HTTP but streams on a second,
         // TLS-only port. `server_protocol` says "http" even then (it describes
         // the API), so it must NOT be used to reject `https_port`. The stream

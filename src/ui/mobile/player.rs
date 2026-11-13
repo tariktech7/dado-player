@@ -862,7 +862,7 @@ fn scrub(ui: &mut Ui, bar: Rect, frac: f32) -> Option<f32> {
 /// chrome belongs on a translucent gradient scrim over it. On desktop video is
 /// a native child window above egui — any scrim drawn here would be hidden
 /// behind it — so opaque bars outside the video rect are the correct choice.
-const HAS_VIDEO: bool = cfg!(target_os = "android");
+const HAS_VIDEO: bool = cfg!(any(target_os = "android", target_os = "ios"));
 
 fn scrim(ui: &Ui, rect: Rect, top: bool) {
     if !HAS_VIDEO {

@@ -184,9 +184,9 @@ pub fn load_settings() -> Settings {
         s.settings_version = 2;
     }
     #[cfg(target_os = "ios")]
-    if s.settings_version < 3 {
+    if s.settings_version < 4 {
         s.live_format = crate::types::LiveFormat::Hls;
-        s.settings_version = 3;
+        s.settings_version = 4;
     }
     s
 }

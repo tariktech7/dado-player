@@ -228,6 +228,9 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     cp "$BIN" "$APP/DadoPlayer"
     cp ios/Info.plist "$APP/Info.plist"
     cp ios/Resources/*.png ios/Resources/Playback.mp4 "$APP/"
+    xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" ios/Resources/LaunchScreen.storyboard --target-device iphone --target-device ipad --minimum-deployment-target 15.0
+    /usr/libexec/PlistBuddy -c "Add :DTPlatformName string $APPLE_SDK" "$APP/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :DTSDKName string ${APPLE_SDK}$(xcrun --sdk "$APPLE_SDK" --show-sdk-version)" "$APP/Info.plist"
 
     # The Rust core is a static library, so it is already inside the executable.
     # Any SwiftPM resource bundles would have to be copied here too; the host
