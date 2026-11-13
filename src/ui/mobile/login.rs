@@ -161,8 +161,8 @@ fn action_height(_app: &App, l: &Layout) -> f32 {
 /// Anchored from the bottom edge of `content` so the primary button never moves
 /// when the error line appears or the keyboard changes height.
 fn action(app: &mut App, ui: &mut Ui, l: &Layout, content: Rect, blocked: bool) {
-    let x = content.left() + l.pad;
-    let w = (content.width() - 2.0 * l.pad).max(80.0);
+    let w = (content.width() - 2.0 * l.pad).clamp(80.0, 496.0);
+    let x = content.center().x - w * 0.5;
 
     let mut bottom = content.bottom() - 14.0;
 

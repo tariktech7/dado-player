@@ -56,12 +56,21 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 poster_rail(app, ui, "Favoriten: Filme & Serien", &favorites, false, Some(View::Favorites));
             }
 
-            let movies = recently_added_items(app);
+            let cache_id=ui.id().with("discovery-rails");
+            let signature=(app.catalog_generation(),app.library.movies.len(),app.library.series.len());
+            type Rail=Vec<(String,String,String,String,PlayKind)>;
+            type Cached=((u64,usize,usize),std::sync::Arc<(Rail,Rail)>);
+            let rails=ui.data(|d|d.get_temp::<Cached>(cache_id)).filter(|c|c.0==signature).map(|c|c.1).unwrap_or_else(||{
+                let result=std::sync::Arc::new((recently_added_items(app),discover_series_items(app)));
+                ui.data_mut(|d|d.insert_temp(cache_id,(signature,result.clone())));
+                result
+            });
+            let (movies,series)=rails.as_ref();
             if !movies.is_empty() {
                 poster_rail(app, ui, "Zuletzt hinzugefügt", &movies, false, Some(View::Movies));
             }
 
-            let series = discover_series_items(app);
+
             if !series.is_empty() {
                 poster_rail(app, ui, "Serien entdecken", &series, false, Some(View::Series));
             }

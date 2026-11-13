@@ -271,6 +271,9 @@ fn touch_style(ctx: &Context) {
 /// values — deliberately NOT a global `pixels_per_point` multiplier (§23.5),
 /// which would blur the measured fonts and break the phone geometry.
 fn tv_style(ctx: &Context) {
+    if ctx.style().spacing.interact_size.y == 64.0 {
+        return;
+    }
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(12.0, 12.0);
     style.spacing.button_padding = egui::vec2(20.0, 14.0);

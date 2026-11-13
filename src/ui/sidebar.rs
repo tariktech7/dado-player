@@ -36,7 +36,7 @@ fn nav(ui: &mut Ui, app: &mut App, label: &str, v: View) {
     let y = rect.center().y;
     use crate::ui::mobile::components::{icon as draw_icon, Icon};
     let symbol = match v {
-        View::Home => Icon::User,
+        View::Home => Icon::Home,
         View::Live => Icon::Tv,
         View::Movies => Icon::Film,
         View::Series => Icon::Series,

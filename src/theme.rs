@@ -242,3 +242,19 @@ fn light_visuals() -> Visuals {
     w.open.rounding = Rounding::same(9.0);
     v
 }
+
+/// Lightweight translucent chrome, with an edge highlight in both appearances.
+pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
+    let (r, g, b, _) = ui.visuals().window_fill.to_tuple();
+    ui.painter()
+        .rect_filled(rect, radius, Color32::from_rgba_unmultiplied(r, g, b, 215));
+    let inner = rect.shrink(1.0);
+    ui.painter().rect_stroke(
+        inner,
+        radius,
+        Stroke::new(
+            1.0_f32,
+            Color32::from_white_alpha(if ui.visuals().dark_mode { 30 } else { 150 }),
+        ),
+    );
+}

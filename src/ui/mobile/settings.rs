@@ -211,7 +211,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     // ---- about ----
                     components::section(ui, "Über");
                     ui.label(
-                        egui::RichText::new(format!("Dado-Player {}", env!("CARGO_PKG_VERSION")))
+                        egui::RichText::new("Dado Player")
                             .font(reg(FS_LABEL))
                             .color(muted(ui)),
                     );

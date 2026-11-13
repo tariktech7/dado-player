@@ -198,6 +198,7 @@ pub struct App {
 
     // login form
     pub login_kind: ProfileKind,
+    editing_profile: Option<String>,
     pub f_name: String,
     pub f_host: String,
     pub f_user: String,
@@ -254,7 +255,7 @@ pub struct App {
     /// Ask the Live list to scroll this channel into view.
     pub scroll_to: Option<u32>,
     pending_fullscreen: Option<bool>,
-    applied_dark: Option<bool>,
+    applied_dark: Option<(bool, bool, bool)>,
     system_dark: bool,
     last_theme_poll: f64,
     preview_placed: bool,
@@ -375,6 +376,7 @@ impl App {
             error: None,
             info: None,
             login_kind: ProfileKind::Xtream,
+            editing_profile: None,
             f_name: String::new(),
             f_host: String::new(),
             f_user: String::new(),
@@ -633,15 +635,15 @@ impl App {
             }
         }
         // Allow overriding the theme via environment for QA purposes.
-        let effective_dark = self.dark_mode_override.or(Some(self.system_dark));
-        let want_dark = effective_dark.unwrap_or(self.system_dark);
-        if self.applied_dark != Some(want_dark) {
-            self.applied_dark = Some(want_dark);
-            // egui only repaints on input; without this the new colours would
-            // not show up until the next mouse move.
+        let want_dark = self
+            .dark_mode_override
+            .unwrap_or_else(|| self.settings.theme.resolve(self.system_dark));
+        let appearance = (want_dark, ui::mobile::active(ctx), self.tv);
+        if self.applied_dark != Some(appearance) {
+            self.applied_dark = Some(appearance);
+            crate::theme::apply(ctx, want_dark);
             ctx.request_repaint();
         }
-        crate::theme::apply(ctx, want_dark);
 
         // Command palette: Ctrl/Cmd+K toggles it from anywhere.
         let toggle_palette =
@@ -1156,6 +1158,16 @@ impl App {
     }
 
     pub fn start_login(&mut self, profile: Profile) {
+        if self.profiles.iter().any(|p| p.id == profile.id) {
+            self.editing_profile = Some(profile.id.clone());
+            self.login_kind = profile.kind;
+            self.f_name = profile.name.clone();
+            self.f_host = profile.host.clone();
+            self.f_user = profile.username.clone();
+            self.f_pass = profile.password.clone();
+            self.f_m3u_url = profile.m3u_url.clone();
+            self.f_m3u_file = profile.m3u_file.clone();
+        }
         self.login_generation = self.login_generation.wrapping_add(1);
         let generation = self.login_generation;
         self.busy = true;
@@ -1239,6 +1251,9 @@ impl App {
                 p.m3u_url = self.f_m3u_url.trim().to_string();
                 p.m3u_file = self.f_m3u_file.trim().to_string();
             }
+        }
+        if let Some(id) = self.editing_profile.as_ref() {
+            p.id = id.clone();
         }
         self.start_login(p);
     }
@@ -1345,6 +1360,13 @@ impl App {
     }
 
     pub fn logout(&mut self) {
+        self.editing_profile = None;
+        self.f_name.clear();
+        self.f_host.clear();
+        self.f_user.clear();
+        self.f_pass.clear();
+        self.f_m3u_url.clear();
+        self.f_m3u_file.clear();
         self.settings.signed_out = true;
         self.save_settings_now();
         #[cfg(target_os = "android")]

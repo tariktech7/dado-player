@@ -26,7 +26,7 @@ use super::focus;
 use super::tokens;
 use super::Layout;
 use crate::app::App;
-use crate::types::{Channel, LiveFormat, PlayerBackend, Series, Theme, TvMode, VodMovie};
+use crate::types::{Channel, LiveFormat, Series, Theme, TvMode, VodMovie};
 
 /// Left-hand navigation. The third field is the description shown in the hero
 /// while the header itself holds focus.
@@ -120,7 +120,8 @@ enum Act {
     SearchClear,
     Theme(Theme),
     TvMode(TvMode),
-    Player(PlayerBackend),
+    #[cfg(target_os = "android")]
+    Player(crate::types::PlayerBackend),
     LiveFmt(LiveFormat),
     Logout,
 }
@@ -1002,8 +1003,10 @@ fn settings_rail(app: &mut App) -> Vec<Rail> {
     // would be a dead end on exactly the device class this shell targets; the
     // user must be able to pick VLC / the system chooser / the built-in player
     // with the remote they actually hold.
+    #[cfg(target_os = "android")]
     let mut player_opts = Vec::new();
-    for p in PlayerBackend::all() {
+    #[cfg(target_os = "android")]
+    for p in crate::types::PlayerBackend::all() {
         player_opts.push(option_card(
             p.label(),
             app.settings.player_backend == p,
@@ -1019,6 +1022,7 @@ fn settings_rail(app: &mut App) -> Vec<Rail> {
         ));
     }
     vec![
+        #[cfg(target_os = "android")]
         Rail {
             title: "Player (Standard: MX Player)".to_string(),
             wide: true,
@@ -1084,6 +1088,7 @@ fn apply_action(app: &mut App, act: Act) {
             // keeps BACK and canGoBack correct on the frame of the change.
             app.tv = m.resolve(crate::platform::tv_device());
         }
+        #[cfg(target_os = "android")]
         Act::Player(p) => {
             app.settings.player_backend = p;
             app.save_settings_now();

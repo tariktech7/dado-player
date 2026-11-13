@@ -288,7 +288,17 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         pos2(full.left(), full.bottom() - bot_h),
         vec2(full.width(), bot_h),
     );
-    scrim(ui, bot, false);
+    let controls = bot.shrink2(vec2(8.0, 4.0));
+    ui.painter().rect_filled(
+        controls,
+        22.0,
+        Color32::from_rgba_unmultiplied(19, 30, 32, 212),
+    );
+    ui.painter().rect_stroke(
+        controls,
+        22.0,
+        Stroke::new(1.0_f32, Color32::from_white_alpha(40)),
+    );
 
     let mut seek_to: Option<f64> = None;
     let mut seek_rel: f64 = 0.0;

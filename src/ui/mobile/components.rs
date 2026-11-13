@@ -20,6 +20,7 @@ use crate::theme;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
+    Home,
     Tv,
     Film,
     Series,
@@ -259,6 +260,18 @@ pub fn icon(ui: &Ui, rect: Rect, ic: Icon, color: Color32) {
                 (0.80, 0.88),
             ]));
         }
+        Icon::Home => {
+            line(poly(&[
+                (0.08, 0.45),
+                (0.50, 0.10),
+                (0.92, 0.45),
+                (0.82, 0.45),
+                (0.82, 0.88),
+                (0.18, 0.88),
+                (0.18, 0.45),
+                (0.08, 0.45),
+            ]));
+        }
         Icon::Info => {
             p.circle_stroke(c, r.width() * 0.42, s);
             p.circle_filled(pos2(c.x, r.top() + r.height() * 0.30), w * 1.3, color);
@@ -424,7 +437,7 @@ const TABS: [(Icon, &str, View); 4] = [
     (Icon::Series, "Serien", View::Series),
     // Fortsetzen is a daily destination; Favoriten is a shelf you visit now and
     // then, so it moved into the "Mehr" sheet (MOBILE-BAUPLAN §20).
-    (Icon::User, "Start", View::Home),
+    (Icon::Home, "Start", View::Home),
 ];
 
 /// Bottom navigation. Returns true when the "Mehr" sheet should open.
@@ -441,7 +454,7 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
             outer.height() - 6.0,
         ),
     );
-    ui.painter().rect_filled(rect, 24.0, bar(ui));
+    crate::theme::glass(ui, rect, 24.0);
     ui.painter()
         .rect_stroke(rect, 24.0, Stroke::new(1.0_f32, hairline(ui)));
     let n = 5;
@@ -973,7 +986,7 @@ pub fn button_at(ui: &mut Ui, rect: Rect, label: &str, primary: bool, enabled: b
     };
     let bg = if enabled && resp.is_pointer_button_down_on() {
         if primary {
-            Color32::from_rgb(0x2E, 0x5B, 0xBE)
+            accent_fill().gamma_multiply(0.82)
         } else {
             pressed(ui)
         }
@@ -1089,7 +1102,11 @@ pub fn field(
     if kb == Kb::Password {
         te = te.password(!*show_password);
     }
-    let resp = ui.add_sized([text_w, 24.0], te);
+    let rect = Rect::from_min_size(ui.next_widget_position(), vec2(text_w, TOUCH));
+    ui.painter().rect_filled(rect, RADIUS_SM, surface(ui));
+    ui.painter()
+        .rect_stroke(rect, RADIUS_SM, Stroke::new(1.0_f32, hairline(ui)));
+    let resp = ui.add_sized([text_w, TOUCH], te.margin(vec2(12.0, 10.0)));
     #[cfg(target_os = "ios")]
     {
         let id = resp.id.value();

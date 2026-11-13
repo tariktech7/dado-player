@@ -20,21 +20,26 @@ pub fn storage_failed() -> bool {
 }
 
 fn app_dir() -> PathBuf {
-    let resolved =
-        ProjectDirs::from("com", "Tarik", "Dado-Player").map(|d| d.config_dir().to_path_buf());
-    let dir = resolved.clone().unwrap_or_else(|| {
-        // A silent fallback to a directory that cannot be written is worse than
-        // an error: everything downstream looks like it worked. Say it once.
-        warn_fallback();
-        PathBuf::from(".")
-    });
-    log_resolved_once(&dir);
-    // The legacy project names are desktop-only. On Android there is no older
-    // install to migrate from, and resolving three project dirs per call is
-    // pointless work on a path that runs for every read and write.
-    #[cfg(not(target_os = "android"))]
-    migrate_legacy(&dir);
-    dir
+    #[cfg(test)]
+    return std::env::temp_dir().join(format!("dado-player-unit-{}", std::process::id()));
+    #[cfg(not(test))]
+    {
+        let resolved =
+            ProjectDirs::from("com", "Tarik", "Dado-Player").map(|d| d.config_dir().to_path_buf());
+        let dir = resolved.clone().unwrap_or_else(|| {
+            // A silent fallback to a directory that cannot be written is worse than
+            // an error: everything downstream looks like it worked. Say it once.
+            warn_fallback();
+            PathBuf::from(".")
+        });
+        log_resolved_once(&dir);
+        // The legacy project names are desktop-only. On Android there is no older
+        // install to migrate from, and resolving three project dirs per call is
+        // pointless work on a path that runs for every read and write.
+        #[cfg(not(target_os = "android"))]
+        migrate_legacy(&dir);
+        dir
+    }
 }
 
 /// Print the resolved data directory once, so a failed save can be diagnosed

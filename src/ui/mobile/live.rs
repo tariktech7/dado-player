@@ -46,8 +46,11 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         &q,
         app.library.channels.len(),
     ));
+    let slot = ui.id().with("filtered-channels");
     let idx = ui
-        .data(|d| d.get_temp::<std::sync::Arc<Vec<usize>>>(key))
+        .data(|d| d.get_temp::<(egui::Id, std::sync::Arc<Vec<usize>>)>(slot))
+        .filter(|entry| entry.0 == key)
+        .map(|entry| entry.1)
         .unwrap_or_else(|| {
             let filtered: Vec<_> = app
                 .library
@@ -59,7 +62,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 .map(|(i, _)| i)
                 .collect();
             let indices = std::sync::Arc::new(filtered);
-            ui.data_mut(|d| d.insert_temp(key, indices.clone()));
+            ui.data_mut(|d| d.insert_temp(slot, (key, indices.clone())));
             indices
         });
     let last = ui.id().with("active-channel-order");
