@@ -174,9 +174,14 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
             draw_headers(app, &mut hui, &mut metas);
 
             let mut cui = ui.child_ui(g.content, egui::Layout::top_down(Align::LEFT));
-            if app.view == crate::app::View::Live {
+            if app.tv_nav == 0 {
+                app.view = crate::app::View::Live;
                 crate::ui::live::show(app, &mut cui);
                 return;
+            }
+            if app.view == crate::app::View::Live {
+                app.close_preview();
+                app.view = crate::app::View::Home;
             }
             let hero_rect = draw_content(app, &mut cui, &g, &mut metas);
 
