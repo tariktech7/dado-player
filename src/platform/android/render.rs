@@ -696,8 +696,7 @@ struct Target {
 }
 static TARGET: Mutex<Option<Target>> = Mutex::new(None);
 
-/// Copy the rendered texture through a GLES draw, avoiding framebuffer-blit
-/// artifacts on Android emulators and tile-based drivers.
+/// Draw the rendered preview texture inside the destination viewport.
 unsafe fn copy_program(gl: &glow::Context) -> Result<glow::NativeProgram, String> {
     const VERTEX: &str = r#"#version 300 es
 precision highp float;
