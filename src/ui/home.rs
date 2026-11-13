@@ -51,7 +51,7 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
             let featured = featured_item(app);
             if let Some(item) = featured {
                 hero(app, ui, &item);
-            } else {
+            } else if app.library.channels.is_empty() {
                 empty_hero(app, ui);
             }
 
@@ -139,7 +139,8 @@ fn filter_by_kind(
 fn featured_item(app: &App) -> Option<PlayItem> {
     app.history
         .iter()
-        .find_map(|h| app.resolve_play(&h.key))
+        .filter_map(|h| app.resolve_play(&h.key))
+        .find(|item| item.kind != PlayKind::Live)
         .or_else(|| {
             app.library.movies.first().map(|m| PlayItem {
                 title: m.name.clone(),
