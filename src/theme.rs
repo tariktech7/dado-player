@@ -275,7 +275,7 @@ pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
         };
         let light = (1.0 - t * 2.8).max(0.0);
         let color = if t < 0.5 {
-            Color32::from_white_alpha((light * if dark { 22.0 } else { 95.0 }) as u8)
+            Color32::from_white_alpha((light * if dark { 5.0 } else { 32.0 }) as u8)
         } else {
             Color32::from_black_alpha(((t - 0.5) * 24.0) as u8)
         };
@@ -294,7 +294,7 @@ pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
         radius,
         Stroke::new(
             0.5_f32,
-            Color32::from_white_alpha(if dark { 24 } else { 125 }),
+            Color32::from_white_alpha(if dark { 6 } else { 60 }),
         ),
     );
 }
