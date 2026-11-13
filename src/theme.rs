@@ -247,7 +247,7 @@ fn light_visuals() -> Visuals {
 pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
     let dark = ui.visuals().dark_mode;
     let base = if dark {
-        Color32::from_rgba_unmultiplied(29, 43, 48, 224)
+        Color32::from_rgba_unmultiplied(31, 43, 51, 185)
     } else {
         Color32::from_rgba_unmultiplied(247, 252, 253, 225)
     };
@@ -257,22 +257,17 @@ pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
         Color32::from_black_alpha(if dark { 40 } else { 12 }),
     );
     ui.painter().rect_filled(rect, radius, base);
-    let inner = rect.shrink(1.0);
+    // Edge-to-edge bars must not look like framed boxes around the safe area.
+    if radius < 1.0 {
+        return;
+    }
+    let inner = rect.shrink(0.5);
     ui.painter().rect_stroke(
         inner,
         radius,
         Stroke::new(
-            1.0_f32,
-            Color32::from_white_alpha(if dark { 48 } else { 240 }),
-        ),
-    );
-    let top = rect.shrink2(egui::vec2(radius * 0.7, 2.0));
-    ui.painter().hline(
-        top.left()..=top.right(),
-        top.top(),
-        Stroke::new(
-            1.0_f32,
-            Color32::from_white_alpha(if dark { 70 } else { 255 }),
+            0.5_f32,
+            Color32::from_white_alpha(if dark { 24 } else { 125 }),
         ),
     );
 }

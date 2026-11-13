@@ -37,6 +37,7 @@ final class VideoHost {
     /// naive retry would start a new 50-step chain each frame while no window
     /// exists yet. This collapses them into one in-flight attempt.
     private var playbackController: PlaybackController?
+    var nativePlayer = false
     private var attachPending = false
     private var pending: [(VideoView) -> Void] = []
 
@@ -76,7 +77,15 @@ final class VideoHost {
             video.isHidden = true
             // This view owns AVPlayer. AVKit presents its interactive playback surface.
             video.isUserInteractionEnabled = false
-            window.addSubview(video)
+            if let root = window.rootViewController?.view {
+                root.isOpaque = false
+                root.backgroundColor = .clear
+                root.layer.isOpaque = false
+                root.layer.sublayers?.forEach { $0.isOpaque = false }
+                window.insertSubview(video, belowSubview: root)
+            } else {
+                window.insertSubview(video, at: 0)
+            }
             self.view = video
             let pending = self.pending
             self.pending.removeAll()
@@ -115,9 +124,6 @@ final class VideoHost {
         withView { [weak self] view in
             guard let self=self else {return}
             if self.playbackController != nil {view.isHidden=true;return}
-            if visible, let window=view.window {
-                window.bringSubviewToFront(view)
-            }
             if view.isHidden != !visible { view.isHidden = !visible }
         }
     }
@@ -189,6 +195,52 @@ public func dado_host_attach() {
     VideoHost.shared.attach()
 }
 
+@_cdecl("dado_host_native_player")
+public func dado_host_native_player(_ enabled: Int32) {
+    VideoHost.shared.nativePlayer = enabled != 0
+}
+
+// Stable per-item option IDs match the shared Dado audio/subtitle menus.
+private func mediaGroup(_ kind: Int32) -> AVMediaSelectionGroup? {
+    VideoHost.shared.view?.player.currentItem?.asset.mediaSelectionGroup(forMediaCharacteristic: kind == 0 ? .audible : .legible)
+}
+
+@_cdecl("dado_host_tracks")
+public func dado_host_tracks(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
+    var tracks: [[String: Any]] = []
+    for kind: Int32 in [0, 1] {
+        guard let group = mediaGroup(kind) else { continue }
+        for (index, option) in group.options.enumerated() {
+            tracks.append(["id": index + 1, "type": kind == 0 ? "audio" : "sub", "lang": option.extendedLanguageTag ?? "", "title": option.displayName])
+        }
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: tracks) else { return 0 }
+    if let buffer = buffer, capacity >= data.count + 1 {
+        data.withUnsafeBytes { raw in
+            if let base = raw.baseAddress { memcpy(buffer, base, data.count) }
+        }
+        buffer[data.count] = 0
+    }
+    return Int32(data.count + 1)
+}
+
+@_cdecl("dado_host_current_track")
+public func dado_host_current_track(_ kind: Int32) -> Int64 {
+    guard let item = VideoHost.shared.view?.player.currentItem,
+          let group = mediaGroup(kind),
+          let selected = item.currentMediaSelection.selectedMediaOption(in: group),
+          let index = group.options.firstIndex(of: selected) else { return -1 }
+    return Int64(index + 1)
+}
+
+@_cdecl("dado_host_select_track")
+public func dado_host_select_track(_ kind: Int32, _ id: Int64) {
+    guard let item = VideoHost.shared.view?.player.currentItem, let group = mediaGroup(kind) else { return }
+    if id <= 0 { if group.allowsEmptySelection { item.select(nil, in: group) }; return }
+    guard id <= group.options.count else { return }
+    item.select(group.options[Int(id - 1)], in: group)
+}
+
 /// Places the native video view. Points, relative to the root view.
 @_cdecl("dado_host_video_frame")
 public func dado_host_video_frame(_ x: Double, _ y: Double, _ w: Double, _ h: Double) {
@@ -214,7 +266,7 @@ public func dado_host_load(_ url: UnsafePointer<CChar>?) {
     }
     VideoHost.shared.withView { view in
         view.load(url: parsed)
-        VideoHost.shared.presentPlayer()
+        if VideoHost.shared.nativePlayer { VideoHost.shared.presentPlayer() }
     }
 }
 

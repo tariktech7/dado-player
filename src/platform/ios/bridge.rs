@@ -68,6 +68,10 @@ pub fn layout_seen() -> bool {
 // ---------------------------------------------------------------- host API ---
 
 extern "C" {
+    fn dado_host_native_player(enabled: i32);
+    fn dado_host_tracks(buffer: *mut c_char, capacity: i32) -> i32;
+    fn dado_host_current_track(kind: i32) -> i64;
+    fn dado_host_select_track(kind: i32, id: i64);
     fn dado_host_attach();
     fn dado_host_video_frame(x: f64, y: f64, w: f64, h: f64);
     fn dado_host_video_visible(visible: i32);
@@ -98,6 +102,30 @@ extern "C" {
 /// caching incorrectly.
 pub fn attach() {
     unsafe { dado_host_attach() }
+}
+
+pub fn native_player(enabled: bool) {
+    unsafe { dado_host_native_player(enabled as i32) }
+}
+
+pub fn tracks() -> Option<String> {
+    let capacity = unsafe { dado_host_tracks(std::ptr::null_mut(), 0) };
+    if !(1..=262144).contains(&capacity) {
+        return None;
+    }
+    let mut buffer = vec![0u8; capacity as usize];
+    let written = unsafe { dado_host_tracks(buffer.as_mut_ptr().cast(), capacity) };
+    if written < 1 || written > capacity {
+        return None;
+    }
+    buffer.truncate(written as usize - 1);
+    String::from_utf8(buffer).ok()
+}
+pub fn current_track(kind: i32) -> i64 {
+    unsafe { dado_host_current_track(kind) }
+}
+pub fn select_track(kind: i32, id: i64) {
+    unsafe { dado_host_select_track(kind, id) }
 }
 
 /// Place the video view. Quantisation to half a point keeps sub-pixel jitter out

@@ -70,6 +70,30 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
 
                     // ---- playback ----
                     components::section(ui, "Wiedergabe");
+                    #[cfg(target_os = "ios")]
+                    {
+                        ui.label("Player-Oberfläche");
+                        ui.horizontal_wrapped(|ui| {
+                            for (label, native) in [("Dado Player", false), ("Apple Player", true)]
+                            {
+                                let r = components::chip(
+                                    ui,
+                                    label,
+                                    app.settings.ios_native_player == native,
+                                );
+                                if focus::clicked(ui, &r) {
+                                    app.settings.ios_native_player = native;
+                                    crate::platform::ios::bridge::native_player(native);
+                                    changed = true;
+                                }
+                            }
+                        });
+                        ui.label(
+                            egui::RichText::new("Gilt ab der nächsten Wiedergabe.")
+                                .font(reg(FS_CAP))
+                                .color(muted(ui)),
+                        );
+                    }
                     if let Some(v) = components::switch_row(
                         ui,
                         "Zuletzt gesehenen Sender starten",

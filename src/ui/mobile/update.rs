@@ -13,14 +13,14 @@ const API: &str = "https://api.github.com/repos/tariktech7/dado-player/releases"
 const PACKAGE: (&str, &str, u32, &str) = (
     "Dado-Player-arm64-debug.apk",
     "android-build-",
-    6,
+    7,
     "Dado-Player.apk",
 );
 #[cfg(target_os = "ios")]
 const PACKAGE: (&str, &str, u32, &str) = (
     "Dado-Player-unsigned.ipa",
     "ios-build-",
-    4,
+    5,
     "Dado-Player.ipa",
 );
 

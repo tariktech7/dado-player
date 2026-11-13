@@ -340,6 +340,9 @@ impl VideoSync {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    /// Opt in to AVKit's full-screen controls; Dado's controls are the default.
+    #[serde(default)]
+    pub ios_native_player: bool,
     #[serde(default = "default_cache", alias = "cache_mb")]
     pub cache_secs: u64,
     #[serde(default = "default_timeout")]
@@ -425,6 +428,7 @@ fn default_sub_size() -> f32 {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            ios_native_player: false,
             cache_secs: default_cache(),
             network_timeout_s: default_timeout(),
             theme: Theme::System,

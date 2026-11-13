@@ -2647,7 +2647,28 @@ fn qa_state_snapshot(app: &App) -> String {
 }
 
 impl eframe::App for App {
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if cfg!(target_os = "ios") {
+            [0.0; 4]
+        } else {
+            visuals.window_fill().to_normalized_gamma_f32()
+        }
+    }
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        #[cfg(target_os = "ios")]
+        if std::env::var_os("DADO_LAYOUT_SMOKE").is_some() {
+            let env = crate::platform::ios::bridge::env();
+            if env.width > 0.0 && env.height > 0.0 {
+                let size = ctx.screen_rect().size() * ctx.zoom_factor();
+                assert!(
+                    (size.x - env.width as f32).abs() < 1.0
+                        && (size.y - env.height as f32).abs() < 1.0,
+                    "iOS drawable/UI mismatch: egui={size:?}, UIKit={}x{}",
+                    env.width,
+                    env.height
+                );
+            }
+        }
         if let Some(path) = qa_state_log_path() {
             let before = qa_state_snapshot(self);
             App::update(self, ctx, frame);

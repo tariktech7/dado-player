@@ -27,8 +27,9 @@ pub struct Mpv {
 
 impl Mpv {
     /// No window handle exists on iOS; the video view is the host's.
-    pub fn new(_wid: isize, _s: &Settings) -> Result<Self, String> {
+    pub fn new(_wid: isize, s: &Settings) -> Result<Self, String> {
         bridge::attach();
+        bridge::native_player(s.ios_native_player);
         Ok(Mpv {
             volume: std::sync::atomic::AtomicI64::new(100),
         })
@@ -133,24 +134,30 @@ impl Mpv {
     }
 
     pub fn current_audio(&self) -> i64 {
-        0
+        bridge::current_track(0)
     }
 
     pub fn current_sub(&self) -> i64 {
-        0
+        bridge::current_track(1)
     }
 
     /// No track list over the current bridge. The audio/subtitle popover is
     /// hidden when this returns `None`, which is the correct degradation.
     pub fn track_list_json(&self) -> Option<String> {
-        None
+        bridge::tracks()
     }
 
-    pub fn set_audio_track(&self, _id: i64) {}
+    pub fn set_audio_track(&self, id: i64) {
+        bridge::select_track(0, id);
+    }
 
-    pub fn set_sub_track(&self, _id: i64) {}
+    pub fn set_sub_track(&self, id: i64) {
+        bridge::select_track(1, id);
+    }
 
-    pub fn disable_sub(&self) {}
+    pub fn disable_sub(&self) {
+        bridge::select_track(1, -1);
+    }
 }
 
 /// iOS bundles AVFoundation; there is no external library to probe for.

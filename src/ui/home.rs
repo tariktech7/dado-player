@@ -34,7 +34,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             );
         });
     } else {
-        show_content(app, ui, desktop);
+        show_content(app, ui, true);
     }
 }
 
@@ -69,12 +69,8 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
                     poster_rail(app, ui, "Weiter ansehen · Filme", &vod_items, true, Some(View::Continue));
                 }
                 if !live_items.is_empty() {
-                    if cfg!(target_os="windows") {
                         let channels:Vec<_>=live_items.iter().map(|(key,name,logo,url,_)|(key.clone(),name.clone(),logo.clone(),url.clone())).collect();
                         live_rail(app,ui,"Zuletzt gesehene Sender",&channels,Some(View::Continue));
-                    }else{
-                        poster_rail(app, ui, "Weiter ansehen · Live-TV", &live_items, true, Some(View::Continue));
-                    }
                 }
             }
 
@@ -583,7 +579,7 @@ fn live_rail(
     section_title(app, ui, title, items.len(), target);
     let mut play = None;
     egui::ScrollArea::horizontal()
-        .id_source("home-live-rail")
+        .id_source(("home-live-rail", title))
         .auto_shrink([false, true])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -622,8 +618,12 @@ fn live_rail(
             });
         });
     if let Some(item) = play {
-        app.start_preview(item);
-        app.view = View::Live;
+        if mobile_active(ui.ctx()) && !app.tv {
+            app.play(item);
+        } else {
+            app.start_preview(item);
+            app.view = View::Live;
+        }
         ui.ctx().request_repaint();
     }
 }

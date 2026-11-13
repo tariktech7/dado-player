@@ -375,7 +375,6 @@ pub fn app_bar(
 ) -> BarOut {
     let mut out = BarOut::default();
     let rect = ui.max_rect();
-    crate::theme::glass(ui, rect, 0.0);
     ui.painter().hline(
         rect.left()..=rect.right(),
         rect.bottom() - 0.5,

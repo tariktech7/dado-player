@@ -90,3 +90,5 @@ strip = true
 # eframe 0.27.2 calls a removed WinitApp method in its iOS-only event loop.
 [patch.crates-io]
 eframe = { path = "vendor/eframe-0.27.2" }
+egui-winit = { path = "vendor/egui-winit-0.27.2" }
+egui-wgpu = { path = "vendor/egui-wgpu-0.27.2" }

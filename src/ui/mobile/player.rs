@@ -18,7 +18,11 @@ const HINT_AFTER: f64 = 2.5;
 
 pub fn show(app: &mut App, ctx: &egui::Context, l: &Layout) {
     egui::CentralPanel::default()
-        .frame(egui::Frame::none().fill(Color32::BLACK))
+        .frame(egui::Frame::none().fill(if cfg!(target_os = "ios") {
+            Color32::TRANSPARENT
+        } else {
+            Color32::BLACK
+        }))
         .show(ctx, |ui| body(app, ui, l));
 }
 
@@ -64,7 +68,9 @@ fn draw_radio_card(ui: &Ui, rect: Rect, title: &str) {
 fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     let ctx = ui.ctx().clone();
     let full = ui.max_rect();
-    ui.painter().rect_filled(full, 0.0, Color32::BLACK);
+    if !cfg!(target_os = "ios") {
+        ui.painter().rect_filled(full, 0.0, Color32::BLACK);
+    }
 
     let now = ctx.input(|i| i.time);
     if app.ui_activity < 0.0 {
@@ -102,9 +108,9 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     let top_h = if show_ui { l.appbar_h } else { 0.0 };
     let bot_h = if show_ui {
         if l.compact_height() {
-            132.0
+            132.0 + l.bottom_inset
         } else {
-            168.0
+            168.0 + l.bottom_inset
         }
     } else {
         0.0
@@ -135,7 +141,10 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     }
     #[cfg(not(target_os = "android"))]
     {
-        app.position_video(video, ctx.pixels_per_point());
+        app.position_video(
+            if cfg!(target_os = "ios") { full } else { video },
+            ctx.pixels_per_point(),
+        );
         // The desktop player reveals its chrome via HWND region cutouts. The
         // mobile layout draws all of its own chrome in egui, so drop any
         // leftover cutout when the same process switches player views.

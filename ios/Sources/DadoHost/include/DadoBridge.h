@@ -74,6 +74,10 @@ void dado_app_set_env(double top,
 /// Creates the AVPlayerLayer-backed view and adds it to the root view, behind
 /// any UI overlay. Idempotent.
 void dado_host_attach(void);
+void dado_host_native_player(int32_t enabled);
+int32_t dado_host_tracks(char *buffer, int32_t capacity);
+int64_t dado_host_current_track(int32_t kind);
+void dado_host_select_track(int32_t kind, int64_t id);
 
 /// Places the native video view. Coordinates are in points, relative to the
 /// host's root view. Called every frame while the player is visible; the host
