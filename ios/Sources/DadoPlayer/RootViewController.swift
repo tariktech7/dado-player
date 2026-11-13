@@ -74,7 +74,7 @@ final class RootViewController: UIViewController {
             view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             // wgpu can install a Metal-backed subview after the first frame.
             // Host the noninteractive video plane above that root surface.
-            window.addSubview(view)
+            root.view.insertSubview(view, at: 0)
             didMove(toParent: root)
         } else if window.rootViewController == nil {
             // Early launch: nobody owns the window yet. Take it, winit will not

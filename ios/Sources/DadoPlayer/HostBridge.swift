@@ -72,7 +72,8 @@ final class VideoHost {
             // the login screen.
             video.isHidden = true
             // Index 0: below the egui surface, which is the UI overlay.
-            controller.view.insertSubview(video, at: 0)
+            video.isUserInteractionEnabled = false
+            window.addSubview(video)
             self.view = video
             let pending = self.pending
             self.pending.removeAll()
@@ -109,8 +110,8 @@ final class VideoHost {
 
     func setVisible(_ visible: Bool) {
         withView { view in
-            if visible, let host=view.superview, let root=host.superview {
-                root.bringSubviewToFront(host)
+            if visible, let window=view.window {
+                window.bringSubviewToFront(view)
             }
             if view.isHidden != !visible { view.isHidden = !visible }
         }
