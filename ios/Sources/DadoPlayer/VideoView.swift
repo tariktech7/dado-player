@@ -35,6 +35,7 @@ final class VideoView: UIView {
     /// `cacheTime` is this minus the current position, i.e. what mpv calls
     /// `demuxer-cache-time`.
     private var bufferedEnd: Double = 0
+    private var pendingSeek: Double?
 
     /// Set by AVPlayerItemDidPlayToEndTime, cleared on load/seek/stop.
     private(set) var eof: Bool = false
@@ -117,6 +118,7 @@ final class VideoView: UIView {
 
     func seek(to seconds: Double) {
         let clamped = max(0, seconds)
+        guard player.currentItem?.status == .readyToPlay else {pendingSeek=clamped;return}
         eof = false
         player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600))
     }
@@ -199,6 +201,7 @@ final class VideoView: UIView {
         switch status {
         case .readyToPlay:
             errorCode = nil
+            if let seconds=pendingSeek {pendingSeek=nil;seek(to:seconds)}
             if let item = player.currentItem {
                 videoSize = item.presentationSize
             }
@@ -231,6 +234,7 @@ final class VideoView: UIView {
         }
 
         eof = false
+        pendingSeek=nil
         bufferedEnd = 0
         videoSize = .zero
         errorCode = nil

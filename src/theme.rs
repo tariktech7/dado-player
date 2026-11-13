@@ -245,16 +245,70 @@ fn light_visuals() -> Visuals {
 
 /// Lightweight translucent chrome, with an edge highlight in both appearances.
 pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
-    let (r, g, b, _) = ui.visuals().window_fill.to_tuple();
-    ui.painter()
-        .rect_filled(rect, radius, Color32::from_rgba_unmultiplied(r, g, b, 215));
+    let dark = ui.visuals().dark_mode;
+    let base = if dark {
+        Color32::from_rgba_unmultiplied(29, 43, 48, 224)
+    } else {
+        Color32::from_rgba_unmultiplied(247, 252, 253, 225)
+    };
+    ui.painter().rect_filled(
+        rect.translate(egui::vec2(0.0, 4.0)),
+        radius,
+        Color32::from_black_alpha(if dark { 40 } else { 12 }),
+    );
+    ui.painter().rect_filled(rect, radius, base);
     let inner = rect.shrink(1.0);
     ui.painter().rect_stroke(
         inner,
         radius,
         Stroke::new(
             1.0_f32,
-            Color32::from_white_alpha(if ui.visuals().dark_mode { 30 } else { 150 }),
+            Color32::from_white_alpha(if dark { 48 } else { 240 }),
         ),
     );
+    let top = rect.shrink2(egui::vec2(radius * 0.7, 2.0));
+    ui.painter().hline(
+        top.left()..=top.right(),
+        top.top(),
+        Stroke::new(
+            1.0_f32,
+            Color32::from_white_alpha(if dark { 70 } else { 255 }),
+        ),
+    );
+}
+/// Ambient light beneath translucent navigation and library surfaces.
+pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
+    let dark = ui.visuals().dark_mode;
+    let base = ui.visuals().panel_fill;
+    ui.painter().rect_filled(rect, 0.0, base);
+    let mut mesh = egui::Mesh::default();
+    let colors = if dark {
+        [
+            Color32::from_rgb(19, 42, 52),
+            Color32::from_rgb(29, 28, 47),
+            base,
+            base,
+        ]
+    } else {
+        [
+            Color32::from_rgb(221, 238, 243),
+            Color32::from_rgb(234, 227, 244),
+            base,
+            base,
+        ]
+    };
+    for (pos, color) in [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ]
+    .into_iter()
+    .zip(colors)
+    {
+        mesh.colored_vertex(pos, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    ui.painter().add(egui::Shape::mesh(mesh));
 }

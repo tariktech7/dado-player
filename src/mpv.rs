@@ -346,6 +346,10 @@ impl Mpv {
         unsafe { (self.f.command)(self.ctx, ptrs.as_ptr()) }
     }
 
+    pub fn load_at(&self, url: &str, seconds: f64) {
+        let _ = self.command(&["set", "start", &seconds.max(0.0).to_string()]);
+        self.load(url);
+    }
     pub fn load(&self, url: &str) {
         let rc = self.command(&["loadfile", url]);
         if rc < 0 {

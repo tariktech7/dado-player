@@ -375,7 +375,7 @@ pub fn app_bar(
 ) -> BarOut {
     let mut out = BarOut::default();
     let rect = ui.max_rect();
-    ui.painter().rect_filled(rect, 0.0, bar(ui));
+    crate::theme::glass(ui, rect, 0.0);
     ui.painter().hline(
         rect.left()..=rect.right(),
         rect.bottom() - 0.5,
@@ -1386,7 +1386,7 @@ pub fn progress_bar(ui: &Ui, rect: Rect, frac: f32) {
 
 /// Draws the shared page background.
 pub fn page_bg(ui: &Ui) {
-    ui.painter().rect_filled(ui.max_rect(), 0.0, bg(ui));
+    crate::theme::ambient(ui, ui.max_rect());
 }
 
 /// Small "LIVE" badge.

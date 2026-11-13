@@ -102,7 +102,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
     // margin instead of touching the bar.
     let list_h = (ui.available_height() - l.pad).max(0.0);
     let mut play: Option<PlayItem> = None;
-    let mut open_epg: Option<u32> = None;
+
     egui::ScrollArea::vertical()
         .max_height(list_h)
         .auto_shrink([false, false])
@@ -147,32 +147,16 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 };
                 let r = components::list_row(app, ui, row, l.pad);
                 if focus::clicked(ui, &r) {
-                    open_epg = Some(ch.id);
-                }
-                let play_rect = Rect::from_center_size(
-                    pos2(r.rect.right() - 32.0, r.rect.center().y),
-                    vec2(44.0, 44.0),
-                );
-                let play_resp = ui.interact(
-                    play_rect,
-                    ui.id().with(("live-play", ch.id)),
-                    Sense::click(),
-                );
-                if focus::clicked(ui, &play_resp) {
                     play = Some(PlayItem {
                         title: ch.name.clone(),
                         url: ch.stream_url.clone(),
                         kind: PlayKind::Live,
-                        progress_key: key.clone(),
+                        progress_key: key,
                     });
                 }
             }
         });
 
-    if let Some(ch_id) = open_epg {
-        app.request_epg(ch_id);
-        app.mobile_epg_channel = Some(ch_id);
-    }
     if let Some(item) = play {
         app.play(item);
     }

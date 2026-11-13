@@ -36,3 +36,6 @@ Auf iOS laufen Streams mit AVPlayer. Xtream verwendet zunächst HLS, bereitgeste
 
 ### iOS 0.2.1
 Die Paketierung kompiliert einen Launchscreen für die native Geräteauflösung. Die Wiedergabe verwendet die AVKit-Vollbildsteuerung mit Audio, Spulen und Schließen. Der iOS-Client behält die eingegebene Anbieterbasis bei, statt auf einen ungeprüften HTTPS-Port umzuschreiben. Xtream wird einmalig auf HLS umgestellt. Inhaltsseiten reservieren am Ende nur den Seitenabstand, da die Navigation bereits aus der verfügbaren Fläche entfernt wurde.
+
+### Bedienkorrekturen 0.2.1 / Windows 0.4.1
+Startseitenkarten setzen gespeicherte Wiedergabe direkt fort. Die Windows-Version setzt die Startposition vor dem asynchronen Laden. Live-Sender starten auf mobilen Geräten beim Antippen der Zeile. Leere Codec-/Auflösungsanzeigen werden ausgeblendet, erfundene Programmfortschritte entfernt. Navigation und Startseite teilen sich durchscheinende Oberflächen mit Lichtkanten und abgestimmten Hintergründen.

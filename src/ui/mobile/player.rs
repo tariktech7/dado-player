@@ -492,7 +492,12 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     // Resolution / fps / codecs for every kind; audio + subtitle selectors for
     // movies & series. Only drawn while the auto-hiding menu is visible (we
     // already returned above when `!show_ui`), so it never stays on screen.
-    {
+    if app.player.as_ref().is_some_and(|p| {
+        p.stream.width > 0
+            || !p.stream.video_codec.is_empty()
+            || p.audio_tracks.len() > 1
+            || !p.sub_tracks.is_empty()
+    }) {
         let pl_ref = app.player.as_ref();
         let stream: StreamInfo = pl_ref.map(|pl| pl.stream.clone()).unwrap_or_default();
         let atracks: Vec<Track> = pl_ref.map(|pl| pl.audio_tracks.clone()).unwrap_or_default();
@@ -507,7 +512,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         let btns_h = if is_vod { TOUCH } else { 0.0 };
         let gap: f32 = if is_vod { 10.0 } else { 0.0 };
         let panel_h = info_h + gap + btns_h;
-        let panel_w: f32 = 260.0;
+        let panel_w = (full.width() - 2.0 * pad).clamp(1.0, 260.0);
         let panel = Rect::from_min_size(
             pos2(full.right() - pad - panel_w, video.bottom() - pad - panel_h),
             vec2(panel_w, panel_h),
@@ -526,13 +531,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
                 res = format!("{}  ·  {:.0} fps", res, stream.fps);
             }
         }
-        let g = components::fit(
-            ui,
-            if res.is_empty() { "…" } else { &res },
-            reg(FS_LABEL),
-            Color32::WHITE,
-            panel_w - 24.0,
-        );
+        let g = components::fit(ui, &res, reg(FS_LABEL), Color32::WHITE, panel_w - 24.0);
         ui.painter().galley(
             pos2(panel.left() + 12.0, panel.top() + 10.0),
             g,
@@ -558,7 +557,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         }
         let g = components::fit(
             ui,
-            if codec.is_empty() { "…" } else { &codec },
+            &codec,
             reg(FS_CAP),
             Color32::from_white_alpha(170),
             panel_w - 24.0,

@@ -91,6 +91,7 @@ fn provider_chip(ui: &mut Ui, kind: ProfileKind) {
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    theme::ambient(ui, ui.max_rect());
     ui.add_space(10.0);
     ui.horizontal(|ui| {
         ui::brand_mark(ui, 34.0);

@@ -14,6 +14,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .id_source("home-page-scroll")
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            theme::ambient(ui,ui.max_rect());
             ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
             // Home is the landing view on desktop AND mobile (mobile/mod.rs
             // routes View::Home here), so one banner covers both platforms.
@@ -122,7 +123,7 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
         (width * 0.27).clamp(228.0, 320.0)
     };
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, h), Sense::hover());
-    ui.painter().rect_filled(rect, 18.0, theme::PANEL_DARK);
+    theme::glass(ui, rect, 24.0);
     let cover = cover_for(app, &item.progress_key);
     let image_width = if compact { width * 0.28 } else { width * 0.40 };
     if !cover.is_empty() {
@@ -157,8 +158,12 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
     );
     info.add_space(6.0);
     let font = egui::FontId::proportional(if compact { 22.0 } else { 32.0 });
-    let mut job =
-        egui::text::LayoutJob::simple(item.title.clone(), font, Color32::WHITE, area.width());
+    let mut job = egui::text::LayoutJob::simple(
+        item.title.clone(),
+        font,
+        ui.visuals().text_color(),
+        area.width(),
+    );
     job.wrap.max_rows = 2;
     info.label(job);
     let button = egui::Rect::from_min_size(
@@ -416,11 +421,7 @@ fn poster_rail(
             });
         });
     if let Some(item) = play {
-        if app.get_progress(&item.progress_key) > 1 {
-            app.ask_resume(&item.progress_key);
-        } else {
-            app.play(item);
-        }
+        app.play(item);
         ui.ctx().request_repaint();
     }
 }
@@ -576,16 +577,6 @@ fn live_rail(
                         egui::Align2::LEFT_CENTER,
                         "● LIVE",
                         egui::FontId::proportional(9.0),
-                        theme::LIVE,
-                    );
-                    let track = egui::Rect::from_min_size(
-                        egui::pos2(rect.left() + 8.0, rect.bottom() - 4.0),
-                        Vec2::new(rect.width() - 16.0, 2.0),
-                    );
-                    ui.painter().rect_filled(track, 1.0, theme::hairline(ui));
-                    ui.painter().rect_filled(
-                        egui::Rect::from_min_size(track.min, Vec2::new(track.width() * 0.66, 2.0)),
-                        1.0,
                         theme::LIVE,
                     );
                     if resp.clicked() {

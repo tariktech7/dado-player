@@ -364,7 +364,7 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
         .frame(Frame::none().fill(bar_color))
         .show(ctx, |ui| {
             let r = ui.max_rect();
-            ui.painter().rect_filled(r, 0.0, bar_color);
+            crate::theme::glass(ui, r, 0.0);
             // Full-bleed: the bar's *background* must reach the screen edges,
             // and the content inset now comes from `l.pad` inside `app_bar`
             // (`pad` already includes `side`, so a landscape cutout still

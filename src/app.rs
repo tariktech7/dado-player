@@ -1618,10 +1618,7 @@ impl App {
                 crate::platform::android::render::request_load(&item.url, resume as f64);
                 #[cfg(not(target_os = "android"))]
                 {
-                    pl.mpv.load(&item.url);
-                    if resume > 0 {
-                        pl.mpv.seek_absolute(resume as f64);
-                    }
+                    pl.mpv.load_at(&item.url, resume as f64);
                 }
                 pl.mpv.set_volume(vol);
                 pl.mpv.set_pause(false);

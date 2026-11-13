@@ -40,6 +40,12 @@ impl Mpv {
         std::ptr::null_mut()
     }
 
+    pub fn load_at(&self, url: &str, seconds: f64) {
+        self.load(url);
+        if seconds > 0.0 {
+            self.seek_absolute(seconds);
+        }
+    }
     pub fn load(&self, url: &str) {
         bridge::load(url);
     }
