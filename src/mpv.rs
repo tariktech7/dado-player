@@ -348,9 +348,12 @@ impl Mpv {
 
     pub fn load_at(&self, url: &str, seconds: f64) {
         let _ = self.command(&["set", "start", &seconds.max(0.0).to_string()]);
-        self.load(url);
+        self.load_command(url);
     }
     pub fn load(&self, url: &str) {
+        self.load_at(url, 0.0);
+    }
+    fn load_command(&self, url: &str) {
         let rc = self.command(&["loadfile", url]);
         if rc < 0 {
             // Never log the URL: provider URLs carry credentials in the query.
