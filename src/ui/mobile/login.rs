@@ -118,9 +118,11 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        ui.add_space(body_l.pad);
+                        ui.add_space(
+                            ((body_l.w - body_l.content_w().min(496.0)) * 0.5).max(body_l.pad),
+                        );
                         ui.vertical(|ui| {
-                            ui.set_width(body_l.content_w());
+                            ui.set_width(body_l.content_w().min(496.0));
                             body(app, ui, &body_l, blocked, viewport);
                         });
                     });

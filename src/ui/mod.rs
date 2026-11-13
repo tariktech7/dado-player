@@ -222,18 +222,26 @@ pub fn pager(ui: &mut Ui, page: &mut usize, pages: usize, count: usize, noun: &s
 
 /// The little square app mark with "D7".
 pub fn brand_mark(ui: &mut Ui, size: f32) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
-    let r = Rounding::same(size * 0.30);
-    ui.painter().rect_filled(rect, r, theme::accent_fill(ui));
-    ui.painter()
-        .rect_stroke(rect, r, Stroke::new(1.0_f32, Color32::from_white_alpha(34)));
-    ui.painter().text(
-        rect.center(),
-        Align2::CENTER_CENTER,
-        "D7",
-        FontId::proportional(size * 0.46),
-        Color32::WHITE,
-    );
+    let key = egui::Id::new("d7-icon-texture");
+    let texture = ui
+        .ctx()
+        .data(|d| d.get_temp::<egui::TextureHandle>(key))
+        .unwrap_or_else(|| {
+            let img = image::load_from_memory(include_bytes!("../../assets/icon.png"))
+                .expect("bundled D7 icon")
+                .thumbnail(128, 128)
+                .to_rgba8();
+            let image = egui::ColorImage::from_rgba_unmultiplied(
+                [img.width() as usize, img.height() as usize],
+                img.as_raw(),
+            );
+            let texture = ui
+                .ctx()
+                .load_texture("D7", image, egui::TextureOptions::LINEAR);
+            ui.ctx().data_mut(|d| d.insert_temp(key, texture.clone()));
+            texture
+        });
+    ui.image((texture.id(), Vec2::splat(size)));
 }
 
 /// Segmented switch (tabs drawn as pills). Returns the newly picked index.

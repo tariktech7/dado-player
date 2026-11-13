@@ -8,30 +8,71 @@ private func presentingController() -> UIViewController? {
     return controller
 }
 
-@_cdecl("dado_host_edit")
-public func editField(_ id: UInt64, _ title: UnsafePointer<CChar>, _ initial: UnsafePointer<CChar>, _ kind: Int32) {
-    let label = String(cString: title)
-    let value = String(cString: initial)
-    DispatchQueue.main.async {
-        guard let root = presentingController(), !(root is UIAlertController) else { return }
-        let editor = UIAlertController(title: label, message: nil, preferredStyle: .alert)
-        editor.addTextField { field in
-            field.text = value
-            field.isSecureTextEntry = kind == 2
-            field.keyboardType = kind == 1 ? .URL : .default
-            field.autocapitalizationType = .none
-            field.autocorrectionType = .no
-            field.spellCheckingType = .no
-            field.returnKeyType = .done
+private final class InlineEditor: NSObject, UITextFieldDelegate {
+    static let shared = InlineEditor()
+    private(set) var field: UITextField?
+    private var id: UInt64 = 0
+
+    func update(id: UInt64, label: String, value: String, kind: Int32, rect: CGRect, mode: Int32, dark: Bool) {
+        if mode < 0 {
+            if id == self.id || id == 0 { close() }
+            return
         }
-        editor.addAction(UIAlertAction(title: "Abbrechen", style: .cancel))
-        let save = UIAlertAction(title: "Übernehmen", style: .default) { _ in
-            (editor.textFields?.first?.text ?? "").withCString { dado_app_edited(id, $0) }
+        guard let root = presentingController()?.view else { return }
+        if mode == 1 && (self.id != id || field == nil) {
+            close()
+            self.id = id
+            let input = UITextField()
+            input.delegate = self
+            input.accessibilityLabel = label
+            input.text = value
+            input.keyboardType = kind == 1 ? .URL : .default
+            input.autocapitalizationType = .none
+            input.autocorrectionType = .no
+            input.spellCheckingType = .no
+            input.font = .systemFont(ofSize: 16)
+            input.returnKeyType = kind == 2 ? .done : .next
+            input.addTarget(self, action: #selector(changed), for: .editingChanged)
+            field = input
+            root.addSubview(input)
         }
-        editor.addAction(save)
-        editor.preferredAction = save
-        root.present(editor, animated: true) { editor.textFields?.first?.becomeFirstResponder() }
+        guard self.id == id, let input = field else { return }
+        input.overrideUserInterfaceStyle = dark ? .dark : .light
+        input.backgroundColor = .secondarySystemBackground
+        input.textColor = .label
+        if input.isSecureTextEntry != (kind == 2) { input.isSecureTextEntry = kind == 2 }
+        input.layer.cornerRadius = 8
+        input.frame = rect
+        if mode == 1 { input.becomeFirstResponder() }
     }
+
+    @objc private func changed() {
+        (field?.text ?? "").withCString { dado_app_edited(id, $0) }
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        let current = id
+        let next = textField.returnKeyType == .next
+        close()
+        dado_app_edit_finished(current, next ? 1 : 0)
+        return false
+    }
+
+    func close() {
+        guard let input = field else { return }
+        changed()
+        field = nil
+        input.resignFirstResponder()
+        input.removeFromSuperview()
+        id = 0
+    }
+}
+
+@_cdecl("dado_host_edit")
+public func editField(_ id: UInt64, _ title: UnsafePointer<CChar>, _ initial: UnsafePointer<CChar>, _ kind: Int32,
+                      _ x: Double, _ y: Double, _ w: Double, _ h: Double, _ mode: Int32, _ dark: Int32) {
+    InlineEditor.shared.update(id: id, label: String(cString: title), value: String(cString: initial), kind: kind,
+                              rect: CGRect(x: x, y: y, width: w, height: h), mode: mode, dark: dark != 0)
 }
 
 @_cdecl("dado_host_mobile_update")

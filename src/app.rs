@@ -563,6 +563,11 @@ impl App {
                 app.palette_q = q;
             }
         }
+        if !env_demo && !cfg!(test) {
+            if let Some(profile) = app.settings.startup_profile(&app.profiles).cloned() {
+                app.start_login(profile);
+            }
+        }
         app.tv = app.settings.tv_mode.resolve(crate::platform::tv_device());
         app
     }
@@ -804,7 +809,7 @@ impl App {
             }
         }
 
-        if self.autostart_test && self.main_hwnd != 0 {
+        if self.autostart_test && (self.main_hwnd != 0 || cfg!(target_os = "ios")) {
             self.autostart_test = false;
             self.play_test_stream();
         }
@@ -908,6 +913,8 @@ impl App {
         } else {
             self.draw(ctx);
         }
+        #[cfg(target_os = "ios")]
+        crate::platform::ios::bridge::end_frame(ctx);
         if self.view != view_before_draw
             || self
                 .current_play
@@ -1061,6 +1068,9 @@ impl App {
                             self.profiles.push(profile.clone());
                         }
                         let _ = store::save_profiles(&self.profiles);
+                        self.settings.default_profile = Some(profile.id.clone());
+                        self.settings.signed_out = false;
+                        self.save_settings_now();
                         self.active_profile = Some(profile);
                         self.library = lib;
                         self.reset_profile_catalog_state();
@@ -1140,6 +1150,10 @@ impl App {
     }
 
     // ---- login ----
+
+    pub fn catalog_generation(&self) -> u64 {
+        self.login_generation
+    }
 
     pub fn start_login(&mut self, profile: Profile) {
         self.login_generation = self.login_generation.wrapping_add(1);
@@ -1230,6 +1244,11 @@ impl App {
     }
 
     pub fn delete_profile(&mut self, id: &str) {
+        if self.settings.default_profile.as_deref() == Some(id) {
+            self.settings.default_profile = None;
+            self.settings.signed_out = true;
+            self.save_settings_now();
+        }
         self.profiles.retain(|p| p.id != id);
         let _ = store::save_profiles(&self.profiles);
     }
@@ -1326,6 +1345,8 @@ impl App {
     }
 
     pub fn logout(&mut self) {
+        self.settings.signed_out = true;
+        self.save_settings_now();
         #[cfg(target_os = "android")]
         crate::platform::android::render::cancel_load();
         self.invalidate_login();
@@ -1642,6 +1663,16 @@ impl App {
             }
         }
 
+        #[cfg(target_os = "ios")]
+        {
+            self.play(PlayItem {
+                title: "Testbild (lokal)".into(),
+                url: "dado:demo".into(),
+                kind: PlayKind::Vod,
+                progress_key: "demo:video".into(),
+            });
+            return;
+        }
         // Local video-output check: an uncompressed RGB24 AVI whose geometry
         // (96x72, rgb24, 10fps) lives in its own strf BITMAPINFOHEADER, so
         // `loadfile` needs no per-file options. This sidesteps two libmpv

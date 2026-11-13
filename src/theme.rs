@@ -13,14 +13,14 @@ use egui::{Color32, Context, FontFamily, FontId, Rounding, Stroke, TextStyle, Vi
 
 /// Primary accent used as *ink* (rings, strokes, progress, selected text) on a
 /// dark surface. On light surfaces use [`accent`] instead.
-pub const ACCENT: Color32 = Color32::from_rgb(0x78, 0xAD, 0xFF);
+pub const ACCENT: Color32 = Color32::from_rgb(0x71, 0xDF, 0xD1);
 /// Accent used as a *fill* behind white text (buttons, segments, brand mark).
 /// A step darker than [`ACCENT`] so white labels keep ≥4.3:1 contrast.
-pub const ACCENT_FILL: Color32 = Color32::from_rgb(0x2F, 0x7B, 0xFF);
+pub const ACCENT_FILL: Color32 = Color32::from_rgb(0x09, 0x74, 0x70);
 /// Soft accent surface (selected row / playing row) in the dark theme.
-pub const ACCENT_DIM: Color32 = Color32::from_rgb(0x28, 0x34, 0x4A);
+pub const ACCENT_DIM: Color32 = Color32::from_rgb(0x20, 0x39, 0x39);
 /// Keyboard focus ring (brighter than the accent for visibility).
-pub const FOCUS: Color32 = Color32::from_rgb(0x8C, 0xBA, 0xFF);
+pub const FOCUS: Color32 = Color32::from_rgb(0xA1, 0xEE, 0xE0);
 
 pub const DANGER: Color32 = Color32::from_rgb(0xFF, 0x8D, 0x9B);
 pub const OK: Color32 = Color32::from_rgb(0x4A, 0xDE, 0x80);
@@ -30,21 +30,21 @@ pub const LIVE: Color32 = Color32::from_rgb(0xFF, 0x8F, 0x8F);
 pub const RATING: Color32 = Color32::from_rgb(0xFF, 0xCF, 0x5C);
 
 /// Provider accents (brighter variants for dark surfaces).
-pub const PROVIDER_XTREAM: Color32 = Color32::from_rgb(0x78, 0xAD, 0xFF);
+pub const PROVIDER_XTREAM: Color32 = Color32::from_rgb(0x71, 0xDF, 0xD1);
 pub const PROVIDER_M3U: Color32 = Color32::from_rgb(0xFB, 0xBF, 0x24);
 
 // ---- dark palette (graphite steps) ----
-pub const BG_DARK: Color32 = Color32::from_rgb(0x0D, 0x0F, 0x12);
-pub const PANEL_DARK: Color32 = Color32::from_rgb(0x11, 0x13, 0x18);
-pub const CARD_DARK: Color32 = Color32::from_rgb(0x16, 0x1A, 0x22);
-pub const WIDGET_DARK: Color32 = Color32::from_rgb(0x1E, 0x23, 0x30);
+pub const BG_DARK: Color32 = Color32::from_rgb(0x0D, 0x13, 0x16);
+pub const PANEL_DARK: Color32 = Color32::from_rgb(0x15, 0x1D, 0x20);
+pub const CARD_DARK: Color32 = Color32::from_rgb(0x1B, 0x25, 0x28);
+pub const WIDGET_DARK: Color32 = Color32::from_rgb(0x21, 0x2D, 0x30);
 pub const CARD_HOVER_DARK: Color32 = Color32::from_rgb(0x25, 0x2B, 0x3A);
 pub const BORDER_DARK: Color32 = Color32::from_rgb(0x26, 0x2E, 0x3A);
-pub const TEXT_DARK: Color32 = Color32::from_rgb(0xE6, 0xE1, 0xE5);
+pub const TEXT_DARK: Color32 = Color32::from_rgb(0xEF, 0xF5, 0xF3);
 pub const MUTED_DARK: Color32 = Color32::from_rgb(0xA1, 0xAA, 0xBD);
 
 // ---- light palette (flat, near-white cards) ----
-pub const BG_LIGHT: Color32 = Color32::from_rgb(0xEE, 0xF0, 0xF3);
+pub const BG_LIGHT: Color32 = Color32::from_rgb(0xF0, 0xF4, 0xF2);
 pub const PANEL_LIGHT: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
 pub const CARD_LIGHT: Color32 = Color32::from_rgb(0xF2, 0xF4, 0xF7);
 pub const BORDER_LIGHT: Color32 = Color32::from_rgb(0xDF, 0xE3, 0xEA);
@@ -96,7 +96,7 @@ pub fn accent_fill(_ui: &egui::Ui) -> Color32 {
 /// Accent as text. Lighter than [`ACCENT`] on dark for 4.5:1 on the rail.
 pub fn accent_text(ui: &egui::Ui) -> Color32 {
     if ui.visuals().dark_mode {
-        Color32::from_rgb(0xA9, 0xCA, 0xFF)
+        Color32::from_rgb(0xAE, 0xEC, 0xDF)
     } else {
         ACCENT_FILL
     }
@@ -107,7 +107,7 @@ pub fn selection_surface(ui: &egui::Ui) -> Color32 {
     if ui.visuals().dark_mode {
         ACCENT_DIM
     } else {
-        Color32::from_rgb(0xE3, 0xEC, 0xFF)
+        Color32::from_rgb(0xDB, 0xEF, 0xE9)
     }
 }
 

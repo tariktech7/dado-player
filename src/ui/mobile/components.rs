@@ -424,7 +424,7 @@ const TABS: [(Icon, &str, View); 4] = [
     (Icon::Series, "Serien", View::Series),
     // Fortsetzen is a daily destination; Favoriten is a shelf you visit now and
     // then, so it moved into the "Mehr" sheet (MOBILE-BAUPLAN §20).
-    (Icon::Play, "Fortsetzen", View::Continue),
+    (Icon::User, "Start", View::Home),
 ];
 
 /// Bottom navigation. Returns true when the "Mehr" sheet should open.
@@ -433,14 +433,17 @@ const TABS: [(Icon, &str, View); 4] = [
 // fifth "Mehr" cell and the ID stability.
 #[allow(clippy::needless_range_loop)]
 pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
-    let rect = ui.max_rect();
-    ui.painter().rect_filled(rect, 0.0, bar(ui));
-    ui.painter().hline(
-        rect.left()..=rect.right(),
-        rect.top() + 0.5,
-        Stroke::new(1.0_f32, hairline(ui)),
+    let outer = ui.max_rect();
+    let rect = Rect::from_center_size(
+        outer.center(),
+        vec2(
+            (outer.width() - 20.0).clamp(1.0, 520.0),
+            outer.height() - 6.0,
+        ),
     );
-
+    ui.painter().rect_filled(rect, 24.0, bar(ui));
+    ui.painter()
+        .rect_stroke(rect, 24.0, Stroke::new(1.0_f32, hairline(ui)));
     let n = 5;
     let cell_w = rect.width() / n as f32;
     let mut open_more = false;
@@ -482,7 +485,7 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
             color,
         );
         let g = fit(ui, label, medium(FS_CAP), color, cell_w - 6.0);
-        let ty = cell.bottom() - 20.0 - g.size().y * 0.5;
+        let ty = cell.bottom() - g.size().y - 4.0;
         ui.painter()
             .galley(pos2(cell.center().x - g.size().x * 0.5, ty), g, color);
 
@@ -569,6 +572,11 @@ pub fn list_row(app: &mut App, ui: &mut Ui, row: Row<'_>, pad: f32) -> Response 
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
 
+    ui.painter().rect_filled(
+        rect.shrink2(vec2((pad * 0.45).max(3.0), 1.0)),
+        RADIUS_SM,
+        surface(ui),
+    );
     if resp.is_pointer_button_down_on() {
         ui.painter().rect_filled(rect, RADIUS_SM, pressed(ui));
     } else if row.playing {
@@ -729,6 +737,9 @@ pub fn poster_card(
 ) -> Response {
     let img_h = (w * 1.5).round();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, img_h + 44.0), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return resp;
+    }
     let img = Rect::from_min_size(rect.min, vec2(w, img_h));
 
     ui.painter()
@@ -1085,19 +1096,18 @@ pub fn field(
         if let Some(value) = crate::platform::ios::bridge::edited(id) {
             *text = value;
         }
-        if resp.clicked() || resp.gained_focus() {
-            let kind = match kb {
-                Kb::Url => 1,
-                Kb::Password => 2,
-                _ => 0,
-            };
-            crate::platform::ios::bridge::edit(
-                id,
-                if label.is_empty() { hint } else { label },
-                text,
-                kind,
-            );
-        }
+        let kind = match kb {
+            Kb::Url => 1,
+            Kb::Password if !*show_password => 2,
+            _ => 0,
+        };
+        crate::platform::ios::bridge::edit(
+            ui,
+            &resp,
+            if label.is_empty() { hint } else { label },
+            text,
+            kind,
+        );
     }
     // Focus ring: with no hover on touch, a filled-but-identical box is the only
     // feedback the user gets that the field is the one the keyboard is typing

@@ -260,32 +260,126 @@ pub fn ime_inset() -> f64 {
 
 #[cfg(target_os = "ios")]
 mod native_fields {
+    use std::collections::HashMap;
     use std::ffi::{c_char, CStr, CString};
     use std::sync::Mutex;
-    static RESULT: Mutex<Option<(u64, String)>> = Mutex::new(None);
+    use std::sync::{LazyLock, OnceLock};
+    static VALUES: LazyLock<Mutex<HashMap<u64, String>>> = LazyLock::new(Default::default);
+    static FINISHED: Mutex<Option<(u64, bool)>> = Mutex::new(None);
+    static CTX: OnceLock<egui::Context> = OnceLock::new();
     extern "C" {
-        fn dado_host_edit(id: u64, title: *const c_char, value: *const c_char, kind: i32);
+        fn dado_host_edit(
+            id: u64,
+            title: *const c_char,
+            value: *const c_char,
+            kind: i32,
+            x: f64,
+            y: f64,
+            w: f64,
+            h: f64,
+            mode: i32,
+            dark: i32,
+        );
     }
-    pub fn edit(id: u64, title: &str, value: &str, kind: i32) {
+    pub fn edit(ui: &egui::Ui, resp: &egui::Response, title: &str, value: &str, kind: i32) {
+        CTX.get_or_init(|| ui.ctx().clone());
+        let id = resp.id.value();
+        let order_key = egui::Id::new("inline-order");
+        let frame = ui.ctx().frame_nr();
+        ui.ctx().data_mut(|d| {
+            let order = d.get_temp_mut_or_default::<(u64, Vec<egui::Id>)>(order_key);
+            if order.0 != frame {
+                order.0 = frame;
+                order.1.clear();
+            }
+            order.1.push(resp.id);
+        });
+        let r = resp.rect.intersect(ui.clip_rect());
+        let mode = if !resp.has_focus() || !r.is_positive() {
+            -1
+        } else if resp.clicked() || resp.gained_focus() {
+            1
+        } else {
+            0
+        };
+        if resp.has_focus() {
+            let frame = ui.ctx().frame_nr();
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::new("inline-frame"), frame));
+        }
         if let (Ok(t), Ok(v)) = (CString::new(title), CString::new(value)) {
-            unsafe { dado_host_edit(id, t.as_ptr(), v.as_ptr(), kind) }
+            unsafe {
+                dado_host_edit(
+                    id,
+                    t.as_ptr(),
+                    v.as_ptr(),
+                    kind,
+                    r.left() as f64,
+                    r.top() as f64,
+                    r.width() as f64,
+                    r.height() as f64,
+                    mode,
+                    ui.visuals().dark_mode as i32,
+                )
+            }
+        }
+        let mut done = FINISHED.lock().unwrap();
+        if done.as_ref().is_some_and(|(key, _)| *key == id) {
+            let (_, next) = done.take().unwrap();
+            if next {
+                let previous = ui
+                    .ctx()
+                    .data(|d| d.get_temp::<Vec<egui::Id>>(egui::Id::new("inline-last")))
+                    .unwrap_or_default();
+                if let Some(following) = previous.iter().skip_while(|x| **x != resp.id).nth(1) {
+                    ui.memory_mut(|m| m.request_focus(*following));
+                } else {
+                    resp.surrender_focus();
+                }
+            } else {
+                resp.surrender_focus();
+            }
+        }
+    }
+    pub fn end_frame(ctx: &egui::Context) {
+        let frame = ctx.frame_nr();
+        ctx.data_mut(|d| {
+            if let Some((seen, order)) =
+                d.get_temp::<(u64, Vec<egui::Id>)>(egui::Id::new("inline-order"))
+            {
+                if seen == frame {
+                    d.insert_temp(egui::Id::new("inline-last"), order);
+                }
+            }
+        });
+        if ctx.data(|d| d.get_temp::<u64>(egui::Id::new("inline-frame"))) != Some(frame) {
+            unsafe {
+                dado_host_edit(0, c"".as_ptr(), c"".as_ptr(), 0, 0., 0., 0., 0., -1, 0);
+            }
         }
     }
     #[no_mangle]
     pub unsafe extern "C" fn dado_app_edited(id: u64, value: *const c_char) {
         if !value.is_null() {
-            *RESULT.lock().unwrap() =
-                Some((id, CStr::from_ptr(value).to_string_lossy().into_owned()));
+            VALUES
+                .lock()
+                .unwrap()
+                .insert(id, CStr::from_ptr(value).to_string_lossy().into_owned());
+        }
+        if let Some(ctx) = CTX.get() {
+            ctx.request_repaint();
+        }
+    }
+    #[no_mangle]
+    pub extern "C" fn dado_app_edit_finished(id: u64, next: i32) {
+        *FINISHED.lock().unwrap() = Some((id, next != 0));
+        if let Some(ctx) = CTX.get() {
+            ctx.request_repaint();
         }
     }
     pub fn edited(id: u64) -> Option<String> {
-        let mut slot = RESULT.lock().unwrap();
-        if slot.as_ref().is_some_and(|(key, _)| *key == id) {
-            slot.take().map(|(_, v)| v)
-        } else {
-            None
-        }
+        VALUES.lock().unwrap().remove(&id)
     }
 }
 #[cfg(target_os = "ios")]
-pub use native_fields::{edit, edited};
+pub use native_fields::{edit, edited, end_frame};

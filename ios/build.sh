@@ -38,12 +38,13 @@ for arg in "$@"; do
         --ipa) MODE="ipa" ;;
         --deploy) MODE="deploy" ;;
         --sim) SIM=1 ;;
+        --sim-app) SIM=1; MODE=simapp ;;
         -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
         *) echo "!! unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
 
-if [ "$SIM" -eq 1 ] && [ "$MODE" != lib ]; then
+if [ "$SIM" -eq 1 ] && [ "$MODE" = ipa -o "$MODE" = deploy ]; then
     echo "Simulator builds support --sim alone; IPA and deploy require a device target." >&2
     exit 2
 fi
@@ -176,7 +177,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Package an unsigned IPA
 # ---------------------------------------------------------------------------
-if [ "$MODE" = "ipa" ]; then
+if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     command -v swift >/dev/null 2>&1 || {
         echo "!! swift not in PATH — required for --ipa" >&2; exit 1; }
 
@@ -226,11 +227,18 @@ if [ "$MODE" = "ipa" ]; then
     mkdir -p "$APP"
     cp "$BIN" "$APP/DadoPlayer"
     cp ios/Info.plist "$APP/Info.plist"
+    cp ios/Resources/*.png ios/Resources/Playback.mp4 "$APP/"
 
     # The Rust core is a static library, so it is already inside the executable.
     # Any SwiftPM resource bundles would have to be copied here too; the host
     # currently declares none.
     chmod +x "$APP/DadoPlayer"
+
+    if [ "$MODE" = simapp ]; then
+        mkdir -p "$ROOT/target/simulator"
+        cp -R "$APP" "$ROOT/target/simulator/"
+        exit 0
+    fi
 
     # An unsigned IPA is only installable through a sideloading tool that signs
     # it with the user's own Apple ID (Sideloadly, AltStore, Xcode). Ad-hoc

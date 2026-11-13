@@ -86,6 +86,15 @@ final class VideoView: UIView {
 
         player.replaceCurrentItem(with: item)
         player.play()
+        #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.environment["DADO_VIDEO_SMOKE"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now()+4) { [weak self] in
+                guard let self = self, self.playerLayer.isReadyForDisplay, self.player.currentTime().seconds > 0.5,
+                      self.window != nil, !self.isHidden, self.bounds.width > 20 else { return }
+                FileManager.default.createFile(atPath: NSHomeDirectory()+"/Documents/video-ready", contents: Data())
+            }
+        }
+        #endif
     }
 
     func stop() {
@@ -164,6 +173,7 @@ final class VideoView: UIView {
                 let status = item.status
                 let error = item.error
                 DispatchQueue.main.async {
+                    guard self?.player.currentItem === item else { return }
                     self?.apply(status: status, error: error)
                 }
             },

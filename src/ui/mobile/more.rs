@@ -14,7 +14,7 @@ pub fn sheet(app: &mut App, ctx: &Context, l: &Layout) {
     focus::begin_modal(0);
     let screen = ctx.screen_rect();
     let rows: [(Icon, &str, View); 4] = [
-        (Icon::Info, "Startseite", View::Home),
+        (Icon::Play, "Fortsetzen", View::Continue),
         (Icon::Search, "Suche", View::Search),
         // Fortsetzen is a tab now; Favoriten took its place here (§20).
         (Icon::Star, "Favoriten", View::Favorites),

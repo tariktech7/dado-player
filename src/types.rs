@@ -352,6 +352,8 @@ pub struct Settings {
     pub auto_play_last: bool,
     #[serde(default)]
     pub default_profile: Option<String>,
+    #[serde(default)]
+    pub signed_out: bool,
 
     // ---- advanced playback (mpv) ----
     #[serde(default)]
@@ -429,6 +431,7 @@ impl Default for Settings {
             settings_mode: SettingsMode::Easy,
             auto_play_last: true,
             default_profile: None,
+            signed_out: false,
             hwdec: HwDec::AutoSafe,
             vo: VideoOut::Gpu,
             video_sync: VideoSync::Audio,
@@ -449,6 +452,17 @@ impl Default for Settings {
 }
 
 impl Settings {
+    pub fn startup_profile<'a>(&self, profiles: &'a [Profile]) -> Option<&'a Profile> {
+        if self.signed_out {
+            return None;
+        }
+        match self.default_profile.as_deref() {
+            Some(id) => profiles.iter().find(|p| p.id == id),
+            None if profiles.len() == 1 => profiles.first(),
+            _ => None,
+        }
+    }
+
     /// Conservative defaults: works on almost every machine.
     pub fn preset_standard(&mut self) {
         self.hwdec = HwDec::AutoSafe;
@@ -725,5 +739,28 @@ mod tests {
         let summary = lib.catalog_issue_summary();
         assert!(summary.contains("Serienliste"), "{summary}");
         assert!(!summary.contains("Senderliste"), "{summary}");
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    #[test]
+    fn old_profiles_resume_only_if_unambiguous_and_logout_wins() {
+        let mut s: Settings = serde_json::from_str("{}").unwrap();
+        let a = Profile::new("a", ProfileKind::M3u);
+        let mut b = Profile::new("b", ProfileKind::Xtream);
+        b.id = "second".into();
+        assert!(s.startup_profile(&[]).is_none());
+        assert_eq!(
+            s.startup_profile(std::slice::from_ref(&a)).unwrap().id,
+            a.id
+        );
+        let both = [a, b];
+        assert!(s.startup_profile(&both).is_none());
+        s.default_profile = Some("second".into());
+        assert_eq!(s.startup_profile(&both).unwrap().name, "b");
+        s.signed_out = true;
+        assert!(s.startup_profile(&both).is_none());
     }
 }

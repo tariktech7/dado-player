@@ -47,7 +47,7 @@
         android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
-        android:banner="@drawable/tv_banner"
+        android:banner="@drawable/d7_banner"
         android:theme="@style/Theme.DadoPlayer.NoTitleBar.Fullscreen"
         android:usesCleartextTraffic="true"
         android:installLocation="auto">

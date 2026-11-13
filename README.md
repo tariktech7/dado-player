@@ -27,3 +27,9 @@ Die portable App fragt auf Wunsch unter **Einstellungen → Auf GitHub-Updates p
 Unter Einstellungen → App-Updates kann der Player ein Paket prüfen und laden. Für das private Repository einen kurzlebigen Fine-grained Token mit Contents: Read für dado-player eingeben oder die Release-Seite im angemeldeten Browser öffnen. Android öffnet den Systeminstaller. Auf iOS die IPA in Dateien sichern und in AltStore Classic über My Apps → + mit derselben Apple-ID installieren.
 
 Bei jedem mobilen Release die native Buildnummer und die entsprechende Buildnummer in src/ui/mobile/update.rs gemeinsam erhöhen. Die APK als Dado-Player-arm64-debug.apk mit Asset-Label android-build-<versionCode>, die IPA als Dado-Player-unsigned.ipa mit ios-build-<CFBundleVersion> veröffentlichen. Der Updater prüft Buildnummer, Dateigröße und den SHA-256-Digest von GitHub.
+
+## D7-Oberfläche und Wiedergabe
+
+Die Zeichenform in assets/d7.svg ist die Vorlage für App-Icons und das gemeinsame Markenzeichen. Die Farbpalette liegt in src/theme.rs. Telefone verwenden die untere Navigation, breite mobile Fenster die Seitenleiste. Nach der Anmeldung öffnet die App beim nächsten Start das letzte Profil. Abmelden setzt diesen Wiedereinstieg aus.
+
+Auf iOS laufen Streams mit AVPlayer. Xtream verwendet zunächst HLS, bereitgestellte M3U-URLs bleiben erhalten. Der lokale Wiedergabetest nutzt ein mitgeliefertes H.264/AAC-MP4. Der macOS-Workflow baut die Geräte-IPA und startet zusätzlich einen Simulator mit diesem Clip. Für eine Freigabe auf Hardware Live-HLS, VOD, Ton, Rotation und Eingabe auf einem iPhone prüfen.

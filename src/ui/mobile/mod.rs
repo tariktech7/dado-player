@@ -125,7 +125,8 @@ impl Layout {
                     tokens::PAD
                 }
             }
-            Bucket::Medium | Bucket::Expanded => tokens::PAD,
+            Bucket::Medium => 24.0,
+            Bucket::Expanded => 32.0,
         };
         Layout {
             w: r.width(),
@@ -237,6 +238,11 @@ pub fn show(app: &mut App, ctx: &Context) {
 }
 
 fn touch_style(ctx: &Context) {
+    if ctx.style().spacing.interact_size == egui::vec2(tokens::TOUCH, tokens::TOUCH)
+        && ctx.style().spacing.scroll.bar_width == 3.0
+    {
+        return;
+    }
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(8.0, 8.0);
     style.spacing.button_padding = egui::vec2(14.0, 10.0);
@@ -292,19 +298,56 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
 
     // ---- bottom navigation (with the gesture-bar inset) ----
     let mut open_more = false;
-    TopBottomPanel::bottom("m-nav")
-        .exact_height(tokens::NAV_H + l.bottom_inset)
-        .frame(Frame::none().fill(bar_color))
-        .show(ctx, |ui| {
-            let r = ui.max_rect();
-            ui.painter().rect_filled(r, 0.0, bar_color);
-            // The inset is subtracted by hand: `Frame::inner_margin` does not
-            // shrink `max_rect`, so the tab labels would sit under the system
-            // navigation bar.
-            let content = Rect::from_min_max(r.min, egui::pos2(r.max.x, r.max.y - l.bottom_inset));
-            let mut child = ui.child_ui(content, EguiLayout::left_to_right(Align::Center));
-            open_more = components::nav_bar(app, &mut child);
-        });
+    let mut page_layout = l.clone();
+    if l.w - 2.0 * l.side >= 720.0 && !l.compact_height() {
+        let width = 104.0 + l.side;
+        egui::SidePanel::left("library-rail")
+            .exact_width(width)
+            .resizable(false)
+            .frame(Frame::none().fill(bar_color))
+            .show(ctx, |ui| {
+                ui.add_space(l.top_inset + 20.0);
+                ui.vertical_centered(|ui| crate::ui::brand_mark(ui, 42.0));
+                ui.add_space(24.0);
+                for (label, view) in [
+                    ("Start", View::Home),
+                    ("Live-TV", View::Live),
+                    ("Filme", View::Movies),
+                    ("Serien", View::Series),
+                    ("Suche", View::Search),
+                    ("Favoriten", View::Favorites),
+                    ("Fortsetzen", View::Continue),
+                    ("Einstellungen", View::Settings),
+                ] {
+                    if ui
+                        .add_sized(
+                            [width, 44.0],
+                            egui::SelectableLabel::new(app.view == view, label),
+                        )
+                        .clicked()
+                    {
+                        app.view = view;
+                    }
+                }
+            });
+        page_layout.w -= width;
+    } else {
+        TopBottomPanel::bottom("m-nav")
+            .exact_height(tokens::NAV_H + l.bottom_inset)
+            .frame(Frame::none().fill(page_color))
+            .show(ctx, |ui| {
+                let r = ui.max_rect();
+                ui.painter().rect_filled(r, 0.0, page_color);
+                // The inset is subtracted by hand: `Frame::inner_margin` does not
+                // shrink `max_rect`, so the tab labels would sit under the system
+                // navigation bar.
+                let content =
+                    Rect::from_min_max(r.min, egui::pos2(r.max.x, r.max.y - l.bottom_inset));
+                let mut child = ui.child_ui(content, EguiLayout::left_to_right(Align::Center));
+                open_more = components::nav_bar(app, &mut child);
+            });
+    }
+    let l = &page_layout;
     if open_more {
         app.mobile_more = true;
     }

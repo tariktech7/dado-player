@@ -101,51 +101,55 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         changed = true;
                     }
 
-                    // ---- picture ----
-                    components::section(ui, "Bild");
-                    let hw: [(HwDec, &str); 3] = [
-                        (HwDec::AutoSafe, "Automatisch"),
-                        (HwDec::Auto, "Immer"),
-                        (HwDec::Off, "Aus"),
-                    ];
-                    ui.horizontal_wrapped(|ui| {
-                        for (mode, label) in hw {
-                            let r = components::chip(ui, label, app.settings.hwdec == mode);
-                            if focus::clicked(ui, &r) {
-                                app.settings.hwdec = mode;
-                                changed = true;
+                    #[cfg(target_os = "ios")]
+                    ui.label("Wiedergabe mit Apple AVPlayer");
+                    #[cfg(not(target_os = "ios"))]
+                    {
+                        // ---- picture ----
+                        components::section(ui, "Bild");
+                        let hw: [(HwDec, &str); 3] = [
+                            (HwDec::AutoSafe, "Automatisch"),
+                            (HwDec::Auto, "Immer"),
+                            (HwDec::Off, "Aus"),
+                        ];
+                        ui.horizontal_wrapped(|ui| {
+                            for (mode, label) in hw {
+                                let r = components::chip(ui, label, app.settings.hwdec == mode);
+                                if focus::clicked(ui, &r) {
+                                    app.settings.hwdec = mode;
+                                    changed = true;
+                                }
                             }
-                        }
-                    });
-                    ui.add_space(8.0);
+                        });
+                        ui.add_space(8.0);
 
-                    // ---- player backend ----
-                    components::section(ui, "Player");
-                    ui.label(
-                        egui::RichText::new(
-                            "Standard: MX Player. Externe Player öffnen den Stream in \
+                        // ---- player backend ----
+                        components::section(ui, "Player");
+                        ui.label(
+                            egui::RichText::new(
+                                "Standard: MX Player. Externe Player öffnen den Stream in \
                              einer anderen App; „Integriert\" nutzt den eingebauten \
                              libmpv-Player (auf dem Desktop immer aktiv).",
-                        )
-                        .font(reg(FS_CAP))
-                        .color(muted(ui)),
-                    );
-                    ui.add_space(6.0);
-                    ui.horizontal_wrapped(|ui| {
-                        for mode in PlayerBackend::all() {
-                            let r = components::chip(
-                                ui,
-                                mode.label(),
-                                app.settings.player_backend == mode,
-                            );
-                            if focus::clicked(ui, &r) {
-                                app.settings.player_backend = mode;
-                                changed = true;
+                            )
+                            .font(reg(FS_CAP))
+                            .color(muted(ui)),
+                        );
+                        ui.add_space(6.0);
+                        ui.horizontal_wrapped(|ui| {
+                            for mode in PlayerBackend::all() {
+                                let r = components::chip(
+                                    ui,
+                                    mode.label(),
+                                    app.settings.player_backend == mode,
+                                );
+                                if focus::clicked(ui, &r) {
+                                    app.settings.player_backend = mode;
+                                    changed = true;
+                                }
                             }
-                        }
-                    });
-                    ui.add_space(8.0);
-
+                        });
+                        ui.add_space(8.0);
+                    }
                     // ---- live stream container ----
                     components::section(ui, "Live-Format");
                     ui.label(
@@ -171,6 +175,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         }
                     });
                     ui.add_space(8.0);
+                    #[cfg(not(target_os = "ios"))]
                     if let Some(v) =
                         components::switch_row(ui, "Entrauschen (deband)", app.settings.deband)
                     {

@@ -39,16 +39,34 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         Some(app.live_cat.clone())
     };
     let q = app.live_q.trim().to_lowercase();
-    let idx: Vec<usize> = app
-        .library
-        .channels
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| cat.as_ref().is_none_or(|id| &c.category_id == id))
-        .filter(|(_, c)| q.is_empty() || c.name.to_lowercase().contains(&q))
-        .map(|(i, _)| i)
-        .collect();
-    app.live_order = idx.iter().map(|&i| app.library.channels[i].id).collect();
+    let key = ui.id().with((
+        "channels",
+        app.catalog_generation(),
+        &cat,
+        &q,
+        app.library.channels.len(),
+    ));
+    let idx = ui
+        .data(|d| d.get_temp::<std::sync::Arc<Vec<usize>>>(key))
+        .unwrap_or_else(|| {
+            let filtered: Vec<_> = app
+                .library
+                .channels
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| cat.as_ref().is_none_or(|id| &c.category_id == id))
+                .filter(|(_, c)| q.is_empty() || c.name.to_lowercase().contains(&q))
+                .map(|(i, _)| i)
+                .collect();
+            let indices = std::sync::Arc::new(filtered);
+            ui.data_mut(|d| d.insert_temp(key, indices.clone()));
+            indices
+        });
+    let last = ui.id().with("active-channel-order");
+    if ui.data(|d| d.get_temp::<egui::Id>(last)) != Some(key) {
+        app.live_order = idx.iter().map(|&i| app.library.channels[i].id).collect();
+        ui.data_mut(|d| d.insert_temp(last, key));
+    }
 
     if idx.is_empty() {
         components::empty_state(

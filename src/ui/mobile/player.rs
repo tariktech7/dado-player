@@ -149,7 +149,16 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         {
             crate::platform::android::render::last_error()
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(target_os = "ios")]
+        {
+            extern "C" {
+                fn dado_host_error_code() -> i32;
+            }
+            let code = unsafe { dado_host_error_code() };
+            (code != 0)
+                .then(|| format!("AVPlayer-Fehler {code}. Streamformat und Verbindung prüfen."))
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             None
         }

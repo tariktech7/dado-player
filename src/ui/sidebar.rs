@@ -7,10 +7,10 @@ use egui::{Align2, Color32, FontId, Layout, RichText, Rounding, Sense, Stroke, U
 /// One navigation entry. Selection is a tinted surface plus a full outline —
 /// the language IPTVnator uses for its workspace rail (no solid accent fill,
 /// no side strips), so nav, channel rows and EPG cards read as one system.
-fn nav(ui: &mut Ui, app: &mut App, icon: &str, label: &str, v: View) {
+fn nav(ui: &mut Ui, app: &mut App, label: &str, v: View) {
     let selected = app.view == v;
     let (rect, resp) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::click());
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 42.0), Sense::click());
 
     let bg = if selected {
         theme::selection_surface(ui)
@@ -34,11 +34,21 @@ fn nav(ui: &mut Ui, app: &mut App, icon: &str, label: &str, v: View) {
         ui.visuals().text_color()
     };
     let y = rect.center().y;
-    ui.painter().text(
-        egui::pos2(rect.left() + 12.0, y),
-        Align2::LEFT_CENTER,
-        icon,
-        FontId::proportional(14.0),
+    use crate::ui::mobile::components::{icon as draw_icon, Icon};
+    let symbol = match v {
+        View::Home => Icon::User,
+        View::Live => Icon::Tv,
+        View::Movies => Icon::Film,
+        View::Series => Icon::Series,
+        View::Search => Icon::Search,
+        View::Favorites => Icon::Star,
+        View::Continue => Icon::Play,
+        _ => Icon::Sliders,
+    };
+    draw_icon(
+        ui,
+        egui::Rect::from_center_size(egui::pos2(rect.left() + 21.0, y), Vec2::splat(22.0)),
+        symbol,
         color,
     );
     ui.painter().text(
@@ -89,7 +99,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.add(egui::Label::new(
                 RichText::new("Dado-Player").size(17.0).strong(),
             ));
-            ui.add(egui::Label::new(RichText::new("v0.3").size(10.5).weak()));
+            ui.add(egui::Label::new(
+                RichText::new(include_str!("../../windows/VERSION").trim())
+                    .size(10.5)
+                    .weak(),
+            ));
         });
     });
 
@@ -171,14 +185,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                nav(ui, app, "⌂", "Startseite", View::Home);
-                nav(ui, app, "📺", "Live TV", View::Live);
-                nav(ui, app, "🎬", "Filme", View::Movies);
-                nav(ui, app, "📚", "Serien", View::Series);
-                nav(ui, app, "🔎", "Suche", View::Search);
-                nav(ui, app, "⭐", "Favoriten", View::Favorites);
-                nav(ui, app, "▶", "Fortsetzen", View::Continue);
-                nav(ui, app, "⚙", "Einstellungen", View::Settings);
+                nav(ui, app, "Startseite", View::Home);
+                nav(ui, app, "Live TV", View::Live);
+                nav(ui, app, "Filme", View::Movies);
+                nav(ui, app, "Serien", View::Series);
+                nav(ui, app, "Suche", View::Search);
+                nav(ui, app, "Favoriten", View::Favorites);
+                nav(ui, app, "Fortsetzen", View::Continue);
+                nav(ui, app, "Einstellungen", View::Settings);
             });
     });
 

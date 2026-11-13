@@ -16,7 +16,7 @@ pub const ROW_H: f32 = 64.0;
 /// Episode row (two text lines).
 pub const EP_ROW_H: f32 = 72.0;
 /// Bottom navigation bar (without the system gesture inset).
-pub const NAV_H: f32 = 56.0;
+pub const NAV_H: f32 = 68.0;
 /// Top app bar (without the status-bar inset).
 pub const APPBAR_H: f32 = 56.0;
 /// App bar in landscape (short screens).

@@ -35,6 +35,7 @@ final class VideoHost {
     /// naive retry would start a new 50-step chain each frame while no window
     /// exists yet. This collapses them into one in-flight attempt.
     private var attachPending = false
+    private var pending: [(VideoView) -> Void] = []
 
     private init() {}
 
@@ -73,6 +74,9 @@ final class VideoHost {
             // Index 0: below the egui surface, which is the UI overlay.
             controller.view.insertSubview(video, at: 0)
             self.view = video
+            let pending = self.pending
+            self.pending.removeAll()
+            pending.forEach { $0(video) }
             self.attachPending = false
         }
     }
@@ -81,8 +85,8 @@ final class VideoHost {
     /// not exist yet.
     func withView(_ body: @escaping (VideoView) -> Void) {
         performOnMain { [weak self] in
-            guard let view = self?.view else { return }
-            body(view)
+            guard let self = self else { return }
+            if let view = self.view { body(view) } else { self.pending.append(body); self.attach() }
         }
     }
 
@@ -93,8 +97,7 @@ final class VideoHost {
     /// redundant assignment would still dirty the layer tree, so skip identical
     /// frames here too.
     func setFrame(x: Double, y: Double, w: Double, h: Double) {
-        performOnMain { [weak self] in
-            guard let view = self?.view else { return }
+        withView { view in
             // A degenerate rect would make AVPlayerLayer drop its content and
             // can produce a 1 px flicker on rotation. Ignore it.
             guard w > 0.5, h > 0.5 else { return }
@@ -105,8 +108,7 @@ final class VideoHost {
     }
 
     func setVisible(_ visible: Bool) {
-        performOnMain { [weak self] in
-            guard let view = self?.view else { return }
+        withView { view in
             if view.isHidden == !visible { return }
             view.isHidden = !visible
         }
@@ -132,7 +134,7 @@ final class VideoHost {
                 return first
             }
         }
-        return nil
+        return UIApplication.shared.windows.first(where: { $0.isKeyWindow })
     }
 }
 
@@ -163,7 +165,8 @@ public func dado_host_video_visible(_ visible: Int32) {
 public func dado_host_load(_ url: UnsafePointer<CChar>?) {
     guard let url = url else { return }
     let string = String(cString: url)
-    guard let parsed = URL(string: string) else {
+    let source = string == "dado:demo" ? Bundle.main.url(forResource: "Playback", withExtension: "mp4") : URL(string: string)
+    guard let parsed = source else {
         NSLog("%@", "Dado: dado_host_load got an unparseable URL")
         return
     }
@@ -253,3 +256,6 @@ private func int64Size(_ value: CGFloat?) -> Int64 {
     guard let value = value, value.isFinite, value > 0 else { return 0 }
     return Int64(value)
 }
+
+@_cdecl("dado_host_error_code")
+public func dadoHostErrorCode() -> Int32 { Int32(clamping: VideoHost.shared.view?.errorCode ?? 0) }

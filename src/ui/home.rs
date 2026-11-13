@@ -8,8 +8,6 @@ use crate::ui::mobile::{
 };
 use egui::{Align, Color32, Layout, RichText, Sense, Stroke, Ui, Vec2};
 
-const HERO_H: f32 = 350.0;
-const HERO_LEFT: f32 = 0.43;
 const POSTER_W: f32 = 112.0;
 const POSTER_H: f32 = 166.0;
 
@@ -110,197 +108,73 @@ fn featured_item(app: &App) -> Option<PlayItem> {
 }
 
 fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
-    let w = ui.available_width().max(320.0);
-    let rect = ui.allocate_space(Vec2::new(w, HERO_H)).1;
-    let right_rect = egui::Rect::from_min_max(
-        egui::pos2(rect.left() + w * HERO_LEFT, rect.top()),
-        rect.max,
-    );
-    ui.painter().rect_filled(rect, 0.0, theme::BG_DARK);
-
-    let media = item
-        .progress_key
-        .strip_prefix("vod:")
-        .and_then(|s| s.parse::<u32>().ok())
-        .and_then(|id| {
-            app.library
-                .movies
-                .iter()
-                .find(|m| m.id == id)
-                .map(|m| (id, m.cover.clone()))
-        })
-        .or_else(|| {
-            item.progress_key
-                .strip_prefix("ep:")
-                .and_then(|s| s.split(':').next()?.parse::<u32>().ok())
-                .and_then(|id| {
-                    app.library
-                        .series
-                        .iter()
-                        .find(|s| s.id == id)
-                        .map(|s| (id, s.cover.clone()))
-                })
-        });
-    if let Some((id, url)) = media.filter(|(_, url)| !url.is_empty()) {
-        let key = format!("home-hero:{}", id);
-        app.request_image(key.clone(), url);
+    let width = ui.available_width();
+    let compact = width < 560.0;
+    let h = if compact {
+        (width * 0.56).clamp(164.0, 232.0)
+    } else {
+        (width * 0.27).clamp(228.0, 320.0)
+    };
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, h), Sense::hover());
+    ui.painter().rect_filled(rect, 18.0, theme::PANEL_DARK);
+    let cover = cover_for(app, &item.progress_key);
+    let image_width = if compact { width * 0.28 } else { width * 0.40 };
+    if !cover.is_empty() {
+        let key = format!("hero:{}", item.progress_key);
+        app.request_image(key.clone(), cover);
         if let Some(tex) = app.image(&key) {
-            // Draw the hero media image keeping its aspect ratio so it isn't
-            // stretched vertically into the diagonal info plane.
-            let ts = tex.size();
-            let tex_ratio = ts[0] as f32 / ts[1] as f32;
-            let avail_h = right_rect.height();
-            let img_w = (avail_h * tex_ratio).min(right_rect.width());
-            let img_h = avail_h.min(img_w / tex_ratio);
-            let img_x = right_rect.right() - img_w;
-            let img_rect = egui::Rect::from_min_size(
-                egui::pos2(img_x, right_rect.top()),
-                Vec2::new(img_w, img_h),
+            let art = egui::Rect::from_min_max(
+                egui::pos2(rect.right() - image_width, rect.top()),
+                rect.max,
             );
-            ui.painter().image(
-                tex.id(),
-                img_rect,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                Color32::WHITE,
+            let ratio = art.aspect_ratio() / (tex.size()[0] as f32 / tex.size()[1] as f32);
+            let uv = egui::Rect::from_center_size(
+                egui::pos2(0.5, 0.5),
+                Vec2::new(ratio.min(1.0), (1.0 / ratio).min(1.0)),
             );
+            ui.painter().image(tex.id(), art, uv, Color32::WHITE);
         }
     }
-    ui.painter()
-        .rect_filled(right_rect, 0.0, Color32::from_black_alpha(45));
-    // Angled information plane — follows the active theme instead of always
-    // rendering as a pale/white block in dark mode.
-    let dark = ui.visuals().dark_mode;
-    let left_color = if dark {
-        theme::PANEL_DARK
-    } else {
-        Color32::WHITE
-    };
-    let points = vec![
-        rect.left_top(),
-        egui::pos2(rect.left() + w * 0.43, rect.top()),
-        egui::pos2(rect.left() + w * 0.62, rect.bottom()),
-        rect.left_bottom(),
-    ];
-    ui.painter().add(egui::Shape::convex_polygon(
-        points,
-        left_color,
-        Stroke::NONE,
-    ));
-
-    let mut info = ui.child_ui(
-        egui::Rect::from_min_max(
-            rect.min + Vec2::new(28.0, 40.0),
-            egui::pos2(rect.left() + w * 0.44, rect.bottom() - 14.0),
-        ),
-        Layout::top_down(Align::Min),
+    let pad = if compact { 16.0 } else { 28.0 };
+    let area = egui::Rect::from_min_max(
+        rect.min + Vec2::splat(pad),
+        egui::pos2(rect.right() - image_width - pad, rect.bottom() - pad),
     );
-    let ink = if dark {
-        theme::TEXT_DARK
-    } else {
-        Color32::from_rgb(0x20, 0x23, 0x29)
-    };
-    let sub = if dark {
-        theme::MUTED_DARK
-    } else {
-        Color32::from_gray(95)
-    };
+    let mut info = ui.child_ui(area, Layout::top_down(Align::Min));
     info.label(
         RichText::new(match item.kind {
-            PlayKind::Vod => "MOVIE  ·  FEATURED",
-            PlayKind::Episode => "SERIES  ·  CONTINUE",
-            PlayKind::Live => "LIVE  ·  FAVORITE",
+            PlayKind::Live => "Live-TV",
+            PlayKind::Vod => "Film",
+            PlayKind::Episode => "Serie",
         })
-        .size(9.5)
-        .strong()
-        .color(sub),
+        .color(theme::ACCENT),
     );
     info.add_space(6.0);
-    info.label(RichText::new(&item.title).size(28.0).strong().color(ink));
-    info.add_space(5.0);
-    let rating = item
-        .progress_key
-        .strip_prefix("vod:")
-        .and_then(|s| s.parse::<u32>().ok())
-        .and_then(|id| {
-            app.library
-                .movies
-                .iter()
-                .find(|m| m.id == id)
-                .map(|m| m.rating.clone())
-        })
-        .and_then(|r| crate::ui::vod::rating_badge_for_home(&r));
-    let mut tags = Vec::new();
-    if let Some(r) = rating {
-        tags.push(r);
-    }
-    if tags.is_empty() {
-        tags.push(match item.kind {
-            PlayKind::Vod => "Film".to_string(),
-            PlayKind::Episode => "Serie".to_string(),
-            PlayKind::Live => "Live-TV".to_string(),
-        });
-    }
-    let tag_fill = if dark {
-        theme::WIDGET_DARK
-    } else {
-        Color32::from_rgb(0xE2, 0xE3, 0xE5)
-    };
-    info.horizontal_wrapped(|ui| {
-        for tag in &tags {
-            egui::Frame::none()
-                .fill(tag_fill)
-                .rounding(egui::Rounding::same(8.0))
-                .inner_margin(egui::Margin::symmetric(6.0, 2.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new(tag).size(9.0).color(ink));
-                });
-        }
-    });
-    info.add_space(8.0);
-    let plot = item.progress_key.strip_prefix("vod:").and_then(|s| s.parse::<u32>().ok())
-        .and_then(|id| app.library.movies.iter().find(|m| m.id == id).map(|m| m.plot.clone()))
-        .or_else(|| item.progress_key.strip_prefix("ep:").and_then(|s| s.split(':').next()?.parse::<u32>().ok())
-            .and_then(|id| app.library.series.iter().find(|s| s.id == id).map(|s| s.plot.clone())))
-        .filter(|s| !s.is_empty()).unwrap_or_else(|| "Deine Bibliothek, deine Auswahl. Öffne einen Titel und entdecke die Details aus deiner Playlist.".to_string());
-    info.add(
-        egui::Label::new(RichText::new(plot).size(10.0).color(theme::muted(&info))).wrap(true),
+    let font = egui::FontId::proportional(if compact { 22.0 } else { 32.0 });
+    let mut job =
+        egui::text::LayoutJob::simple(item.title.clone(), font, Color32::WHITE, area.width());
+    job.wrap.max_rows = 2;
+    info.label(job);
+    let button = egui::Rect::from_min_size(
+        egui::pos2(area.left(), area.bottom() - 40.0),
+        Vec2::new(area.width().min(152.0), 40.0),
     );
-    info.add_space(8.0);
-    // A fixed 66% bar used to sit here. It looked like a progress indicator but
-    // had no data behind it (the store only keeps elapsed seconds, no duration).
-    // Show a real, verifiable resume position instead — and nothing otherwise.
-    let resume_at = app.get_progress(&item.progress_key);
-    if resume_at > 1 {
-        info.label(
-            RichText::new(format!("WEITERSCHAUEN AB {}", app.fmt_hms(resume_at)))
-                .size(9.0)
-                .strong()
-                .color(theme::accent(&info)),
-        );
+    let label = if app.get_progress(&item.progress_key) > 1 {
+        "Fortsetzen"
+    } else {
+        "Abspielen"
+    };
+    if info
+        .put(
+            button,
+            egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
+                .fill(theme::ACCENT_FILL)
+                .rounding(20.0),
+        )
+        .clicked()
+    {
+        app.play(item.clone());
     }
-    info.add_space(10.0);
-    if info.button("●  Details").clicked() {
-        match item.kind {
-            PlayKind::Live => app.view = View::Live,
-            PlayKind::Episode => {
-                if let Some(sid) = item
-                    .progress_key
-                    .strip_prefix("ep:")
-                    .and_then(|s| s.split(':').next())
-                    .and_then(|s| s.parse::<u32>().ok())
-                {
-                    app.open_series(sid);
-                } else {
-                    app.view = View::Series;
-                }
-            }
-            PlayKind::Vod => app.view = View::Movies,
-        }
-    }
-
-    // No carousel dots: the hero is a single featured item, and a lone white
-    // dot reads as a broken/inert control. `right_rect` is the artwork plane
-    // and is already shaded above.
 }
 
 fn empty_hero(app: &mut App, ui: &mut Ui) {
