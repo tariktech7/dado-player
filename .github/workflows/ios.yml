@@ -90,8 +90,25 @@ jobs:
           done
           xcrun simctl io "$device" screenshot video.png
           test -f "$data/Documents/video-ready"
+          xcrun simctl terminate "$device" com.tarik.dadoplayer
+          mkdir -p "$RUNNER_TEMP/dado-hls"
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          ffmpeg -hide_banner -loglevel error -i ios/Resources/Playback.mp4 -c copy -hls_time 2 -hls_list_size 0 -hls_segment_filename "$RUNNER_TEMP/dado-hls/seg%d.ts" "$RUNNER_TEMP/dado-hls/stream.m3u8"
+          python3 -m http.server 18494 --bind 127.0.0.1 --directory "$RUNNER_TEMP/dado-hls" > /dev/null 2>&1 &
+          server=$!
+          trap 'kill "$server" || true' EXIT
+          rm "$data/Documents/video-ready"
+          SIMCTL_CHILD_IPTV_TEST_STREAM=1 SIMCTL_CHILD_IPTV_TEST_URL=http://127.0.0.1:18494/stream.m3u8 SIMCTL_CHILD_DADO_VIDEO_SMOKE=1 xcrun simctl launch "$device" com.tarik.dadoplayer
+          for i in {1..45}; do
+            if test -f "$data/Documents/video-ready"; then break; fi
+            sleep 1
+          done
+          xcrun simctl io "$device" screenshot hls.png
+          test -f "$data/Documents/video-ready"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ios-simulator-playback
-          path: video.png
+          path: |
+            video.png
+            hls.png

@@ -67,12 +67,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             });
             let (movies,series)=rails.as_ref();
             if !movies.is_empty() {
-                poster_rail(app, ui, "Zuletzt hinzugefügt", &movies, false, Some(View::Movies));
+                poster_rail(app, ui, "Zuletzt hinzugefügt", movies, false, Some(View::Movies));
             }
 
 
             if !series.is_empty() {
-                poster_rail(app, ui, "Serien entdecken", &series, false, Some(View::Series));
+                poster_rail(app, ui, "Serien entdecken", series, false, Some(View::Series));
             }
 
             if recent.is_empty() && live.is_empty() && favorites.is_empty() && movies.is_empty() && series.is_empty() {

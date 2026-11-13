@@ -1,5 +1,6 @@
 use crate::types::{Profile, Settings};
 use anyhow::Result;
+#[cfg(not(test))]
 use directories::ProjectDirs;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -44,6 +45,7 @@ fn app_dir() -> PathBuf {
 
 /// Print the resolved data directory once, so a failed save can be diagnosed
 /// from logcat instead of guessed at.
+#[cfg(not(test))]
 fn log_resolved_once(dir: &Path) {
     static LOGGED: AtomicBool = AtomicBool::new(false);
     if !LOGGED.swap(true, Ordering::Relaxed) {
@@ -51,6 +53,7 @@ fn log_resolved_once(dir: &Path) {
     }
 }
 
+#[cfg(not(test))]
 fn warn_fallback() {
     static WARNED: AtomicBool = AtomicBool::new(false);
     if !WARNED.swap(true, Ordering::Relaxed) {
@@ -64,6 +67,7 @@ fn warn_fallback() {
 
 /// The app was renamed twice. Copy any existing data forward once so saved
 /// profiles, favorites and resume points are not lost.
+#[cfg(not(test))]
 fn migrate_legacy(new_dir: &PathBuf) {
     const FILES: [&str; 4] = [
         "profiles.json",

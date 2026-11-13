@@ -158,23 +158,6 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     ui.id().with(("live-play", ch.id)),
                     Sense::click(),
                 );
-                let dark = ui.visuals().dark_mode;
-                ui.painter().rect_filled(
-                    play_rect,
-                    Rounding::same(22.0),
-                    if dark {
-                        Color32::from_white_alpha(12)
-                    } else {
-                        Color32::from_black_alpha(12)
-                    },
-                );
-                ui.painter().text(
-                    play_rect.center(),
-                    Align2::CENTER_CENTER,
-                    "▶",
-                    reg(FS_CAP),
-                    theme::accent(ui),
-                );
                 if focus::clicked(ui, &play_resp) {
                     play = Some(PlayItem {
                         title: ch.name.clone(),
