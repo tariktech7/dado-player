@@ -16,8 +16,7 @@
     in on most panels".
 
   * UIBackgroundModes / audio — an IPTV player that stops when the screen locks
-    is broken. Requires an AVAudioSession category set in the host, which is
-    still outstanding (see docs/history/README.iOS.md §8).
+    is broken. The host sets AVAudioSession to playback/moviePlayback.
 -->
 <plist version="1.0">
 <dict>

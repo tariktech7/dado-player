@@ -42,7 +42,7 @@ final class VideoHost {
 
     private init() {}
 
-    /// Creates the video view and parents it behind the UI overlay. Idempotent
+    /// Creates the playback owner. AVKit presents the full-screen player. Idempotent
     /// and safe to call every frame.
     func attach(attempt: Int = 0) {
         performOnMain { [weak self] in
@@ -74,7 +74,7 @@ final class VideoHost {
             // size, so showing it immediately would flash a black rectangle over
             // the login screen.
             video.isHidden = true
-            // Index 0: below the egui surface, which is the UI overlay.
+            // This view owns AVPlayer. AVKit presents its interactive playback surface.
             video.isUserInteractionEnabled = false
             window.addSubview(video)
             self.view = video
@@ -86,7 +86,7 @@ final class VideoHost {
     }
 
     /// Runs `body` with the view on the main thread; no-op when the view does
-    /// not exist yet.
+    /// not exist yet; commands are queued until attachment.
     func withView(_ body: @escaping (VideoView) -> Void) {
         performOnMain { [weak self] in
             guard let self = self else { return }

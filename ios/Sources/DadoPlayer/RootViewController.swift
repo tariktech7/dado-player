@@ -1,29 +1,5 @@
-//
-//  RootViewController.swift
-//  Dado Player — full-screen container that owns the native video layer and
-//  reports the environment (safe area, keyboard, appearance, scale) to Rust.
-//
-//  winit installs its own root view controller for the egui surface, so this
-//  controller never becomes the window's root in the normal case: it is added
-//  as a child of whatever root controller exists and its view is inserted at
-//  index 0, i.e. BEHIND the egui surface. Rust only ever pushes data *to* the
-//  host through dado_host_*; the host only ever pushes data *to* Rust through
-//  dado_app_set_env. No C-callable handle to this class is needed.
-//
-//  Two assumptions worth knowing, both unverifiable without a device:
-//
-//  1. Stacking. winit's root controller view may itself be the Metal/GL surface
-//     (winit 0.29 uses a CAMetalLayer-backed UIView as the controller's view).
-//     Inserting this controller's view at index 0 of that view puts us below its
-//     *subviews* but above its own layer content. If the video ends up covering
-//     the UI instead of sitting under it, the fix is to parent this controller's
-//     view to the window instead of to winit's view.
-//  2. Opacity. For the video to be visible at all, the egui surface must not
-//     paint an opaque quad over the video rect (Android solves this with overlay
-//     cutouts). A fully black screen during playback is a Rust-side clear-colour
-//     issue, not a host issue.
-//
-
+// Observes safe areas, keyboard overlap and appearance of the winit window.
+// The noninteractive child view stays behind the Rust surface.
 import UIKit
 import DadoBridge
 
@@ -72,8 +48,7 @@ final class RootViewController: UIViewController {
             root.addChild(self)
             view.frame = window.bounds
             view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            // wgpu can install a Metal-backed subview after the first frame.
-            // Host the noninteractive video plane above that root surface.
+            // Keep the environment observer behind the interactive Rust surface.
             root.view.insertSubview(view, at: 0)
             didMove(toParent: root)
         } else if window.rootViewController == nil {
