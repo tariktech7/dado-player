@@ -3,7 +3,9 @@ use anyhow::Result;
 #[cfg(not(test))]
 use directories::ProjectDirs;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+#[cfg(not(test))]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Set when the most recent write to disk failed, cleared by the next one that
