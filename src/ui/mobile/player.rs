@@ -299,17 +299,11 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         pos2(full.left(), full.bottom() - bot_h),
         vec2(full.width(), bot_h),
     );
-    let controls = bot.shrink2(vec2(8.0, 4.0));
-    ui.painter().rect_filled(
-        controls,
-        22.0,
-        Color32::from_rgba_unmultiplied(19, 30, 32, 212),
+    let controls = Rect::from_min_max(
+        bot.min + vec2(8.0, 4.0),
+        bot.max - vec2(8.0, l.bottom_inset + 4.0),
     );
-    ui.painter().rect_stroke(
-        controls,
-        22.0,
-        Stroke::new(1.0_f32, Color32::from_white_alpha(40)),
-    );
+    crate::theme::glass(ui, controls, 22.0);
 
     let mut seek_to: Option<f64> = None;
     let mut seek_rel: f64 = 0.0;
@@ -382,7 +376,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     let cy = if is_live {
         bot.top() + 70.0
     } else {
-        bot.bottom() - 44.0
+        bot.bottom() - l.bottom_inset - 44.0
     };
     let cx = full.center().x;
 
@@ -518,8 +512,9 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         let line_h: f32 = 18.0;
         let info_h = line_h * 2.0 + 14.0;
         let is_vod = !is_live;
-        let btns_h = if is_vod { TOUCH } else { 0.0 };
-        let gap: f32 = if is_vod { 10.0 } else { 0.0 };
+        let has_tracks = atracks.len() > 1 || !stracks.is_empty();
+        let btns_h = if has_tracks { TOUCH } else { 0.0 };
+        let gap: f32 = if has_tracks { 10.0 } else { 0.0 };
         let panel_h = info_h + gap + btns_h;
         let panel_w = (full.width() - 2.0 * pad).clamp(1.0, 260.0);
         let panel = Rect::from_min_size(
@@ -577,7 +572,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
             Color32::from_white_alpha(170),
         );
 
-        if is_vod {
+        if has_tracks {
             let by = panel.top() + info_h + gap;
             let inner_w = panel_w - 24.0;
             let btn_w = (inner_w - 10.0) / 2.0;
