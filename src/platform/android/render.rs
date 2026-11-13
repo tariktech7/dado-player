@@ -428,6 +428,8 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
                     if let Some(t) = TARGET.lock().unwrap().take() {
                         gl.delete_framebuffer(t.fbo);
                         gl.delete_texture(t.color);
+                        gl.delete_program(t.program);
+                        gl.delete_vertex_array(t.vao);
                     }
                 };
             }
@@ -488,6 +490,8 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
                 if let Some(old) = target.take() {
                     gl.delete_framebuffer(old.fbo);
                     gl.delete_texture(old.color);
+                    gl.delete_program(old.program);
+                    gl.delete_vertex_array(old.vao);
                 }
                 let Ok(fbo) = gl.create_framebuffer() else {
                     set_err("Vorschau-Framebuffer fehlt".into());
@@ -548,9 +552,30 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
                     set_err("Vorschau-Framebuffer unvollständig".into());
                     return;
                 }
+                let program = match copy_program(gl) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        gl.delete_framebuffer(fbo);
+                        gl.delete_texture(color);
+                        set_err(e);
+                        return;
+                    }
+                };
+                let vao = match gl.create_vertex_array() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        gl.delete_framebuffer(fbo);
+                        gl.delete_texture(color);
+                        gl.delete_program(program);
+                        set_err(e);
+                        return;
+                    }
+                };
                 *target = Some(Target {
                     fbo,
                     color,
+                    program,
+                    vao,
                     width: viewport.width_px,
                     height: viewport.height_px,
                 });
@@ -610,20 +635,19 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
         }
 
         if let Some(t) = selected {
-            gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(t.fbo));
-            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, None);
-            gl.blit_framebuffer(
-                0,
-                0,
-                t.width,
-                t.height,
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            gl.viewport(
                 viewport.left_px,
                 viewport.from_bottom_px,
-                viewport.left_px + viewport.width_px,
-                viewport.from_bottom_px + viewport.height_px,
-                glow::COLOR_BUFFER_BIT,
-                glow::LINEAR,
+                viewport.width_px,
+                viewport.height_px,
             );
+            gl.use_program(Some(t.program));
+            gl.bind_vertex_array(Some(t.vao));
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(t.color));
+            gl.uniform_1_i32(gl.get_uniform_location(t.program, "image").as_ref(), 0);
+            gl.draw_arrays(glow::TRIANGLES, 0, 3);
             let error = gl.get_error();
             if error != glow::NO_ERROR {
                 set_err(format!("Vorschau-Kopie: OpenGL {error}"));
@@ -653,10 +677,8 @@ unsafe fn set_enabled(gl: &glow::Context, cap: u32, on: bool) {
 
 /// The video area as one egui shape.
 ///
-/// The callback paints the whole framebuffer (mpv letterboxes to the video's
-/// aspect ratio); `rect` is the full screen so egui never clips it away. Added
-/// before the chrome, so the transport controls paint over the picture rather
-/// than under it.
+/// Full-screen playback renders directly into the window. Smaller previews
+/// render into a texture and draw inside the supplied rectangle.
 pub fn shape(rect: egui::Rect) -> egui::Shape {
     egui::Shape::Callback(egui::PaintCallback {
         rect,
@@ -667,7 +689,73 @@ pub fn shape(rect: egui::Rect) -> egui::Shape {
 struct Target {
     fbo: glow::NativeFramebuffer,
     color: glow::NativeTexture,
+    program: glow::NativeProgram,
+    vao: glow::NativeVertexArray,
     width: i32,
     height: i32,
 }
 static TARGET: Mutex<Option<Target>> = Mutex::new(None);
+
+/// Copy the rendered texture through a GLES draw, avoiding framebuffer-blit
+/// artifacts on Android emulators and tile-based drivers.
+unsafe fn copy_program(gl: &glow::Context) -> Result<glow::NativeProgram, String> {
+    const VERTEX: &str = r#"#version 300 es
+precision highp float;
+out vec2 uv;
+void main() {
+    vec2 position = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    uv = position;
+    gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
+}
+"#;
+    const FRAGMENT: &str = r#"#version 300 es
+precision highp float;
+uniform sampler2D image;
+in vec2 uv;
+out vec4 color;
+void main() {
+    color = texture(image, uv);
+}
+"#;
+    let program = gl.create_program()?;
+    let mut shaders = Vec::new();
+    for (kind, source) in [
+        (glow::VERTEX_SHADER, VERTEX),
+        (glow::FRAGMENT_SHADER, FRAGMENT),
+    ] {
+        let shader = match gl.create_shader(kind) {
+            Ok(shader) => shader,
+            Err(error) => {
+                for shader in shaders {
+                    gl.delete_shader(shader);
+                }
+                gl.delete_program(program);
+                return Err(error);
+            }
+        };
+        gl.shader_source(shader, source);
+        gl.compile_shader(shader);
+        if !gl.get_shader_compile_status(shader) {
+            let error = gl.get_shader_info_log(shader);
+            gl.delete_shader(shader);
+            for shader in shaders {
+                gl.delete_shader(shader);
+            }
+            gl.delete_program(program);
+            return Err(error);
+        }
+        gl.attach_shader(program, shader);
+        shaders.push(shader);
+    }
+    gl.link_program(program);
+    for shader in shaders {
+        gl.detach_shader(program, shader);
+        gl.delete_shader(shader);
+    }
+    if !gl.get_program_link_status(program) {
+        let error = gl.get_program_info_log(program);
+        gl.delete_program(program);
+        return Err(error);
+    }
+    Ok(program)
+}
