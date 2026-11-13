@@ -1303,7 +1303,8 @@ impl App {
     /// One step back. Returns false when there is nothing to pop (the platform
     /// may then close the app). Used by Android's back key.
     pub fn mobile_can_back(&self) -> bool {
-        if self.pending_delete.is_some()
+        if (self.tv && self.preview.is_some())
+            || self.pending_delete.is_some()
             || self.mobile_more
             || self.view == View::Player
             || (self.view == View::Series && self.selected_series.is_some())
@@ -1336,6 +1337,10 @@ impl App {
         }
         if self.view == View::Player {
             self.stop_play();
+            return true;
+        }
+        if self.tv && self.preview.is_some() {
+            self.close_preview();
             return true;
         }
         if self.view == View::Series && self.selected_series.is_some() {

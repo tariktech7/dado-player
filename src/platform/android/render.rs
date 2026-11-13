@@ -427,7 +427,7 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
                     (c.fns.free)(c.ctx);
                     if let Some(t) = TARGET.lock().unwrap().take() {
                         gl.delete_framebuffer(t.fbo);
-                        gl.delete_renderbuffer(t.color);
+                        gl.delete_texture(t.color);
                     }
                 };
             }
@@ -487,38 +487,64 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
             unsafe {
                 if let Some(old) = target.take() {
                     gl.delete_framebuffer(old.fbo);
-                    gl.delete_renderbuffer(old.color);
+                    gl.delete_texture(old.color);
                 }
                 let Ok(fbo) = gl.create_framebuffer() else {
                     set_err("Vorschau-Framebuffer fehlt".into());
                     return;
                 };
-                let Ok(color) = gl.create_renderbuffer() else {
+                let Ok(color) = gl.create_texture() else {
                     gl.delete_framebuffer(fbo);
                     set_err("Vorschau-Puffer fehlt".into());
                     return;
                 };
                 gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
-                gl.bind_renderbuffer(glow::RENDERBUFFER, Some(color));
-                gl.renderbuffer_storage(
-                    glow::RENDERBUFFER,
-                    glow::RGBA8,
+                gl.bind_texture(glow::TEXTURE_2D, Some(color));
+                gl.tex_image_2d(
+                    glow::TEXTURE_2D,
+                    0,
+                    glow::RGBA8 as i32,
                     viewport.width_px,
                     viewport.height_px,
+                    0,
+                    glow::RGBA,
+                    glow::UNSIGNED_BYTE,
+                    None,
                 );
-                gl.framebuffer_renderbuffer(
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MIN_FILTER,
+                    glow::LINEAR as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MAG_FILTER,
+                    glow::LINEAR as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_WRAP_S,
+                    glow::CLAMP_TO_EDGE as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_WRAP_T,
+                    glow::CLAMP_TO_EDGE as i32,
+                );
+                gl.framebuffer_texture_2d(
                     glow::FRAMEBUFFER,
                     glow::COLOR_ATTACHMENT0,
-                    glow::RENDERBUFFER,
+                    glow::TEXTURE_2D,
                     Some(color),
+                    0,
                 );
                 let valid =
                     gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
                 gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-                gl.bind_renderbuffer(glow::RENDERBUFFER, None);
+                gl.bind_texture(glow::TEXTURE_2D, None);
                 if !valid {
                     gl.delete_framebuffer(fbo);
-                    gl.delete_renderbuffer(color);
+                    gl.delete_texture(color);
                     set_err("Vorschau-Framebuffer unvollständig".into());
                     return;
                 }
@@ -598,6 +624,10 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
                 glow::COLOR_BUFFER_BIT,
                 glow::LINEAR,
             );
+            let error = gl.get_error();
+            if error != glow::NO_ERROR {
+                set_err(format!("Vorschau-Kopie: OpenGL {error}"));
+            }
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
         }
         gl.viewport(old_vp[0], old_vp[1], old_vp[2], old_vp[3]);
@@ -636,7 +666,7 @@ pub fn shape(rect: egui::Rect) -> egui::Shape {
 
 struct Target {
     fbo: glow::NativeFramebuffer,
-    color: glow::NativeRenderbuffer,
+    color: glow::NativeTexture,
     width: i32,
     height: i32,
 }

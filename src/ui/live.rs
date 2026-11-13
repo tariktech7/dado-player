@@ -7,6 +7,8 @@ use egui::{pos2, vec2, Align, Color32, Layout, Rect, Response, RichText, Sense, 
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     number_jump(app, ui);
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_secs(30));
     let tv = app.tv;
     let available = ui.available_rect_before_wrap();
     let gap = if tv { 18.0 } else { 12.0 };
@@ -319,6 +321,10 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         app.promote_preview(false);
     }
     if let Some(error) = app.player_error.as_ref() {
+        ui.colored_label(theme::DANGER, error);
+    }
+    #[cfg(target_os = "android")]
+    if let Some(error) = crate::platform::android::render::last_error() {
         ui.colored_label(theme::DANGER, error);
     }
     egui::ScrollArea::vertical()
