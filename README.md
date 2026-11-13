@@ -34,8 +34,14 @@ Die Zeichenform in assets/d7.svg ist die Vorlage für App-Icons und das gemeinsa
 
 Auf iOS laufen Streams mit AVPlayer. Xtream verwendet zunächst HLS, bereitgestellte M3U-URLs bleiben erhalten. Der lokale Wiedergabetest nutzt ein mitgeliefertes H.264/AAC-MP4. Der macOS-Workflow baut die Geräte-IPA und startet zusätzlich einen Simulator mit diesem Clip. Für eine Freigabe auf Hardware Live-HLS, VOD, Ton, Rotation und Eingabe auf einem iPhone prüfen.
 
-### iOS 0.2.1
-Die Paketierung kompiliert einen Launchscreen für die native Geräteauflösung. Die Wiedergabe verwendet die AVKit-Vollbildsteuerung mit Audio, Spulen und Schließen. Der iOS-Client behält die eingegebene Anbieterbasis bei, statt auf einen ungeprüften HTTPS-Port umzuschreiben. Xtream wird einmalig auf HLS umgestellt. Inhaltsseiten reservieren am Ende nur den Seitenabstand, da die Navigation bereits aus der verfügbaren Fläche entfernt wurde.
+### Mobile 0.2.3 / Windows 0.5.1
+Die iOS-Zeichenfläche verwendet die vollständigen Fenstermaße. Die beiden lokalen egui-winit-/egui-wgpu-Patches umgehen dafür Winit 0.29s Safe-Area-bereinigte inner_size; Safe Areas werden ausschließlich im Inhaltslayout berücksichtigt. Der Simulator prüft zusätzlich, dass UIKit-Fenster und egui-Fläche übereinstimmen.
+
+Dado-Steuerung ist auf iOS wieder Standard: AVPlayerLayer liegt hinter der transparenten Metal-Oberfläche. Einstellungen → Wiedergabe → Player-Oberfläche bietet weiterhin Apple Player als Option, wirksam ab der nächsten Wiedergabe. Tonspuren und Untertitel werden über AVFoundation an die gemeinsamen Menüs angebunden, soweit der Stream sie bereitstellt.
+
+Die Startseite zeigt auf allen Plattformen kompakte Senderkarten mit Logos. Der separate Bereich „Das läuft auf deinen Favoriten“ liest ausschließlich favorisierte Sender und deren aktuelle EPG-Sendung. Auf Telefonen startet ein Tipp die Wiedergabe direkt. Alle Plattformen bündeln Source Sans 3 in festen Gewichten; Quelle und OFL-Lizenz liegen unter assets/fonts.
+
+**Prüfstand 13.11.2026:** Der neue iOS-Gerätebuild und die Simulator-Bildprüfung sind noch nicht durchgeführt: GitHub Actions verweigert bereits den Runnerstart wegen Kontozahlung/Ausgabenlimit (Run 43489126211). Ein Host-Typecheck ersetzt diese Prüfungen nicht. Die zuvor veröffentlichte IPA bleibt Build 4 / 0.2.1; nicht als neue IPA ausgeben.
 
 ### Bedienkorrekturen 0.2.1 / Windows 0.4.1
 Startseitenkarten setzen gespeicherte Wiedergabe direkt fort. Die Windows-Version setzt die Startposition vor dem asynchronen Laden. Live-Sender starten auf mobilen Geräten beim Antippen der Zeile. Leere Codec-/Auflösungsanzeigen werden ausgeblendet, erfundene Programmfortschritte entfernt. Navigation und Startseite teilen sich durchscheinende Oberflächen mit Lichtkanten und abgestimmten Hintergründen.

@@ -65,6 +65,7 @@ fn sec(ui: &mut Ui, q: &str, title: &str) -> bool {
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    crate::fonts::license(ui);
     let mut player_changed = false;
     let mut theme_changed = false;
 

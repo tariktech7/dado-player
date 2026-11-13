@@ -1,7 +1,6 @@
 //! Visual identity for Dado-Player.
 //!
-//! Deliberately flat and high-contrast so the same layout survives a later port
-//! to Android / Smart-TV (10-foot UI): big hit areas, strong accent, no gradients.
+//! Shared graphite palette, translucent chrome and restrained ambient light.
 //!
 //! Palette reference: the "graphite" dark theme of IPTVnator (see
 //! `references/iptvnator/apps/web/src/_theme-palettes.scss`): distinct surface
@@ -261,6 +260,34 @@ pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
     if radius < 1.0 {
         return;
     }
+    // A broad reflection and shaded lower edge give the material depth without
+    // the old white outlines. Keep every vertex inside the rounded silhouette.
+    let r = radius.min(rect.width() * 0.5).min(rect.height() * 0.5);
+    let mut reflection = egui::Mesh::default();
+    for i in 0..=32 {
+        let t = i as f32 / 32.0;
+        let y = rect.top() + rect.height() * t;
+        let edge = (y - rect.top()).min(rect.bottom() - y);
+        let inset = if edge < r {
+            r - (r * r - (r - edge).powi(2)).max(0.0).sqrt()
+        } else {
+            0.0
+        };
+        let light = (1.0 - t * 2.8).max(0.0);
+        let color = if t < 0.5 {
+            Color32::from_white_alpha((light * if dark { 22.0 } else { 95.0 }) as u8)
+        } else {
+            Color32::from_black_alpha(((t - 0.5) * 24.0) as u8)
+        };
+        reflection.colored_vertex(egui::pos2(rect.left() + inset, y), color);
+        reflection.colored_vertex(egui::pos2(rect.right() - inset, y), color);
+        if i > 0 {
+            let n = (i * 2) as u32;
+            reflection.add_triangle(n - 2, n - 1, n);
+            reflection.add_triangle(n - 1, n + 1, n);
+        }
+    }
+    ui.painter().add(egui::Shape::mesh(reflection));
     let inner = rect.shrink(0.5);
     ui.painter().rect_stroke(
         inner,

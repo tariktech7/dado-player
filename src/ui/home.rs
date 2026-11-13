@@ -10,6 +10,17 @@ const POSTER_H: f32 = 166.0;
 
 /// Full-width content dashboard inspired by the supplied reference capture.
 pub fn show(app: &mut App, ui: &mut Ui) {
+    if mobile_active(ui.ctx()) && !app.tv {
+        let pad = if ui.available_width() < 360.0 {
+            12.0
+        } else {
+            16.0
+        };
+        egui::Frame::none()
+            .inner_margin(egui::Margin::symmetric(pad, 8.0))
+            .show(ui, |ui| show_content(app, ui, true));
+        return;
+    }
     let desktop = cfg!(target_os = "windows");
     if desktop && ui.available_width() >= 940.0 {
         let gap = 20.0;

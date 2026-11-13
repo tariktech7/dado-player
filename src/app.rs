@@ -2749,6 +2749,66 @@ fn redact(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn mobile_home_keeps_channels_compact_and_favorites_separate_at_phone_sizes() {
+        use egui::epaint::Shape;
+        fn texts(shape: &Shape, out: &mut Vec<String>) {
+            match shape {
+                Shape::Text(t) => out.push(t.galley.job.text.clone()),
+                Shape::Vec(shapes) => shapes.iter().for_each(|s| texts(s, out)),
+                _ => {}
+            }
+        }
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("UI test", ProfileKind::M3u));
+        app.library = crate::client::parse_m3u("#EXTM3U\n#EXTINF:-1,History only\nhttps://example.invalid/1\n#EXTINF:-1,Favorite only\nhttps://example.invalid/2");
+        app.favorites = ["live:2".to_owned()].into_iter().collect();
+        app.history = vec![crate::types::HistEntry {
+            key: "live:1".into(),
+            ts: 1,
+            title: "History only".into(),
+            sub: String::new(),
+        }];
+        app.view = View::Home;
+        for (width, height) in [
+            (320.0, 568.0),
+            (393.0, 852.0),
+            (440.0, 956.0),
+            (852.0, 393.0),
+        ] {
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            crate::theme::apply(&ctx, true);
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, height),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| crate::ui::mobile::show(&mut app, ctx),
+            );
+            let mut labels = Vec::new();
+            for shape in &output.shapes {
+                texts(&shape.shape, &mut labels);
+            }
+            assert!(
+                labels.iter().any(|t| t == "Zuletzt gesehene Sender"),
+                "{width}x{height}: {labels:?}"
+            );
+            assert!(labels.iter().any(|t| t == "Das läuft auf deinen Favoriten"));
+            assert!(!labels
+                .iter()
+                .any(|t| t == "Abspielen" || t == "Weiter ansehen · Live-TV"));
+            // The navigation's painted background must reach the full viewport
+            // bottom; a safe-area-sized renderer used to leave a black strip.
+            assert!(output.shapes.iter().any(|s| matches!(&s.shape, Shape::Rect(r) if (r.rect.bottom()-height).abs()<0.1 && r.rect.width()>width-1.0)));
+        }
+        assert!(app.favorites.contains("live:2"));
+        assert!(!app.favorites.contains("live:1"));
+    }
+
+    #[test]
     fn channel_selection_previews_then_promotes_only_the_same_channel() {
         let mut app = App::test_app();
         app.view = View::Live;

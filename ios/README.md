@@ -23,8 +23,7 @@ the same commit.
 Strings are NUL-terminated UTF-8 and are copied by the callee. Geometry is in
 UIKit points; Rust converts using the reported `scale`.
 
-Symbol counts, so the `nm` check below has a reference: **3** `dado_app_*`
-(`start`, `set_storage_dir`, `set_env`) and **16** `dado_host_*`.
+The header is the ABI reference. Keep declarations and ownership contracts in sync with the Rust bridge and exported Swift functions; validate with the build script’s nm check.
 
 Video placement flows Rust → Swift: `dado_host_video_frame` and
 `dado_host_video_visible` are implemented in `HostBridge.swift` and called from
@@ -62,3 +61,16 @@ which is the layout above. If SwiftPM ever fails to resolve the module, move
 Run `bash ios/build.sh --ipa` from the repository root with the Apple device SDK, Swift, and the Rust target aarch64-apple-ios installed. The script builds the Rust archive, links the Swift host and packages Payload/DadoPlayer.app. Info.plist supplies the bundle metadata. Package.swift resolves Vendor relative to its own location.
 
 The ios.yml workflow runs the device build and uploads Dado-Player-unsigned.ipa on success. Windows can type-check the Rust bridge, AVPlayer adapter and startup API with `cargo check --features ios-check --lib`. Device linking, signing and playback need separate validation.
+
+## Dado and Apple controls
+
+`ios_native_player` defaults to false. Dado renders its controls in transparent
+egui/Metal above an AVPlayerLayer behind winit’s root view. Opting into Apple
+Player presents AVPlayerViewController instead. Audio and subtitle option IDs
+are one-based within each AVMediaSelectionGroup; subtitle -1 disables selection.
+The host copies track JSON into a caller-owned buffer. No cross-runtime allocation
+needs to be freed by the other language.
+
+Winit 0.29’s iOS inner_size omits safe areas. Our vendored egui-winit and
+egui-wgpu use outer_size on iOS so input, drawable and layout share full-window
+coordinates; app content applies safe areas exactly once.

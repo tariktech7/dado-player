@@ -234,6 +234,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     super::update::show(ui);
                     // ---- about ----
                     components::section(ui, "Über");
+                    crate::fonts::license(ui);
                     ui.label(
                         egui::RichText::new("Dado Player")
                             .font(reg(FS_LABEL))

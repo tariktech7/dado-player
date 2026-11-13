@@ -208,7 +208,7 @@ private func mediaGroup(_ kind: Int32) -> AVMediaSelectionGroup? {
 @_cdecl("dado_host_tracks")
 public func dado_host_tracks(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
     var tracks: [[String: Any]] = []
-    for kind: Int32 in [0, 1] {
+    for kind in [Int32(0), Int32(1)] {
         guard let group = mediaGroup(kind) else { continue }
         for (index, option) in group.options.enumerated() {
             tracks.append(["id": index + 1, "type": kind == 0 ? "audio" : "sub", "lang": option.extendedLanguageTag ?? "", "title": option.displayName])
@@ -237,7 +237,7 @@ public func dado_host_current_track(_ kind: Int32) -> Int64 {
 public func dado_host_select_track(_ kind: Int32, _ id: Int64) {
     guard let item = VideoHost.shared.view?.player.currentItem, let group = mediaGroup(kind) else { return }
     if id <= 0 { if group.allowsEmptySelection { item.select(nil, in: group) }; return }
-    guard id <= group.options.count else { return }
+    guard id <= Int64(group.options.count) else { return }
     item.select(group.options[Int(id - 1)], in: group)
 }
 

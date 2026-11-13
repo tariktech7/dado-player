@@ -454,8 +454,6 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
         ),
     );
     crate::theme::glass(ui, rect, 24.0);
-    ui.painter()
-        .rect_stroke(rect, 24.0, Stroke::new(1.0_f32, hairline(ui)));
     let n = 5;
     let cell_w = rect.width() / n as f32;
     let mut open_more = false;

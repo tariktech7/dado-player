@@ -386,17 +386,20 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
     // ---- page ----
     egui::CentralPanel::default()
         .frame(Frame::none().fill(page_color))
-        .show(ctx, |ui| match app.view {
-            View::Home => crate::ui::home::show(app, ui),
-            View::Live => live::show(app, ui, l),
-            View::Movies => movies::show(app, ui, l),
-            View::Series => series::show(app, ui, l),
-            View::Search => search::show(app, ui, l),
-            View::Favorites => favorites::show(app, ui, l),
-            View::Continue => continue_watching::show(app, ui, l),
-            View::Settings => settings::show(app, ui, l),
-            View::Player => {}
-            View::Login => {}
+        .show(ctx, |ui| {
+            crate::theme::ambient(ui, ui.max_rect());
+            match app.view {
+                View::Home => crate::ui::home::show(app, ui),
+                View::Live => live::show(app, ui, l),
+                View::Movies => movies::show(app, ui, l),
+                View::Series => series::show(app, ui, l),
+                View::Search => search::show(app, ui, l),
+                View::Favorites => favorites::show(app, ui, l),
+                View::Continue => continue_watching::show(app, ui, l),
+                View::Settings => settings::show(app, ui, l),
+                View::Player => {}
+                View::Login => {}
+            }
         });
 
     if app.mobile_more {
