@@ -56,3 +56,11 @@ Startseitenkarten setzen gespeicherte Wiedergabe direkt fort. Die Windows-Versio
 
 ### Live-TV-Spaltenansicht
 Windows und der TV-Modus verwenden dieselbe Ansicht mit getrennt scrollbaren Kategorien, Sendern und einer Vorschau. Senderzeilen zeigen das aktuelle und das nächste Programm. Die erste Auswahl startet die interne Vorschau, die zweite Auswahl desselben Senders oder die Aktivierung des Vorschaubilds öffnet den großen Player. Auf Fernsehern bewegt das Steuerkreuz den Fokus zwischen den Spalten. Die Android-Vorschau wird in einen eigenen OpenGL-Puffer gerendert und anschließend in die Vorschaufläche kopiert.
+
+### Android TV 0.2.4
+
+Die TV-Aufteilung ist auf die übliche Arbeitsfläche von 960 × 540 dp ausgelegt. 1920 × 1080 bei 320 dpi und 3840 × 2160 bei 640 dpi behalten dieselbe Größe der Bedienelemente. Die physische Diagonale (etwa 55 oder 77 Zoll) ist kein Layout-Breakpoint. Die Schrift wird bei 4K nicht halbiert. Navigation, Kategorien, Sender und Vorschau passen nebeneinander; Einstellungen bleiben im sicheren Bildschirmbereich. Der TV-Kopf verwendet das gemeinsame D7-Logo.
+
+Auf Android-TV-Geräten aktiviert die Geräteerkennung den TV-Modus automatisch. Zum Ausprobieren auf anderen Android-Geräten unter Einstellungen → Fernsehen → TV-Modus „Immer“ wählen. Pfeile navigieren, OK startet Vorschau bzw. Player, Zurück schließt zuerst den Player bzw. die Vorschau. Am Hauptmenü legt Zurück die native Hauptaktivität in den Hintergrund, damit das Wiederöffnen keinen zweiten winit-Eventloop anfordert.
+
+Die Abnahme dieses Stands erfolgte im Android-Emulator mit Demodaten und Fernbedienungstasten, nicht auf echter 55-/77-Zoll-Hardware. Lesbarkeit hängt außerdem vom Sitzabstand und der Geräteskalierung ab. Die letzten iOS-Änderungen sind weiterhin mangels gestartetem macOS-Runner nicht in einer neuen IPA bestätigt.
