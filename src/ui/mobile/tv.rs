@@ -63,19 +63,19 @@ const SHORT_HEADERS: [&str; HEADER_COUNT] = [
 // ---- 10-foot scale (§23.4 P1) ----
 /// 5 % safe area on each edge, with a floor for small windows.
 const OVERSCAN_MIN: f32 = 20.0;
-const BRAND_H: f32 = 40.0;
-const HEADER_ROW_H: f32 = 46.0;
-const COLUMN_GAP: f32 = 16.0;
+const BRAND_H: f32 = 30.0;
+const HEADER_ROW_H: f32 = 34.0;
+const COLUMN_GAP: f32 = 12.0;
 const RAIL_GAP: f32 = 16.0;
 const MAX_CARDS: usize = 24;
-const FS_BRAND: f32 = 26.0;
-const FS_HEADER: f32 = 20.0;
-const FS_HERO: f32 = 38.0;
-const FS_HERO_SUB: f32 = 24.0;
-const FS_RAIL: f32 = 24.0;
-const FS_CARD: f32 = 22.0;
-const FS_CARD_SUB: f32 = 18.0;
-const FS_META: f32 = 18.0;
+const FS_BRAND: f32 = 18.0;
+const FS_HEADER: f32 = 16.0;
+const FS_HERO: f32 = 28.0;
+const FS_HERO_SUB: f32 = 18.0;
+const FS_RAIL: f32 = 18.0;
+const FS_CARD: f32 = 16.0;
+const FS_CARD_SUB: f32 = 14.0;
+const FS_META: f32 = 14.0;
 
 struct Geom {
     brand: Rect,
@@ -87,11 +87,11 @@ fn geom(ctx: &Context) -> Geom {
     let r = ctx.screen_rect();
     let ox = (r.width() * 0.05).max(OVERSCAN_MIN);
     let oy = (r.height() * 0.05).max(OVERSCAN_MIN);
-    let rail_w = ((r.width() - 2.0 * ox) * 0.20).clamp(156.0, 224.0);
+    let rail_w = ((r.width() - 2.0 * ox) * 0.16).clamp(128.0, 176.0);
     let content_x = ox + rail_w + COLUMN_GAP;
     let content_right = (r.max.x - ox).max(content_x + 120.0);
     let brand = Rect::from_min_size(pos2(ox, oy), vec2(content_right - ox, BRAND_H));
-    let top = (brand.bottom() + 14.0).min(r.max.y - oy - 60.0);
+    let top = (brand.bottom() + 8.0).min(r.max.y - oy - 60.0);
     let bottom = (r.max.y - oy).max(top + 60.0);
     Geom {
         brand,
@@ -173,12 +173,12 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
             let mut hui = ui.child_ui(g.headers, egui::Layout::top_down(Align::LEFT));
             draw_headers(app, &mut hui, &mut metas);
 
-            let mut cui = ui.child_ui(g.content, egui::Layout::top_down(Align::LEFT));
             if app.tv_nav == 0 {
                 app.view = crate::app::View::Live;
-                crate::ui::live::show(app, &mut cui);
+                crate::ui::live::show_tv(app, ui, g.content, g.brand);
                 return;
             }
+            let mut cui = ui.child_ui(g.content, egui::Layout::top_down(Align::LEFT));
             if app.view == crate::app::View::Live {
                 app.close_preview();
                 app.view = crate::app::View::Home;
@@ -193,16 +193,16 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
 
 fn paint_brand(ui: &mut Ui, rect: Rect, app: &App) {
     let p = ui.painter().clone();
-    let mark = Rect::from_min_size(pos2(rect.left(), rect.center().y - 17.0), Vec2::splat(34.0));
+    let mark = Rect::from_min_size(pos2(rect.left(), rect.center().y - 12.0), Vec2::splat(24.0));
     let mut brand_ui = ui.child_ui(mark, egui::Layout::top_down(Align::Min));
-    crate::ui::brand_mark(&mut brand_ui, 34.0);
+    crate::ui::brand_mark(&mut brand_ui, 24.0);
     components::draw_line(
         ui,
-        pos2(mark.right() + 14.0, rect.center().y),
+        pos2(mark.right() + 8.0, rect.center().y),
         "Dado Player",
         tokens::bold(FS_BRAND),
         tokens::text(ui),
-        220.0,
+        132.0,
     );
     let profile = app
         .active_profile
@@ -230,7 +230,7 @@ fn paint_brand(ui: &mut Ui, rect: Rect, app: &App) {
 
 fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
     let w = ui.available_width();
-    let narrow = w < 156.0;
+    let narrow = w < 128.0;
     let fs = FS_HEADER;
     ui.spacing_mut().item_spacing.y = 4.0;
     let mut activate: Option<usize> = None;
@@ -261,7 +261,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         };
         components::icon(
             ui,
-            Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), Vec2::splat(22.0)),
+            Rect::from_center_size(pos2(rect.left() + 16.0, rect.center().y), Vec2::splat(18.0)),
             *ic,
             if selected {
                 tokens::accent_text(ui)
@@ -271,7 +271,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         );
         components::draw_line(
             ui,
-            pos2(rect.left() + 40.0, rect.center().y),
+            pos2(rect.left() + 32.0, rect.center().y),
             if narrow { SHORT_HEADERS[i] } else { label },
             if selected {
                 tokens::bold(fs)
@@ -279,7 +279,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
                 tokens::medium(fs)
             },
             color,
-            (w - 46.0).max(40.0),
+            (w - 38.0).max(40.0),
         );
         metas.push(Meta {
             title: label.to_string(),
@@ -301,7 +301,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
 fn draw_content(app: &mut App, ui: &mut Ui, g: &Geom, metas: &mut Vec<Meta>) -> Rect {
     // Tall enough for title + subtitle + the bottom hint/progress zone. A
     // shorter band used to paint the hint on top of the subtitle (QA finding).
-    let hero_h = (g.content.height() * 0.36).clamp(150.0, 200.0);
+    let hero_h = (g.content.height() * 0.30).clamp(112.0, 160.0);
     let (hero_rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), hero_h), Sense::hover());
     ui.add_space(10.0);
     let rails_h = ui.available_height().max(70.0);
@@ -345,9 +345,9 @@ fn draw_rail(
         hr.width(),
     );
     let (cw, art_h, text_h) = if rail.wide {
-        (176.0, 100.0, 46.0)
+        (160.0, 90.0, 40.0)
     } else {
-        (122.0, 164.0, 46.0)
+        (108.0, 146.0, 40.0)
     };
     egui::ScrollArea::horizontal()
         .id_source(("tv-rail", app.tv_nav, rail_no))

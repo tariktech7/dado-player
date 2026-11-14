@@ -2763,14 +2763,13 @@ mod tests {
         }
         let mut app = App::test_app();
         app.active_profile = Some(Profile::new("TV fixture", ProfileKind::M3u));
-        app.library = crate::client::parse_m3u(
-            "#EXTM3U\n#EXTINF:-1 group-title=\"Sport\",Dado Sport HD\nhttps://example.invalid/test",
-        );
+        let playlist = format!("#EXTM3U\n{}", (1..=16).map(|i| format!("#EXTINF:-1 group-title=\"Sport\",Dado Kanal {i:02}\nhttps://example.invalid/{i}\n")).collect::<String>());
+        app.library = crate::client::parse_m3u(&playlist);
         app.tv = true;
         app.tv_nav = 0;
         app.view = View::Live;
         app.preview = Some(PlayItem {
-            title: "Dado Sport HD".into(),
+            title: "Vorschausender".into(),
             url: "https://example.invalid/test".into(),
             kind: PlayKind::Live,
             progress_key: "live:1".into(),
@@ -2803,6 +2802,35 @@ mod tests {
                     "{required} is clipped at {width}x{height}: {rect:?}"
                 );
             }
+            let channels: Vec<_> = text
+                .iter()
+                .filter(|(name, rect)| {
+                    name.starts_with("Dado Kanal ") && rect.center().y + 40.0 <= height * 0.95
+                })
+                .collect();
+            assert!(
+                channels.len() >= 7,
+                "Only {} complete channel rows at {width}x{height}: {text:?}",
+                channels.len()
+            );
+            let rect_for = |name: &str| {
+                text.iter()
+                    .filter(|(t, _)| t == name)
+                    .map(|(_, rect)| *rect)
+                    .min_by(|a, b| a.top().total_cmp(&b.top()))
+                    .unwrap()
+            };
+            assert!(
+                (rect_for("Alle Sender").center().y - rect_for("Dado Player").center().y).abs()
+                    < 2.0
+            );
+            assert!(
+                (rect_for("Kategorien").center().y - rect_for("Sender suchen").center().y).abs()
+                    < 2.0,
+                "Category/search alignment: {:?} {:?}",
+                rect_for("Kategorien"),
+                rect_for("Sender suchen")
+            );
         }
     }
 

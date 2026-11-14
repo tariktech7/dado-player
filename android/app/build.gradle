@@ -15,8 +15,8 @@ android {
         // treats an APK as an *update* when versionCode grows; with a frozen
         // value the installer keeps reporting the same version and some OEM
         // installers refuse the package outright.
-        versionCode 8
-        versionName "0.2.4"
+        versionCode 9
+        versionName "0.2.5"
 
         // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the
         // prebuilt libmpv.so fetched from mpv-android). Restricting ABIs here keeps

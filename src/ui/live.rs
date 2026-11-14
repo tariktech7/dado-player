@@ -36,12 +36,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 ui.allocate_ui_with_layout(
                     vec2(category_w, available.height()),
                     Layout::top_down(Align::Min),
-                    |ui| categories(app, ui),
+                    |ui| categories(app, ui, true),
                 );
                 ui.allocate_ui_with_layout(
                     vec2(channel_w, available.height()),
                     Layout::top_down(Align::Min),
-                    |ui| channels(app, ui),
+                    |ui| channels(app, ui, true),
                 );
                 if has_preview {
                     ui.allocate_ui_with_layout(
@@ -52,6 +52,98 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 }
             });
         });
+}
+
+/// TV keeps the category title in the brand row and search in the column
+/// header, leaving the full remaining height for seven or more channel rows.
+pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
+    number_jump(app, ui);
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_secs(30));
+    let gap = 10.0;
+    let category_w = (content.width() * 0.18).clamp(116.0, 168.0);
+    let preview_w = if app.preview.is_some() {
+        (content.width() * 0.37).clamp(220.0, 420.0)
+    } else {
+        0.0
+    };
+    let channel_w = (content.width()
+        - category_w
+        - preview_w
+        - gap * if app.preview.is_some() { 2.0 } else { 1.0 })
+    .max(1.0);
+    let channels_x = content.left() + category_w + gap;
+    let title = match app.live_cat.as_str() {
+        "all" => "Alle Sender",
+        "favorites" => "Favoriten",
+        id => app
+            .library
+            .live_categories
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.name.as_str())
+            .unwrap_or("Sender"),
+    };
+    components::draw_line(
+        ui,
+        pos2(channels_x, title_row.center().y),
+        title,
+        tokens::bold(20.0),
+        tokens::text(ui),
+        channel_w,
+    );
+    let header_h = 32.0;
+    components::draw_line(
+        ui,
+        pos2(content.left(), content.top() + header_h * 0.5),
+        "Kategorien",
+        tokens::medium(16.0),
+        tokens::text(ui),
+        category_w,
+    );
+    let search_rect =
+        Rect::from_min_size(pos2(channels_x, content.top()), vec2(channel_w, header_h));
+    let mut search_ui = ui.child_ui(search_rect, Layout::top_down(Align::Min));
+    search_ui.spacing_mut().interact_size.y = header_h;
+    let text_h = search_ui.fonts(|fonts| fonts.row_height(&tokens::reg(16.0)));
+    let search_margin_y = ((header_h - text_h) * 0.5).max(0.0);
+    let query = search_ui.put(
+        search_rect,
+        egui::TextEdit::singleline(&mut app.live_q)
+            .font(tokens::reg(16.0))
+            .margin(vec2(6.0, search_margin_y))
+            .hint_text("Sender suchen"),
+    );
+    if focus::clicked(&search_ui, &query) {
+        query.request_focus();
+    }
+    let body_y = content.top() + header_h + 6.0;
+    let mut category_ui = ui.child_ui(
+        Rect::from_min_max(
+            pos2(content.left(), body_y),
+            pos2(content.left() + category_w, content.bottom()),
+        ),
+        Layout::top_down(Align::Min),
+    );
+    category_ui.spacing_mut().item_spacing.y = 4.0;
+    categories(app, &mut category_ui, false);
+    let mut channel_ui = ui.child_ui(
+        Rect::from_min_max(
+            pos2(channels_x, body_y),
+            pos2(channels_x + channel_w, content.bottom()),
+        ),
+        Layout::top_down(Align::Min),
+    );
+    channel_ui.spacing_mut().item_spacing.y = 4.0;
+    channels(app, &mut channel_ui, false);
+    if app.preview.is_some() {
+        let preview_rect = Rect::from_min_max(
+            pos2(channels_x + channel_w + gap, content.top()),
+            content.max,
+        );
+        let mut preview_ui = ui.child_ui(preview_rect, Layout::top_down(Align::Min));
+        preview_panel(app, &mut preview_ui);
+    }
 }
 
 fn activated(ui: &Ui, response: &Response, tv: bool) -> bool {
@@ -78,14 +170,16 @@ fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Re
     response
 }
 
-fn categories(app: &mut App, ui: &mut Ui) {
+fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     let tv = app.tv;
-    ui.label(
-        RichText::new("Kategorien")
-            .size(if tv { 20.0 } else { 22.0 })
-            .strong(),
-    );
-    ui.add_space(10.0);
+    if heading {
+        ui.label(
+            RichText::new("Kategorien")
+                .size(if tv { 20.0 } else { 22.0 })
+                .strong(),
+        );
+        ui.add_space(10.0);
+    }
     let mut list = vec![
         ("all".to_owned(), "Alle Sender".to_owned()),
         ("favorites".to_owned(), "Favoriten".to_owned()),
@@ -105,7 +199,7 @@ fn categories(app: &mut App, ui: &mut Ui) {
                 let r = row(
                     ui,
                     ("category", &id),
-                    if tv { 48.0 } else { 44.0 },
+                    if tv { 34.0 } else { 44.0 },
                     app.live_cat == id,
                 );
                 if ui.is_rect_visible(r.rect) {
@@ -113,7 +207,7 @@ fn categories(app: &mut App, ui: &mut Ui) {
                         ui,
                         pos2(r.rect.left() + 12.0, r.rect.center().y),
                         &name,
-                        tokens::medium(if tv { 18.0 } else { 14.0 }),
+                        tokens::medium(if tv { 16.0 } else { 14.0 }),
                         ui.visuals().text_color(),
                         r.rect.width() - 24.0,
                     );
@@ -133,27 +227,29 @@ fn categories(app: &mut App, ui: &mut Ui) {
     }
 }
 
-fn channels(app: &mut App, ui: &mut Ui) {
+fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     let tv = app.tv;
-    ui.heading(if app.live_cat == "all" {
-        "Alle Sender"
-    } else if app.live_cat == "favorites" {
-        "Favoriten"
-    } else {
-        app.library
-            .live_categories
-            .iter()
-            .find(|c| c.id == app.live_cat)
-            .map(|c| c.name.as_str())
-            .unwrap_or("Sender")
-    });
-    ui.add_space(6.0);
-    let query = ui.add_sized(
-        [ui.available_width(), if tv { 42.0 } else { 30.0 }],
-        egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
-    );
-    if tv && focus::clicked(ui, &query) {
-        query.request_focus();
+    if controls {
+        ui.heading(if app.live_cat == "all" {
+            "Alle Sender"
+        } else if app.live_cat == "favorites" {
+            "Favoriten"
+        } else {
+            app.library
+                .live_categories
+                .iter()
+                .find(|c| c.id == app.live_cat)
+                .map(|c| c.name.as_str())
+                .unwrap_or("Sender")
+        });
+        ui.add_space(6.0);
+        let query = ui.add_sized(
+            [ui.available_width(), if tv { 42.0 } else { 30.0 }],
+            egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
+        );
+        if tv && focus::clicked(ui, &query) {
+            query.request_focus();
+        }
     }
     let search = app.live_q.trim().to_lowercase();
     let indices: Vec<_> = app
@@ -173,11 +269,29 @@ fn channels(app: &mut App, ui: &mut Ui) {
         .iter()
         .map(|&i| app.library.channels[i].id)
         .collect();
-    ui.label(
-        RichText::new(format!("{} Sender", indices.len()))
-            .small()
-            .color(theme::muted(ui)),
-    );
+    if controls {
+        ui.label(
+            RichText::new(format!("{} Sender", indices.len()))
+                .small()
+                .color(theme::muted(ui)),
+        );
+    }
+    let tv_row_h = ((ui.available_height() - 6.0 * 4.0) / 7.0).clamp(48.0, 58.0);
+    let (name_size, epg_size) = if tv_row_h < 54.0 {
+        (14.0, 11.5)
+    } else {
+        (16.0, 12.5)
+    };
+    let (name_y, current_y, next_y) = ui.fonts(|fonts| {
+        let name_h = fonts.row_height(&tokens::reg(name_size));
+        let epg_h = fonts.row_height(&tokens::reg(epg_size));
+        let top = ((tv_row_h - name_h - 2.0 * epg_h) * 0.5).max(0.0);
+        (
+            top + name_h * 0.5,
+            top + name_h + epg_h * 0.5,
+            top + name_h + epg_h * 1.5,
+        )
+    });
     let now = chrono::Utc::now().timestamp();
     let mut selected = None;
     egui::ScrollArea::vertical()
@@ -193,7 +307,7 @@ fn channels(app: &mut App, ui: &mut Ui) {
                 let r = row(
                     ui,
                     ("channel", id),
-                    if tv { 96.0 } else { 90.0 },
+                    if tv { tv_row_h } else { 90.0 },
                     app.is_previewing(&key),
                 );
                 if app.scroll_to == Some(id) {
@@ -208,8 +322,8 @@ fn channels(app: &mut App, ui: &mut Ui) {
                             .request_repaint_after(std::time::Duration::from_millis(250));
                     }
                     let logo = Rect::from_min_size(
-                        r.rect.min + vec2(10.0, 15.0),
-                        Vec2::splat(if tv { 38.0 } else { 34.0 }),
+                        r.rect.min + vec2(8.0, if tv { (tv_row_h - 28.0) * 0.5 } else { 15.0 }),
+                        Vec2::splat(if tv { 28.0 } else { 34.0 }),
                     );
                     components::thumb(
                         app,
@@ -225,13 +339,13 @@ fn channels(app: &mut App, ui: &mut Ui) {
                         epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now);
                     for (offset, text, size, color) in [
                         (
-                            if tv { 24.0 } else { 20.0 },
+                            if tv { name_y } else { 20.0 },
                             channel.name,
-                            if tv { 20.0 } else { 15.0 },
+                            if tv { name_size } else { 15.0 },
                             ui.visuals().text_color(),
                         ),
                         (
-                            if tv { 50.0 } else { 45.0 },
+                            if tv { current_y } else { 45.0 },
                             current.map(|s| format!("Jetzt: {s}")).unwrap_or_else(|| {
                                 if app.epg_pending(id) {
                                     "EPG wird geladen …".into()
@@ -239,13 +353,13 @@ fn channels(app: &mut App, ui: &mut Ui) {
                                     "Kein aktuelles EPG".into()
                                 }
                             }),
-                            if tv { 16.0 } else { 12.0 },
+                            if tv { epg_size } else { 12.0 },
                             theme::muted(ui),
                         ),
                         (
-                            if tv { 76.0 } else { 68.0 },
+                            if tv { next_y } else { 68.0 },
                             next.map(|s| format!("Danach: {s}")).unwrap_or_default(),
-                            if tv { 16.0 } else { 12.0 },
+                            if tv { epg_size } else { 12.0 },
                             theme::muted(ui),
                         ),
                     ] {
@@ -300,27 +414,31 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     };
     let tv = app.tv;
     if tv {
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                [ui.available_width() - 44.0, 40.0],
-                egui::Label::new(RichText::new("Vorschau").size(22.0).strong()),
-            );
-            let (rect, r) = ui.allocate_exact_size(vec2(36.0, 40.0), Sense::click());
-            let favorite = app.is_favorite(&item.progress_key);
-            components::icon(
-                ui,
-                Rect::from_center_size(rect.center(), vec2(24.0, 24.0)),
-                if favorite {
-                    components::Icon::StarOn
-                } else {
-                    components::Icon::Star
-                },
-                theme::accent(ui),
-            );
-            if activated(ui, &r, true) {
-                app.toggle_favorite(&item.progress_key);
-            }
-        });
+        let (header, _) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
+        components::draw_line(
+            ui,
+            pos2(header.left(), header.center().y),
+            "Vorschau",
+            tokens::medium(16.0),
+            tokens::text(ui),
+            header.width() - 36.0,
+        );
+        let rect = Rect::from_min_max(pos2(header.right() - 32.0, header.top()), header.max);
+        let r = ui.interact(rect, ui.id().with("preview-favorite"), Sense::click());
+        let favorite = app.is_favorite(&item.progress_key);
+        components::icon(
+            ui,
+            Rect::from_center_size(rect.center(), vec2(20.0, 20.0)),
+            if favorite {
+                components::Icon::StarOn
+            } else {
+                components::Icon::Star
+            },
+            theme::accent(ui),
+        );
+        if activated(ui, &r, true) {
+            app.toggle_favorite(&item.progress_key);
+        }
     } else {
         ui.heading("Vorschau");
     }
@@ -339,7 +457,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     if tv {
         ui.label(
             RichText::new("OK: Vollbild · Zurück: Schließen")
-                .size(16.0)
+                .size(13.0)
                 .color(theme::muted(ui)),
         );
     } else {

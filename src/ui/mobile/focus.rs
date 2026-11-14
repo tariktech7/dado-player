@@ -269,15 +269,15 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
                 .rect_filled(r, Rounding::same(tokens::RADIUS_SM), wash);
             // Two strokes: an accent halo for dark surfaces plus a crisp,
             // theme-aware high-contrast line that stays visible on a filled
-            // accent button (where accent-on-accent would vanish). On a TV the
-            // ring is thicker — a 2 pt line disappears from 3 m away.
+            // accent button (where accent-on-accent would vanish). Compact TV
+            // rows use a restrained high-contrast ring that leaves the text clear.
             let halo = if s.spatial {
-                tokens::SEL_RING + 5.0
+                tokens::SEL_RING + 1.5
             } else {
                 tokens::SEL_RING + 3.0
             };
             let line = if s.spatial {
-                tokens::SEL_RING + 2.5
+                tokens::SEL_RING
             } else {
                 tokens::SEL_RING + 1.0
             };

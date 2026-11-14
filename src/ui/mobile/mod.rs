@@ -273,26 +273,26 @@ fn touch_style(ctx: &Context) {
 /// values — deliberately NOT a global `pixels_per_point` multiplier (§23.5),
 /// which would blur the measured fonts and break the phone geometry.
 fn tv_style(ctx: &Context) {
-    if ctx.style().spacing.interact_size.y == 48.0 && ctx.style().spacing.scroll.bar_width == 5.0 {
+    if ctx.style().spacing.interact_size.y == 36.0 && ctx.style().spacing.scroll.bar_width == 5.0 {
         return;
     }
     let mut style = (*ctx.style()).clone();
-    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(14.0, 10.0);
-    style.spacing.interact_size = egui::vec2(48.0, 48.0);
+    style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+    style.spacing.button_padding = egui::vec2(10.0, 6.0);
+    style.spacing.interact_size = egui::vec2(36.0, 36.0);
     style.spacing.scroll.bar_width = 5.0;
     style
         .text_styles
-        .insert(egui::TextStyle::Body, tokens::reg(18.0));
+        .insert(egui::TextStyle::Body, tokens::reg(16.0));
     style
         .text_styles
-        .insert(egui::TextStyle::Button, tokens::bold(18.0));
+        .insert(egui::TextStyle::Button, tokens::bold(16.0));
     style
         .text_styles
-        .insert(egui::TextStyle::Small, tokens::reg(16.0));
+        .insert(egui::TextStyle::Small, tokens::reg(13.0));
     style
         .text_styles
-        .insert(egui::TextStyle::Heading, tokens::bold(22.0));
+        .insert(egui::TextStyle::Heading, tokens::bold(18.0));
     ctx.set_style(style);
 }
 
