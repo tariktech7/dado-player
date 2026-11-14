@@ -45,6 +45,8 @@ The final `bash ios/build.sh --ipa` run completed successfully under WSL. It bui
 
 Validation limits: no Apple-account provisioning/signature, iPhone installation, playback, rotation or screen-layout test was performed here. AltStore/Sideloadly must sign this artifact with the user's Apple ID. The cross-linker emits warnings about platform support while reading the newer SDK stubs; the resulting device architecture, minimum OS, dependencies and bridge symbols were inspected, but actual runtime behavior requires the iPhone test. SwiftPM's native backend also emits a deprecation notice. Neither warning is represented as hardware validation.
 
+Published the IPA to the existing [unified GitHub release](https://github.com/tariktech7/dado-player/releases/tag/dado-posters-2026-11-14), asset label `ios-build-7`. GitHub reports the same 5,721,193 bytes and SHA-256 as the local package. All four existing Windows/Android/Tizen assets remain in that release. The build implementation is committed as `53a80fa`; the release description records that source and supersedes the earlier missing-IPA note.
+
 ## Primary references
 
 - [GitHub billing lock troubleshooting](https://docs.github.com/en/billing/how-tos/troubleshooting/locked-account): payment processing can take up to 24 hours after a successful payment; this is not a guaranteed wait/reset period for an unresolved restriction.
