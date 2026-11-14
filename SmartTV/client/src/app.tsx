@@ -23,6 +23,7 @@ import { TVSelect } from "./select";
 import { TVInput } from "./input";
 import { CatalogBrowser, EpisodePicker } from "./library";
 import { Home } from "./home";
+import {licenseClient} from './licensing';
 import packageInfo from "../package.json";
 const APP_VERSION = packageInfo.version;
 import {
@@ -110,6 +111,9 @@ function Field({
   );
 }
 function App() {
+  const [license,setLicense]=useState(licenseClient.state);
+  useEffect(()=>{const unsubscribe=licenseClient.subscribe(()=>setLicense(licenseClient.state));void licenseClient.init();return unsubscribe;},[]);
+  useEffect(()=>{if(license.ready && !license.allowed){playerRef.current?.stop();setFull(false);}},[license.ready,license.allowed]);
   const [saved, setSaved] = useState<Saved>(load),
     savedRef = useRef(saved);
   savedRef.current = saved;
@@ -352,6 +356,7 @@ function App() {
     }
   };
   async function start(item: Item, fullscreen = false, position = 0) {
+    if(!licenseClient.state.allowed){setView('settings');setMessage('Bitte Testversion starten oder Freischaltung abrufen.');return;}
     if (item.kind === "live")
       item = catalog.live.find((i) => i.id === item.id) || item;
     if (item.kind === "series") {
@@ -501,6 +506,15 @@ function App() {
   };
   keyHandler.current = (e: KeyboardEvent) => {
     const code = e.keyCode;
+    if (!licenseClient.state.allowed) {
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        moveFocus(e.key, document.querySelector('[data-license-gate]') || document);
+      }
+      // Do not navigate the hidden catalogue or start playback behind the gate.
+      if (code === 10009 || e.key === 'Escape' || e.key === 'BrowserBack') e.preventDefault();
+      return;
+    }
     if (code === 10009 || e.key === "Escape" || e.key === "BrowserBack") {
       e.preventDefault();
       back();
@@ -669,7 +683,7 @@ function App() {
       if (!root.contains(document.activeElement)) focusables(root)[0]?.focus();
     }, 50);
     return () => clearTimeout(id);
-  }, [view, !!session, editing, !!detail, !!resume, tracks, exit, full]);
+  }, [view, !!session, editing, !!detail, !!resume, tracks, exit, full, license.ready, license.allowed]);
   const surface = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (preview && surface.current)
@@ -803,6 +817,18 @@ function App() {
         </p>
       </header>
       <div class="settings-grid">
+        <section class="glass" data-license-status>
+          <h2>Lizenz & Gerät</h2>
+          <p><strong>{license.text}</strong></p>
+          <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
+          <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
+          <p class="muted">{license.identitySource}. Die Geräte-ID bleibt die Kennung für deine Freischaltung.</p>
+          {license.error && <p role="status">{license.error}</p>}
+          <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
+            {license.busy?'Wird abgerufen …':license.claims?.kind==='permanent'?'Lizenz wiederherstellen':license.claims?'Freischaltung abrufen':'7 Tage kostenlos testen / Freischaltung abrufen'}
+          </button>
+          <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
+        </section>
         <section class="glass">
           <h2>Darstellung</h2>
           <Field label="Farbschema">
@@ -1177,6 +1203,25 @@ function App() {
         Dado-Cloud.
       </p>
     </form>
+  );
+  if (!license.allowed) return (
+    <div class="welcome" data-license-gate>
+      <div class="welcome-panel glass" role="region" aria-label="Lizenz & Freischaltung">
+        <span class="eyebrow">DADO PLAYER · LIZENZ & GERÄT</span>
+        <h1>{!license.ready ? 'Lizenz wird geprüft …' : license.claims?.kind==='trial' ? 'Ihre Testversion ist abgelaufen' : 'Willkommen bei Dado Player'}</h1>
+        <p>{license.claims?.kind==='trial' ? 'Die 7 Tage Testzeit sind vorbei. Zur weiteren Nutzung benötigen Sie eine dauerhafte Freischaltung.' : 'Testen Sie Dado Player 7 Tage kostenlos. Starten Sie die Testversion einmal online oder rufen Sie Ihre vorhandene Freischaltung ab.'}</p>
+        <p><strong>{license.text}</strong></p>
+        <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
+        <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
+        <p class="muted">Nennen Sie für die manuelle Freigabe die Geräte-ID oder Ihre registrierte MAC-Adresse. Wählen Sie nach der Freigabe „Freischaltung abrufen“. Profile und Favoriten bleiben gespeichert.</p>
+        {license.error && <p role="status">{license.error}</p>}
+        <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
+          {license.busy?'Wird abgerufen …':license.claims?'Freischaltung abrufen':'7 Tage kostenlos testen / Freischaltung abrufen'}
+        </button>
+        <button onClick={()=>exitApp()}>App schließen</button>
+        <p class="muted">Nach der dauerhaften Freischaltung: Unlimited, ohne automatische Lizenz-Serverabfragen.</p>
+      </div>
+    </div>
   );
   return (
     <>

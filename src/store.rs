@@ -45,6 +45,10 @@ fn app_dir() -> PathBuf {
     }
 }
 
+pub fn license_path() -> PathBuf {
+    app_dir().join("device-license.json")
+}
+
 /// Print the resolved data directory once, so a failed save can be diagnosed
 /// from logcat instead of guessed at.
 #[cfg(not(test))]

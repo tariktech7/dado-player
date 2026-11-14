@@ -9,6 +9,7 @@ if (data.length > 20_000_000) throw new Error("Unexpected widget size");
 const entries = unzipSync(data),
   names = Object.keys(entries),
   text = (n) => new TextDecoder().decode(entries[n]);
+if (entries['version.json'] && JSON.parse(text('version.json')).licenseTestBuild) throw new Error('Test-license builds must never be packaged for distribution');
 for (const file of [
   "index.html",
   "config.xml",

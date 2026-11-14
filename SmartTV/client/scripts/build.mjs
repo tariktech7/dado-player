@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { cp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+const testConfig = process.env.DADO_LICENSE_TEST_CONFIG;
 const root = fileURLToPath(new URL("..", import.meta.url));
 process.chdir(root);
 const out = path.resolve("dist");
@@ -19,6 +20,7 @@ await build({
   minify: true,
   external: ["./fonts/*"],
   legalComments: "eof",
+  plugins: testConfig ? [{name:'test-license-key',setup(b){b.onLoad({filter:/licensing[\\/]public-config\.json$/},async()=>({contents:await readFile(testConfig,'utf8'),loader:'json'}));}}] : [],
   metafile: true,
 }).then(async (result) => {
   await writeFile(
@@ -57,6 +59,7 @@ await writeFile(
       version: pkg.version,
       platform: "Samsung Tizen",
       minimumTizen: "6.5",
+      licenseTestBuild: !!testConfig,
     },
     null,
     2,

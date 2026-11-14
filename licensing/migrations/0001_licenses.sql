@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS devices (
+ subject TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, platform TEXT NOT NULL,
+ started_at INTEGER NOT NULL, approved_at INTEGER, reference TEXT NOT NULL DEFAULT '',
+ license_id TEXT NOT NULL UNIQUE
+);
+CREATE TABLE IF NOT EXISTS aliases (
+ mac_hash TEXT NOT NULL, subject TEXT NOT NULL REFERENCES devices(subject),
+ PRIMARY KEY(mac_hash, subject)
+);
+CREATE TABLE IF NOT EXISTS audit (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, actor TEXT NOT NULL,
+ subject TEXT NOT NULL, action TEXT NOT NULL, reference TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS rate_limits (
+ bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);

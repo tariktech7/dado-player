@@ -1,0 +1,23 @@
+{
+  "name": "dado-admin",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-14",
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dado-licenses",
+      "database_id": "877fd180-1d83-45c8-9b45-cb243b052205",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "KEY_ID": "production-2026-11",
+    "ACCESS_TEAM": "morning-frost-f8f6",
+    "ACCESS_AUD": "496fc2c7d19f16e4eee85c6eb229bc550a98457722b7fd07eb692a583f9f297c",
+    "ROLE": "admin"
+  }
+}

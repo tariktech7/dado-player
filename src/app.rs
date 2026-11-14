@@ -627,6 +627,8 @@ impl App {
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        #[cfg(target_os = "windows")]
+        crate::licensing::tick(ctx);
         #[cfg(target_os = "ios")]
         if crate::platform::ios::bridge::take_player_closed() {
             self.stop_play();
@@ -1066,6 +1068,17 @@ impl App {
     }
 
     fn draw(&mut self, ctx: &Context) {
+        #[cfg(target_os = "windows")]
+        if crate::licensing::enabled() && !crate::licensing::allowed() {
+            if self.current_play.is_some() {
+                self.stop_play();
+            }
+            if self.preview.is_some() {
+                self.close_preview();
+            }
+            crate::licensing::blocked_screen(ctx);
+            return;
+        }
         // Touch UI: phone / tablet. Takes over the whole window.
         if ui::mobile::active(ctx) {
             ui::mobile::show(self, ctx);
@@ -1640,6 +1653,11 @@ impl App {
     }
 
     pub fn play(&mut self, item: PlayItem) {
+        #[cfg(target_os = "windows")]
+        if crate::licensing::enabled() && !crate::licensing::allowed() {
+            self.view = View::Settings;
+            return;
+        }
         self.remember_live(&item);
         self.preview = None;
         // A note from the previous item ("MX Player fehlt") must not survive

@@ -1,0 +1,13 @@
+export type Platform = 'samsung' | 'windows' | 'android-tv' | 'lg';
+export type Claims = {v:1;product:string;subject:string;platform:Platform;license_id:string;kind:'trial'|'permanent';issued_at:number;started_at:number;expires_at:number|null;expired?:boolean};
+export const PRODUCT: string;
+export const TRIAL_SECONDS: number;
+export function encode(bytes: Uint8Array): string;
+export function decode(text: string): Uint8Array;
+export function fingerprint(platform: string, identifier: string): Promise<string>;
+export function deviceCode(subject: string): string;
+export function normalizeMac(value: string): string|null;
+export function macAlias(value: string): Promise<string|null>;
+export function signLicense(claims: Claims, privateJwk: JsonWebKey, kid: string): Promise<string>;
+export function verifyLicense(token: string, keys: Record<string,JsonWebKey>, subject: string, platform: string, now: number): Promise<Claims>;
+export function statusText(claims: Claims|null, now:number): string;

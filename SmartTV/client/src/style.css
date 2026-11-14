@@ -685,6 +685,19 @@ hr {
   color: var(--muted);
   font-size: 24px;
 }
+.welcome[data-license-gate] {
+  grid-template-columns: minmax(0, 1100px);
+  justify-content: center;
+  gap: 0;
+}
+.welcome[data-license-gate] .welcome-panel {
+  width: 100%;
+  max-height: 100%;
+  overflow-wrap: anywhere;
+}
+.welcome[data-license-gate] button {
+  margin: 12px 20px 0 0;
+}
 .welcome-panel {
   padding: 44px;
   max-height: 950px;

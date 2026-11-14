@@ -1,13 +1,13 @@
 {
   "name": "dado-player-tv",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "test:ui": "playwright test",
+    "test:ui": "node scripts/test-ui.mjs",
     "serve": "node scripts/serve.mjs",
     "package": "node scripts/package.mjs",
     "verify:package": "node scripts/verify-package.mjs",

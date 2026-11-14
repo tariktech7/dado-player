@@ -24,6 +24,8 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 ui.vertical(|ui| {
                     ui.set_width(l.content_w());
                     components::storage_banner(ui, storage_failed);
+                    #[cfg(target_os = "windows")]
+                    crate::licensing::settings(ui);
 
                     // ---- appearance ----
                     components::section(ui, "Darstellung");

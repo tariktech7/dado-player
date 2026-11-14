@@ -1,5 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { fresh } from "../../src/store";
+import {readFileSync} from 'node:fs';
+import {fingerprint,signLicense} from '../../../../licensing/shared/protocol.mjs';
 const profile = {
   id: "qa",
   name: "TV Demo",
@@ -10,7 +12,15 @@ const profile = {
   m3uUrl: "",
   epgUrl: "",
 };
-async function fixture(page: Page, seed = true, native = false) {
+async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent') {
+  const subject=await fingerprint('samsung','tv-ui-fixture'),now=Math.floor(Date.now()/1000);
+  const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
+  const token=await signLicense({v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',kind:licenseKind==='expired'?'trial':'permanent',started_at:licenseKind==='expired'?now-604801:now,issued_at:now,expires_at:licenseKind==='expired'?now-1:null},key,'ui-test');
+  await page.addInitScript(({token,now,licenseKind})=>{
+    const api=(window as any).webapis ||= {};
+    api.productinfo={getDuid:()=> 'tv-ui-fixture'};api.network={getMac:()=> 'AA:BB:CC:DD:EE:10'};
+    if(licenseKind!=='missing' && !localStorage.getItem('dado.license.v1'))localStorage.setItem('dado.license.v1',JSON.stringify({token,high:now,lastCheck:now}));
+  },{token,now,licenseKind});
   await page.route("https://provider.invalid/**", async (route) => {
     const url = new URL(route.request().url()),
       action = url.searchParams.get("action"),
@@ -139,6 +149,8 @@ async function fixture(page: Page, seed = true, native = false) {
         },
       };
       (window as any).webapis = {
+        productinfo:{getDuid:()=> 'tv-ui-fixture'},
+        network:{getMac:()=> 'AA:BB:CC:DD:EE:10'},
         appcommon: {
           setScreenSaver: (...a: any[]) => log.push(["screensaver", a[0]]),
         },
@@ -198,6 +210,56 @@ async function fixture(page: Page, seed = true, native = false) {
     });
   }
 }
+test('license settings show real MAC and Unlimited, and paid restarts never query the license server',async({page})=>{
+  await fixture(page,true,true);
+  let requests=0;page.on('request',r=>{if(r.url().startsWith('https://license-fixture.invalid'))requests++;});
+  await page.goto('/');
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  const section=page.locator('[data-license-status]');
+  await expect(section.getByText('Unlimited',{exact:true})).toBeVisible();
+  await expect(section).toContainText('AA:BB:CC:DD:EE:10');
+  await expect(section).toContainText('D7-');
+  await page.reload();
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await expect(section.getByText('Unlimited',{exact:true})).toBeVisible();
+  expect(requests).toBe(0);
+});
+
+test('expired trial replaces catalogue with device gate and verified activation restores access',async({page})=>{
+  await fixture(page,true,true,'expired');
+  const now=Math.floor(Date.now()/1000),subject=await fingerprint('samsung','tv-ui-fixture');
+  const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
+  const token=await signLicense({v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',kind:'permanent',started_at:now-604801,issued_at:now,expires_at:null},key,'ui-test');
+  let calls=0;
+  await page.route('https://license-fixture.invalid/v1/license',async route=>{calls++;await route.fulfill({json:{license:token}});});
+  await page.goto('/');
+  const gate=page.locator('[data-license-gate]');
+  await expect(gate.getByRole('heading',{name:'Ihre Testversion ist abgelaufen'})).toBeVisible();
+  await expect(gate).toContainText('AA:BB:CC:DD:EE:10');
+  await expect(gate).toContainText('D7-');
+  expect((await gate.locator('.welcome-panel').boundingBox())!.width).toBeGreaterThan(800);
+  await page.screenshot({path:test.info().outputPath('license-expired.png')});
+  await expect(page.locator('.navigation')).toHaveCount(0);
+  await page.keyboard.press('ArrowRight');await page.keyboard.press('Escape');
+  await expect(gate).toBeVisible();expect(calls).toBe(0);
+  await gate.getByRole('button',{name:'Freischaltung abrufen',exact:true}).click();
+  await expect(gate).toHaveCount(0);expect(calls).toBe(1);
+  await page.reload();await expect(gate).toHaveCount(0);expect(calls).toBe(1);
+});
+
+test('first launch requires explicit trial start and offline failure keeps device gate available',async({page})=>{
+  await fixture(page,false,true,'missing');
+  let calls=0;
+  await page.route('https://license-fixture.invalid/v1/license',async route=>{calls++;await route.abort();});
+  await page.goto('/');
+  const gate=page.locator('[data-license-gate]');
+  const start=gate.getByRole('button',{name:'7 Tage kostenlos testen / Freischaltung abrufen',exact:true});
+  await expect(start).toBeEnabled();expect(calls).toBe(0);
+  await start.click();await expect(gate.getByRole('status')).toBeVisible();
+  await expect(start).toBeEnabled();await expect(gate).toContainText('AA:BB:CC:DD:EE:10');
+  expect(calls).toBe(1);
+});
+
 test("login is inline, saved profile resumes without a profile prompt", async ({
   page,
 }) => {

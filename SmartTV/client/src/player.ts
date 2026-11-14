@@ -1,5 +1,6 @@
 import { Item, PlayerStatus, Settings, Track } from "./types";
 import { screensaver } from "./platform";
+import { licenseClient } from "./licensing";
 export function resolvePackagedMedia(
   url: string,
   filesystem: any = (globalThis as any).tizen?.filesystem,
@@ -112,6 +113,7 @@ export class Player {
     }
   }
   async open(item: Item, resume = 0): Promise<void> {
+    if (!licenseClient.state.allowed) throw new Error('Testzeit abgelaufen oder noch nicht gestartet. Freischaltung in den Einstellungen abrufen.');
     this.stop();
     const gen = ++this.generation;
     this.current = item;

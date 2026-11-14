@@ -69,3 +69,7 @@ Dado-Player-startup.log
 **/companion.local.json
 **/tizen.local.json
 __pycache__/
+/licensing/node_modules/
+/licensing/.wrangler/
+/licensing/.local/
+/licensing/.dev.vars*

@@ -11,6 +11,10 @@ const COL_W: f32 = 720.0;
 /// filter and the section headers can never drift apart.
 const SECTIONS: &[(&str, &str)] = &[
     (
+        "Lizenz & Gerät",
+        "lizenz aktivierung freischaltung test tage trial unlimited mac adresse geräte-id",
+    ),
+    (
         "Darstellung",
         "design farbschema theme dunkel hell system dark light aussehen appearance",
     ),
@@ -129,6 +133,10 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
         }
     });
     ui.add_space(10.0);
+    #[cfg(target_os = "windows")]
+    if hits(q, "Lizenz & Gerät") {
+        crate::licensing::settings(ui);
+    }
 
     if !q.is_empty() && !SECTIONS.iter().any(|(t, _)| hits(q, t)) {
         ui.add_space(8.0);

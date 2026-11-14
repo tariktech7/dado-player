@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "apiUrl": "https://dado-license.dado-licensing.workers.dev",
+  "keys": {
+    "production-2026-11": {
+      "key_ops": [
+        "verify"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "jZpw1UAQ46leRXSMOd3ZCbsORyE7UoE99CEyTnrictk",
+      "y": "jmM2N2oLkQ4LO1ynF7vIbr_G9n-Aeh72b9YcfBJCVds",
+      "crv": "P-256"
+    }
+  }
+}

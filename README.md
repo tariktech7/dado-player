@@ -1,6 +1,10 @@
 # Dado Player
 
 Aktuell: Windows portable **0.5.5**, Android **0.2.9 / Build 13**, iOS **0.2.6 / Build 8**, Samsung Tizen **0.1.6**.
+Lizenz-Beta in Vorbereitung: Windows **0.5.6** und Samsung **0.1.7** mit 7 Tagen Testzeit,
+eigenem Sperrbildschirm, MAC/Geräte-ID und manuellem Freischaltabruf. Dauerlizenzen werden
+offline geprüft und lösen keine automatischen Lizenz-Serverabrufe aus. Android/iOS bleiben
+ohne diese Kaufsperre. Betrieb und Einrichtung: [Lizenzverwaltung](licensing/README.md).
 Windows und TV verwenden Kategorien, ein virtualisiertes Poster-Raster und einen festen Detailbereich.
 Die Touch-Oberfläche auf Telefonen/Tablets hat stattdessen Kategorien-Dropdown und Suche im jeweiligen Tab,
 ein breites Poster-Raster und eigene Detailseiten mit Zurück-/Rand-Wisch-Navigation.
