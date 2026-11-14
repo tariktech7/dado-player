@@ -299,7 +299,31 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         return;
     };
     let tv = app.tv;
-    ui.heading("Vorschau");
+    if tv {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [ui.available_width() - 44.0, 40.0],
+                egui::Label::new(RichText::new("Vorschau").size(22.0).strong()),
+            );
+            let (rect, r) = ui.allocate_exact_size(vec2(36.0, 40.0), Sense::click());
+            let favorite = app.is_favorite(&item.progress_key);
+            components::icon(
+                ui,
+                Rect::from_center_size(rect.center(), vec2(24.0, 24.0)),
+                if favorite {
+                    components::Icon::StarOn
+                } else {
+                    components::Icon::StarOff
+                },
+                theme::accent(ui),
+            );
+            if activated(ui, &r, true) {
+                app.toggle_favorite(&item.progress_key);
+            }
+        });
+    } else {
+        ui.heading("Vorschau");
+    }
     let w = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
     ui.painter().rect_filled(rect, 8.0, Color32::BLACK);
@@ -312,16 +336,24 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     }
     let promote = activated(ui, &response, tv);
     ui.add_space(8.0);
-    ui.horizontal_wrapped(|ui| {
-        let r = ui.button("Im Player öffnen");
-        if activated(ui, &r, tv) {
-            app.promote_preview(false);
-        }
-        let r = ui.button("Vorschau schließen");
-        if activated(ui, &r, tv) {
-            app.close_preview();
-        }
-    });
+    if tv {
+        ui.label(
+            RichText::new("OK: Vollbild · Zurück: Schließen")
+                .size(16.0)
+                .color(theme::muted(ui)),
+        );
+    } else {
+        ui.horizontal_wrapped(|ui| {
+            let r = ui.button("Im Player öffnen");
+            if activated(ui, &r, tv) {
+                app.promote_preview(false);
+            }
+            let r = ui.button("Vorschau schließen");
+            if activated(ui, &r, tv) {
+                app.close_preview();
+            }
+        });
+    }
     if promote {
         app.promote_preview(false);
     }
@@ -351,26 +383,31 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                     .find(|c| c.id == channel.category_id)
                     .map(|c| c.name.as_str())
                     .unwrap_or("");
-                ui.label(format!("Kanal {} · {}", channel.num, category));
-                let r = ui.button(if app.is_favorite(&item.progress_key) {
-                    "Aus Favoriten entfernen"
-                } else {
-                    "Zu Favoriten"
-                });
-                if activated(ui, &r, tv) {
-                    app.toggle_favorite(&item.progress_key);
+                if !tv {
+                    ui.label(format!("Kanal {} · {}", channel.num, category));
+                    let r = ui.button(if app.is_favorite(&item.progress_key) {
+                        "Aus Favoriten entfernen"
+                    } else {
+                        "Zu Favoriten"
+                    });
+                    if activated(ui, &r, tv) {
+                        app.toggle_favorite(&item.progress_key);
+                    }
                 }
                 app.request_epg(channel.id);
                 let now = chrono::Utc::now().timestamp();
                 let entries = app.epg_for(channel.id).cloned().unwrap_or_default();
                 if let Some(current) = entries.iter().find(|e| e.start <= now && now < e.end) {
                     ui.separator();
-                    ui.label(RichText::new("Jetzt").strong());
-                    ui.label(format!(
-                        "{} – {}",
-                        fmt_clock(current.start),
-                        fmt_clock(current.end)
-                    ));
+                    ui.label(
+                        RichText::new(format!(
+                            "Jetzt · {} – {}",
+                            fmt_clock(current.start),
+                            fmt_clock(current.end)
+                        ))
+                        .size(if tv { 16.0 } else { 14.0 })
+                        .strong(),
+                    );
                     ui.label(RichText::new(&current.title).strong());
                     if !current.description.is_empty() {
                         ui.label(&current.description);
