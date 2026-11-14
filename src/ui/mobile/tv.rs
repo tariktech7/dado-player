@@ -88,11 +88,15 @@ struct Geom {
     content: Rect,
 }
 
-fn geom(ctx: &Context) -> Geom {
+fn geom(ctx: &Context, collapsed: bool) -> Geom {
     let r = ctx.screen_rect();
     let ox = (r.width() * 0.05).max(OVERSCAN_MIN);
     let oy = (r.height() * 0.05).max(OVERSCAN_MIN);
-    let rail_w = ((r.width() - 2.0 * ox) * 0.16).clamp(128.0, 176.0);
+    let rail_w = if collapsed {
+        48.0
+    } else {
+        ((r.width() - 2.0 * ox) * 0.16).clamp(128.0, 176.0)
+    };
     let content_x = ox + rail_w + COLUMN_GAP;
     let content_right = (r.max.x - ox).max(content_x + 120.0);
     let brand = Rect::from_min_size(pos2(ox, oy), vec2(content_right - ox, BRAND_H));
@@ -165,7 +169,10 @@ struct Rail {
 
 /// Entry point from `ui::mobile::show()`.
 pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
-    let g = geom(ctx);
+    if let Some(zone) = focus::current_zone() {
+        app.nav_collapsed = zone != 0;
+    }
+    let g = geom(ctx, app.nav_collapsed);
     let bg = ctx.style().visuals.panel_fill;
 
     egui::CentralPanel::default()
@@ -231,14 +238,16 @@ fn paint_brand(ui: &mut Ui, rect: Rect, app: &App) {
     let mark = Rect::from_min_size(pos2(rect.left(), rect.center().y - 12.0), Vec2::splat(24.0));
     let mut brand_ui = ui.child_ui(mark, egui::Layout::top_down(Align::Min));
     crate::ui::brand_mark(&mut brand_ui, 24.0);
-    components::draw_line(
-        ui,
-        pos2(mark.right() + 8.0, rect.center().y),
-        "Dado Player",
-        tokens::bold(FS_BRAND),
-        tokens::text(ui),
-        132.0,
-    );
+    if !app.nav_collapsed {
+        components::draw_line(
+            ui,
+            pos2(mark.right() + 8.0, rect.center().y),
+            "Dado Player",
+            tokens::bold(FS_BRAND),
+            tokens::text(ui),
+            132.0,
+        );
+    }
     let profile = app
         .active_profile
         .as_ref()
@@ -304,18 +313,20 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
                 color
             },
         );
-        components::draw_line(
-            ui,
-            pos2(rect.left() + 32.0, rect.center().y),
-            if narrow { SHORT_HEADERS[i] } else { label },
-            if selected {
-                tokens::bold(fs)
-            } else {
-                tokens::medium(fs)
-            },
-            color,
-            (w - 38.0).max(40.0),
-        );
+        if w > 60.0 {
+            components::draw_line(
+                ui,
+                pos2(rect.left() + 32.0, rect.center().y),
+                if narrow { SHORT_HEADERS[i] } else { label },
+                if selected {
+                    tokens::bold(fs)
+                } else {
+                    tokens::medium(fs)
+                },
+                color,
+                (w - 38.0).max(40.0),
+            );
+        }
         metas.push(Meta {
             title: label.to_string(),
             sub: desc.to_string(),

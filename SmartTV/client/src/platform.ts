@@ -114,6 +114,24 @@ export function moveFocus(
       return;
     }
   }
+  const grid = horizontal
+    ? current.closest<HTMLElement>("[data-focus-grid]")
+    : null;
+  if (grid) {
+    const cols = Number(grid.dataset.focusGrid),
+      index = Number(current.dataset.gridIndex),
+      next = index + sign;
+    if (Math.floor(next / cols) === Math.floor(index / cols)) {
+      const target = grid.querySelector<HTMLElement>(
+        `[data-grid-index="${next}"]`,
+      );
+      if (target) {
+        target.focus({ preventScroll: true });
+        scrollFocused(target);
+        return;
+      }
+    }
+  }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
   if (horizontal && zone && !current.closest(".modal,.fullscreen")) {
     const scope = zone.closest<HTMLElement>("[data-focus-scope]")!;

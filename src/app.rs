@@ -214,12 +214,15 @@ pub struct App {
     pub search_q: String,
     pub live_q: String,
     pub catalog_queries: [String; 2],
+    pub nav_collapsed: bool,
+    pub description_open: Option<(String, String)>,
     pub selected_movie: Option<u32>,
     pub favorite_section: usize,
     pub live_selected: Option<u32>,
     pub previous_live: Option<PlayItem>,
     pub selected_series: Option<u32>,
     pub series_season: u32,
+    pub series_open_revision: u64,
     pub live_page: usize,
     /// Horizontal EPG timeline offset from the current programme window, in hours.
     pub epg_offset_hours: i32,
@@ -397,12 +400,15 @@ impl App {
             search_q: String::new(),
             live_q: String::new(),
             catalog_queries: [String::new(), String::new()],
+            nav_collapsed: false,
+            description_open: None,
             selected_movie: None,
             favorite_section: 0,
             live_selected: None,
             previous_live: None,
             selected_series: None,
             series_season: 0,
+            series_open_revision: 0,
             live_page: 0,
             epg_offset_hours: 0,
             vod_page: 0,
@@ -944,7 +950,8 @@ impl App {
             // switches to TV while it is open, flagging a modal that never
             // draws would suppress EVERY TV control on that frame.
             let modal = (!in_shell && self.pending_delete.is_some())
-                || (!self.tv && in_shell && self.mobile_more);
+                || (!self.tv && in_shell && self.mobile_more)
+                || self.description_open.is_some();
 
             // PlayPause is a global media key. On the player it must only toggle
             // pause, not also select the focused control: focus restarts at idx 0
@@ -1062,6 +1069,7 @@ impl App {
         // Touch UI: phone / tablet. Takes over the whole window.
         if ui::mobile::active(ctx) {
             ui::mobile::show(self, ctx);
+            ui::library::description_dialog(self, ctx);
             ui::palette::show(self, ctx);
             return;
         }
@@ -1086,10 +1094,15 @@ impl App {
             return;
         }
 
+        if self.nav_collapsed
+            && ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft))
+            && !ctx.wants_keyboard_input()
+        {
+            self.nav_collapsed = false;
+        }
         egui::SidePanel::left("nav")
-            .resizable(true)
-            .default_width(224.0)
-            .min_width(186.0)
+            .resizable(false)
+            .exact_width(if self.nav_collapsed { 60.0 } else { 224.0 })
             .show(ctx, |ui| ui::sidebar::show(self, ui));
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -1107,6 +1120,7 @@ impl App {
             });
         });
 
+        ui::library::description_dialog(self, ctx);
         ui::palette::show(self, ctx);
     }
 
@@ -1254,6 +1268,8 @@ impl App {
         self.search_q.clear();
         self.live_q.clear();
         self.catalog_queries = [String::new(), String::new()];
+        self.nav_collapsed = false;
+        self.description_open = None;
         self.selected_movie = None;
         self.live_selected = None;
         self.previous_live = None;
@@ -1369,7 +1385,8 @@ impl App {
     /// One step back. Returns false when there is nothing to pop (the platform
     /// may then close the app). Used by Android's back key.
     pub fn mobile_can_back(&self) -> bool {
-        if (self.tv && self.preview.is_some())
+        if self.description_open.is_some()
+            || (self.tv && self.preview.is_some())
             || self.pending_delete.is_some()
             || self.mobile_more
             || self.view == View::Player
@@ -1386,6 +1403,9 @@ impl App {
     }
 
     pub fn mobile_back(&mut self) -> bool {
+        if self.description_open.take().is_some() {
+            return true;
+        }
         // A destructive confirm owns the back key: back cancels it and goes no
         // further. Without this the key would close the activity underneath the
         // dialog, which reads as "confirm".
@@ -2080,31 +2100,32 @@ impl App {
         }
     }
     pub fn series_resume_target(&self, sid: u32) -> Option<(Episode, u64)> {
-        let mut episodes = self.series_episodes_for(sid)?.clone();
-        episodes.sort_by_key(|e| (e.season, e.episode, e.id));
+        let episodes = self.series_episodes_for(sid)?;
         let prefix = format!("ep:{sid}:");
-        let last = self.history.iter().find(|h| h.key.starts_with(&prefix));
-        let index = last
-            .and_then(|h| {
-                episodes
-                    .iter()
-                    .position(|e| h.key == format!("ep:{sid}:{}", e.id))
-            })
-            .unwrap_or(0);
-        let episode = episodes.get(index)?.clone();
+        let id = self
+            .history
+            .iter()
+            .find(|h| h.key.starts_with(&prefix))
+            .and_then(|h| h.key.rsplit(':').next()?.parse::<u32>().ok());
+        let first = episodes
+            .iter()
+            .min_by_key(|e| (e.season, e.episode, e.id))?;
+        let episode = id
+            .and_then(|id| episodes.iter().find(|e| e.id == id))
+            .unwrap_or(first);
         let key = format!("ep:{sid}:{}", episode.id);
         let pos = self.get_progress(&key);
         let duration = self.durations.get(&key).copied().unwrap_or(0);
         if pos > 0 && duration > 0 && duration.saturating_sub(pos) <= 60 {
-            return Some((
-                episodes
-                    .get(index + 1)
-                    .or_else(|| episodes.first())?
-                    .clone(),
-                0,
-            ));
+            let order = (episode.season, episode.episode, episode.id);
+            let next = episodes
+                .iter()
+                .filter(|e| (e.season, e.episode, e.id) > order)
+                .min_by_key(|e| (e.season, e.episode, e.id))
+                .unwrap_or(first);
+            return Some((next.clone(), 0));
         }
-        Some((episode, pos))
+        Some((episode.clone(), pos))
     }
     pub fn play_series_resume(&mut self, sid: u32) {
         if let Some((e, pos)) = self.series_resume_target(sid) {
@@ -2743,6 +2764,8 @@ impl App {
     /// to the Series view. Used from home rails where a poster represents a
     /// series (no single streamable URL exists for a whole series).
     pub fn open_series(&mut self, series_id: u32) {
+        self.series_season = 0;
+        self.series_open_revision = self.series_open_revision.wrapping_add(1);
         self.selected_series = Some(series_id);
         self.request_series(series_id);
         if self.tv {
@@ -3471,5 +3494,94 @@ mod tests {
             app.series_resume_target(77).map(|(e, p)| (e.id, p)),
             Some((2, 1740))
         );
+    }
+    #[test]
+    fn poster_catalogue_only_draws_visible_titles_and_opens_saved_season() {
+        use egui::epaint::Shape;
+        fn texts(s: &Shape, out: &mut Vec<String>) {
+            match s {
+                Shape::Text(t) => out.push(t.galley.job.text.clone()),
+                Shape::Vec(v) => v.iter().for_each(|s| texts(s, out)),
+                _ => {}
+            }
+        }
+        let mut app = App::test_app();
+        app.library = crate::demo::library();
+        app.active_profile = Some(Profile::new("UI test", ProfileKind::M3u));
+        let template = app.library.movies[0].clone();
+        app.library.movies = (0..20_000)
+            .map(|i| {
+                let mut m = template.clone();
+                m.id = i;
+                m.name = format!("Poster {i}");
+                m.cover.clear();
+                m
+            })
+            .collect();
+        app.vod_cat = "all".into();
+        app.catalog_queries[0].clear();
+        let ctx = egui::Context::default();
+        crate::fonts::install(&ctx);
+        crate::theme::apply(&ctx, true);
+        let frame = |app: &mut App, series| {
+            ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1200.0, 700.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default()
+                        .show(ctx, |ui| crate::ui::library::show(app, ui, series));
+                },
+            )
+        };
+        let out = frame(&mut app, false);
+        let mut all = Vec::new();
+        for s in out.shapes {
+            texts(&s.shape, &mut all);
+        }
+        let posters = all.iter().filter(|t| t.starts_with("Poster ")).count();
+        assert!(
+            posters > 0 && posters < 100,
+            "{posters} titles drawn from 20000"
+        );
+        app.library.series[0].id = 77;
+        app.selected_series = Some(77);
+        app.series_season = 0;
+        app.series_episodes.insert(
+            77,
+            (1..=12)
+                .flat_map(|season| {
+                    (1..=20).map(move |episode| Episode {
+                        id: season * 100 + episode,
+                        series_id: 77,
+                        season,
+                        episode,
+                        title: "avx.raw.provider.filename".into(),
+                        container_extension: "mp4".into(),
+                        stream_url: String::new(),
+                    })
+                })
+                .collect(),
+        );
+        app.history = vec![crate::types::HistEntry {
+            key: "ep:77:506".into(),
+            title: "Saved".into(),
+            sub: String::new(),
+            ts: 1,
+        }];
+        app.progress.insert("ep:77:506".into(), 300);
+        app.durations.insert("ep:77:506".into(), 1800);
+        let out = frame(&mut app, true);
+        let mut all = Vec::new();
+        for s in out.shapes {
+            texts(&s.shape, &mut all);
+        }
+        assert_eq!(app.series_season, 5);
+        assert!(all.iter().any(|t| t == "Folge 6"));
+        assert!(!all.iter().any(|t| t.contains("avx.raw")));
     }
 }

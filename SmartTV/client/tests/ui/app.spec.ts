@@ -667,16 +667,205 @@ test("home episode artwork resolves fresh series cover when the saved episode ha
     "src",
     "https://logos.invalid/wide.svg",
   );
-  const rail = page
-    .locator(".home-section")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Weiter ansehen · Serien",
-        exact: true,
-      }),
-    });
+  const rail = page.locator(".home-section").filter({
+    has: page.getByRole("heading", {
+      name: "Weiter ansehen · Serien",
+      exact: true,
+    }),
+  });
   await expect(rail.locator("img")).toHaveAttribute(
     "src",
     "https://logos.invalid/wide.svg",
   );
+});
+
+async function bigCatalogue(page: Page) {
+  await fixture(page, true, true);
+  await page.route(
+    "https://provider.invalid/player_api.php**",
+    async (route) => {
+      const action = new URL(route.request().url()).searchParams.get("action");
+      if (action === "get_vod_streams")
+        return route.fulfill({
+          headers: { "Access-Control-Allow-Origin": "*" },
+          json: Array.from({ length: 20000 }, (_, n) => ({
+            stream_id: n + 1,
+            name: `Film ${String(n + 1).padStart(5, "0")}`,
+            category_id: "1",
+            stream_icon: "https://logos.invalid/tall.svg",
+            container_extension: "mp4",
+          })),
+        });
+      if (action === "get_series")
+        return route.fulfill({
+          headers: { "Access-Control-Allow-Origin": "*" },
+          json: [
+            {
+              series_id: 2,
+              name: "Modern Family",
+              category_id: "1",
+              cover: "https://logos.invalid/tall.svg",
+              plot: "Eine ausführliche Beschreibung für die ganze Familie. ".repeat(
+                30,
+              ),
+            },
+          ],
+        });
+      if (action === "get_series_info")
+        return route.fulfill({
+          headers: { "Access-Control-Allow-Origin": "*" },
+          json: {
+            episodes: Object.fromEntries(
+              Array.from({ length: 12 }, (_, s) => [
+                String(s + 1),
+                Array.from({ length: 20 }, (_, n) => ({
+                  id: (s + 1) * 100 + n + 1,
+                  season: s + 1,
+                  episode_num: n + 1,
+                  title: "avx.provider.filename",
+                  container_extension: "mp4",
+                })),
+              ]),
+            ),
+          },
+        });
+      return route.fallback();
+    },
+  );
+}
+
+test("large poster catalogue stays bounded and rail expands only on navigation focus", async ({
+  page,
+}) => {
+  await bigCatalogue(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
+  await expect(page.locator(".catalog-poster").first()).toBeVisible();
+  expect(await page.locator(".catalog-poster").count()).toBeLessThan(80);
+  const category = page
+    .locator(".catalog-browser .category-list button")
+    .nth(2);
+  await category.focus();
+  await expect(page.locator(".shell")).toHaveClass(/nav-collapsed/);
+  await expect
+    .poll(() =>
+      page
+        .locator(".navigation")
+        .evaluate((e) => e.getBoundingClientRect().width),
+    )
+    .toBe(80);
+  expect(
+    await page
+      .locator(".catalog-browser .categories")
+      .evaluate((e) => e.getBoundingClientRect().width),
+  ).toBe(320);
+  await page.keyboard.press("ArrowLeft");
+  await expect(
+    page.getByRole("button", { name: "▷ Filme", exact: true }),
+  ).toBeFocused();
+  await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
+  await category.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.locator(".catalog-poster").first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('[data-grid-index="1"]')).toBeFocused();
+  await page.locator(".catalog-title-list").evaluate((e) => {
+    e.scrollTop = 100000;
+    e.dispatchEvent(new Event("scroll"));
+  });
+  await expect
+    .poll(() =>
+      page.locator(".catalog-poster").first().getAttribute("data-grid-index"),
+    )
+    .not.toBe("0");
+  expect(await page.locator(".catalog-poster").count()).toBeLessThan(80);
+  await page.screenshot({ path: "test-results/tizen-poster-grid.png" });
+});
+
+test("series details restore season five and episode six, keep episodes visible, and reuse cached details", async ({
+  page,
+}) => {
+  await bigCatalogue(page);
+  await page.goto("/");
+  await expect(page.locator(".home-hero")).toBeVisible();
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("dado.tv.v1")!);
+    s.history.qa = [
+      {
+        item: {
+          id: "506",
+          kind: "episode",
+          seriesId: "2",
+          season: 5,
+          episode: 6,
+          name: "Staffel 5 · Folge 6",
+          category: "1",
+          logo: "",
+          url: "https://provider.invalid/series/demo/demo/506.mp4",
+        },
+        position: 300,
+        duration: 1800,
+        at: Date.now(),
+      },
+    ];
+    localStorage.setItem("dado.tv.v1", JSON.stringify(s));
+  });
+  let infoRequests = 0;
+  page.on("request", (r) => {
+    if (r.url().includes("action=get_series_info")) infoRequests++;
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Modern Family", exact: true })
+    .click();
+  await expect(page.locator(".season-buttons .selected")).toHaveText(
+    "Staffel 5",
+  );
+  await expect(page.locator(".episode-list [aria-current=true]")).toContainText(
+    "Folge 6",
+  );
+  expect(
+    await page.locator(".season-buttons").evaluate((e) => e.scrollLeft),
+  ).toBeGreaterThan(0);
+  const box = await page.locator(".episode-list").boundingBox(),
+    episode = await page
+      .locator(".episode-list [aria-current=true]")
+      .boundingBox();
+  expect(episode!.y).toBeGreaterThanOrEqual(box!.y - 1);
+  expect(episode!.y + episode!.height).toBeLessThanOrEqual(
+    box!.y + box!.height + 1,
+  );
+  const tabs = await page.locator(".season-buttons button").all();
+  const y = (await tabs[0].boundingBox())!.y;
+  for (const tab of tabs)
+    expect((await tab.boundingBox())!.y).toBeCloseTo(y, 0);
+  await page.getByRole("button", { name: "Mehr lesen", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Beschreibung" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.screenshot({ path: "test-results/tizen-series-season5.png" });
+  await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
+  await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Modern Family", exact: true })
+    .click();
+  await expect(page.locator(".season-buttons .selected")).toHaveText(
+    "Staffel 5",
+  );
+  await page
+    .getByRole("button", { name: "Staffel 1", exact: true })
+    .evaluate((e) => (e as HTMLButtonElement).click());
+  await expect(page.locator(".season-buttons .selected")).toHaveText(
+    "Staffel 1",
+  );
+  await page
+    .getByRole("button", { name: "Modern Family", exact: true })
+    .click();
+  await expect(page.locator(".season-buttons .selected")).toHaveText(
+    "Staffel 5",
+  );
+  expect(infoRequests).toBe(1);
 });

@@ -2,7 +2,7 @@
 
 Stand: 14. November 2026. Android TV ist Teil der bestehenden Android-App.
 Samsung Tizen hat jetzt einen eigenen baubaren [Web-TV-Client](client/README.md)
-(0.1.5, Tizen 6.5+). Die Samsung-Zertifikatssignierung und Hardwareabnahme sind getrennte Schritte.
+(0.1.6, Tizen 6.5+). Die Samsung-Zertifikatssignierung und Hardwareabnahme sind getrennte Schritte.
 LG webOS bleibt ein vorbereitetes Portierungsziel. APK/EXE sind keine IPK/WGT.
 
 - [UI-SPEC.md](UI-SPEC.md): Darstellung und Fernbedienungsabläufe.

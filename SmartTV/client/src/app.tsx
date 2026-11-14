@@ -122,6 +122,11 @@ function App() {
     [editing, setEditing] = useState(false);
   const [favoriteKind, setFavoriteKind] = useState("live");
   const [historyKind, setHistoryKind] = useState("live");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const detailCache = useRef(
+    new Map<string, { item: Item; episodes: Item[] }>(),
+  );
+  const detailRequest = useRef(0);
   const [category, setCategory] = useState("all"),
     [query, setQuery] = useState(""),
     [preview, setPreview] = useState<Item | null>(null),
@@ -266,6 +271,9 @@ function App() {
     setCatalog(emptyCatalog());
     memories.current = {};
     resetFocusMemory();
+    detailCache.current.clear();
+    detailRequest.current++;
+    setNavCollapsed(false);
     previousLive.current = null;
     setSelectedTitle(null);
     setEpg({});
@@ -392,23 +400,34 @@ function App() {
     else void start(item, true);
   };
   async function openDetail(item: Item) {
-    setDetail(item);
-    setEpisodes([]);
-    const gen = generation.current;
+    const token = ++detailRequest.current,
+      gen = generation.current,
+      key = itemKey(item),
+      cached = detailCache.current.get(key);
+    detailRef.current = item;
+    setDetail(cached?.item || item);
+    setEpisodes(cached ? [...cached.episodes] : []);
+    if (cached) return;
     try {
-      if (item.kind === "series") {
-        const rows = (await providerRef.current?.episodes(item)) || [];
-        if (gen === generation.current && detailRef.current?.id === item.id)
-          setEpisodes(rows);
-      } else {
-        const description = (await providerRef.current?.details(item)) || "";
-        if (gen === generation.current)
-          setDetail((old) =>
-            old?.id === item.id ? { ...old, description } : old,
-          );
+      const rows =
+        item.kind === "series"
+          ? (await providerRef.current?.episodes(item)) || []
+          : [];
+      const description =
+        item.kind === "vod"
+          ? (await providerRef.current?.details(item)) || item.description
+          : item.description;
+      if (gen !== generation.current) return;
+      const value = { item: { ...item, description }, episodes: rows };
+      if (detailCache.current.size >= 64)
+        detailCache.current.delete(detailCache.current.keys().next().value!);
+      detailCache.current.set(key, value);
+      if (token === detailRequest.current) {
+        setDetail(value.item);
+        setEpisodes(rows);
       }
     } catch (e) {
-      setMessage((e as Error).message);
+      if (token === detailRequest.current) setMessage((e as Error).message);
     }
   }
   const go = (next: View) => {
@@ -426,6 +445,7 @@ function App() {
       scroll,
     };
     stop();
+    detailRequest.current++;
     const memory = memories.current[next];
     setView(next);
     setCategory(memory?.category || "all");
@@ -586,7 +606,10 @@ function App() {
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
     const focus = (e: FocusEvent) => {
-      rememberFocus(e.target as HTMLElement);
+      const target = e.target as HTMLElement;
+      if (target.closest(".shell"))
+        setNavCollapsed(!target.closest(".navigation"));
+      rememberFocus(target);
       resize();
     };
     document.addEventListener("focusin", focus);
@@ -1255,7 +1278,7 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
+            class={`shell ${navCollapsed ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
           >
             <aside class="navigation" data-focus-zone="navigation">
               <div class="brand">
@@ -1265,12 +1288,14 @@ function App() {
               <nav>
                 {nav.map(([id, icon, label]) => (
                   <button
+                    aria-label={`${icon} ${label}`}
+                    title={label}
                     data-focus-key={id}
                     class={view === id ? "selected" : ""}
                     onClick={() => go(id)}
                   >
                     <span>{icon}</span>
-                    {label}
+                    <span class="nav-label">{label}</span>
                   </button>
                 ))}
               </nav>

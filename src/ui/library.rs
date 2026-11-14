@@ -1,21 +1,22 @@
-//! Shared category → title → details browser for desktop, phone and TV.
+//! Shared virtual poster catalogue and fixed-height series details.
 use crate::{
     app::App,
-    types::{PlayItem, PlayKind},
+    types::{Episode, PlayItem, PlayKind},
     ui::mobile::{components, focus, tokens},
 };
 use egui::{pos2, vec2, Align, Layout, Rect, RichText, Sense, Ui};
-
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 #[derive(Clone)]
 struct Entry {
     id: u32,
     name: String,
     cover: String,
-    category: String,
     plot: String,
     meta: String,
     url: String,
-    added: i64,
 }
 fn hit(ui: &Ui, r: &egui::Response, tv: bool) -> bool {
     if tv {
@@ -28,106 +29,83 @@ fn button(ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
     let r = ui.button(label);
     hit(ui, &r, tv)
 }
-
-pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
-    let id = if series { 1 } else { 0 };
-    ui.push_id(("library", id, app.catalog_generation()), |ui| {
-        let available = ui.available_rect_before_wrap();
-        let narrow = available.width() < 620.0;
-        let gap = 10.0;
-        let category_w = if narrow {
-            (available.width() * 0.28).clamp(84.0, 130.0)
-        } else {
-            (available.width() * 0.18).clamp(116.0, 200.0)
-        };
-        let details_w = if narrow {
-            0.0
-        } else {
-            (available.width() * 0.36).clamp(230.0, 380.0)
-        };
-        let top_h = if narrow {
-            (available.height() * 0.53).max(150.0)
-        } else {
-            available.height()
-        };
-        let categories = Rect::from_min_size(available.min, vec2(category_w, top_h));
-        let list = Rect::from_min_max(
-            pos2(categories.right() + gap, available.top()),
-            pos2(
-                available.right() - details_w - if narrow { 0.0 } else { gap },
-                available.top() + top_h,
-            ),
-        );
-        let details = if narrow {
-            Rect::from_min_max(pos2(available.left(), list.bottom() + gap), available.max)
-        } else {
-            Rect::from_min_max(pos2(list.right() + gap, available.top()), available.max)
-        };
-        let mut category_ui = ui.child_ui(categories, Layout::top_down(Align::Min));
-        category_ui.set_clip_rect(categories.intersect(ui.clip_rect()));
-        focus::set_zone(1);
-        category_list(app, &mut category_ui, series);
-        let mut list_ui = ui.child_ui(list, Layout::top_down(Align::Min));
-        list_ui.set_clip_rect(list.intersect(ui.clip_rect()));
-        focus::set_zone(2);
-        title_list(app, &mut list_ui, series);
-        let mut details_ui = ui.child_ui(details, Layout::top_down(Align::Min));
-        details_ui.set_clip_rect(details.intersect(ui.clip_rect()));
-        focus::set_zone(3);
-        details_panel(app, &mut details_ui, series);
-    });
-}
-fn entries(app: &App, series: bool) -> Vec<Entry> {
+fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
     if series {
-        app.library
-            .series
-            .iter()
-            .map(|v| Entry {
-                id: v.id,
-                name: v.name.clone(),
-                cover: v.cover.clone(),
-                category: v.category_id.clone(),
-                plot: v.plot.clone(),
-                meta: "Serie".into(),
-                url: String::new(),
-                added: v.added.unwrap_or(0),
-            })
-            .collect()
+        let v = app.library.series.get(index)?;
+        Some(Entry {
+            id: v.id,
+            name: v.name.clone(),
+            cover: v.cover.clone(),
+            plot: v.plot.clone(),
+            meta: "Serie".into(),
+            url: String::new(),
+        })
     } else {
-        app.library
-            .movies
-            .iter()
-            .map(|v| Entry {
-                id: v.id,
-                name: v.name.clone(),
-                cover: v.cover.clone(),
-                category: v.category_id.clone(),
-                plot: v.plot.clone(),
-                meta: if v.rating.is_empty() {
-                    "Film".into()
-                } else {
-                    format!("★ {}", v.rating)
-                },
-                url: v.stream_url.clone(),
-                added: v.added.unwrap_or(0),
-            })
-            .collect()
+        let v = app.library.movies.get(index)?;
+        Some(Entry {
+            id: v.id,
+            name: v.name.clone(),
+            cover: v.cover.clone(),
+            plot: v.plot.clone(),
+            meta: crate::ui::vod::rating_badge_for_home(&v.rating).unwrap_or_else(|| "Film".into()),
+            url: v.stream_url.clone(),
+        })
     }
 }
-fn category_list(app: &mut App, ui: &mut Ui, series: bool) {
+pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
+    ui.push_id(("library", series, app.catalog_generation()), |ui| {
+        let a = ui.available_rect_before_wrap();
+        let narrow = a.width() < 620.0;
+        let gap = 10.0;
+        let cw = if narrow {
+            (a.width() * 0.31).clamp(96.0, 150.0)
+        } else {
+            (a.width() * 0.25).clamp(174.0, 244.0)
+        };
+        let dw = if narrow {
+            0.0
+        } else {
+            (a.width() * 0.32).clamp(220.0, 340.0)
+        };
+        let h = if narrow {
+            (a.height() * 0.48).max(120.0)
+        } else {
+            a.height()
+        };
+        let cr = Rect::from_min_size(a.min, vec2(cw, h));
+        let lr = Rect::from_min_max(
+            pos2(cr.right() + gap, a.top()),
+            pos2(a.right() - dw - if narrow { 0.0 } else { gap }, a.top() + h),
+        );
+        let dr = if narrow {
+            Rect::from_min_max(pos2(a.left(), lr.bottom() + gap), a.max)
+        } else {
+            Rect::from_min_max(pos2(lr.right() + gap, a.top()), a.max)
+        };
+        let mut c = ui.child_ui(cr, Layout::top_down(Align::Min));
+        c.set_clip_rect(cr.intersect(ui.clip_rect()));
+        focus::set_zone(1);
+        categories(app, &mut c, series);
+        let mut l = ui.child_ui(lr, Layout::top_down(Align::Min));
+        l.set_clip_rect(lr.intersect(ui.clip_rect()));
+        focus::set_zone(2);
+        posters(app, &mut l, series);
+        let mut d = ui.child_ui(dr, Layout::top_down(Align::Min));
+        d.set_clip_rect(dr.intersect(ui.clip_rect()));
+        focus::set_zone(3);
+        details(app, &mut d, series);
+    });
+}
+fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     let tv = app.tv;
-    ui.label(
-        RichText::new("Kategorien")
-            .strong()
-            .size(if tv { 16.0 } else { 15.0 }),
-    );
-    ui.add_space(8.0);
-    let mut categories = vec![
-        ("favorites".to_string(), "Favoriten".to_string()),
+    ui.label(RichText::new("Kategorien").strong().size(15.0));
+    ui.add_space(6.0);
+    let mut cats = vec![
+        ("favorites".to_owned(), "Favoriten".to_owned()),
         ("all".into(), "Alle".into()),
         ("recent".into(), "Neu hinzugefügt".into()),
     ];
-    categories.extend(
+    cats.extend(
         if series {
             &app.library.series_categories
         } else {
@@ -146,249 +124,327 @@ fn category_list(app: &mut App, ui: &mut Ui, series: bool) {
         .id_source("categories")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            for (id, name) in categories {
-                let r = ui.add_sized(
-                    [ui.available_width(), if tv { 34.0 } else { 42.0 }],
-                    egui::SelectableLabel::new(
-                        selected == id,
-                        RichText::new(name).size(if tv { 14.0 } else { 13.0 }),
-                    ),
+            for (id, name) in cats {
+                let (rect, _) = ui.allocate_exact_size(
+                    vec2(ui.available_width(), if tv { 39.0 } else { 46.0 }),
+                    Sense::hover(),
+                );
+                let r = ui.interact(rect, ui.id().with((&id, "category")), Sense::click());
+                if selected == id {
+                    ui.painter().rect_filled(
+                        rect.shrink(1.0),
+                        9.0,
+                        crate::theme::selection_surface(ui),
+                    );
+                }
+                let mut job = egui::text::LayoutJob::simple(
+                    name.clone(),
+                    tokens::reg(if tv { 12.0 } else { 13.0 }),
+                    ui.visuals().text_color(),
+                    (rect.width() - 16.0).max(1.0),
+                );
+                job.wrap.max_rows = 2;
+                let galley = ui.fonts(|f| f.layout_job(job));
+                ui.painter().galley(
+                    pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
+                    galley,
+                    ui.visuals().text_color(),
                 );
                 if hit(ui, &r, tv) {
                     next = Some(id);
                 }
+                r.on_hover_text(name);
             }
         });
-    if let Some(next) = next {
-        if next != selected {
+    if let Some(id) = next {
+        if selected != id {
             if series {
-                app.series_cat = next;
+                app.series_cat = id;
                 app.selected_series = None;
             } else {
-                app.vod_cat = next;
+                app.vod_cat = id;
                 app.selected_movie = None;
             }
+            app.nav_collapsed = true;
         }
     }
 }
-fn title_list(app: &mut App, ui: &mut Ui, series: bool) {
-    let tv = app.tv;
-    ui.label(
-        RichText::new(if series { "Serien" } else { "Filme" })
-            .strong()
-            .size(if tv { 18.0 } else { 20.0 }),
-    );
-    let q = if series { 1 } else { 0 };
-    let mut show_password = false;
-    components::field(
-        ui,
-        "",
-        &mut app.catalog_queries[q],
-        "Titel suchen",
-        components::Kb::Text,
-        &mut show_password,
-    );
-    ui.add_space(6.0);
-    let category = if series {
+type FilterSignature = (u64, usize, String, String, u64);
+type FilterCache = (FilterSignature, Arc<Vec<usize>>);
+fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
+    let cat = if series {
         &app.series_cat
     } else {
         &app.vod_cat
     };
-    let search = app.catalog_queries[q].to_lowercase();
-    let prefix = if series { "series" } else { "vod" };
-    let mut rows: Vec<_> = entries(app, series)
-        .into_iter()
-        .filter(|e| match category.as_str() {
-            "all" | "recent" => true,
-            "favorites" => app.is_favorite(&format!("{prefix}:{}", e.id)),
-            cat => e.category == cat,
-        })
-        .filter(|e| search.is_empty() || e.name.to_lowercase().contains(&search))
-        .collect();
-    if category == "recent" {
-        rows.sort_by_key(|e| std::cmp::Reverse(e.added));
+    let query = app.catalog_queries[usize::from(series)].to_lowercase();
+    let fav_hash = app.favorites.iter().fold(0, |sum, k| {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        k.hash(&mut h);
+        sum ^ h.finish()
+    });
+    let sig = (
+        app.catalog_generation(),
+        if series {
+            app.library.series.len()
+        } else {
+            app.library.movies.len()
+        },
+        cat.clone(),
+        query.clone(),
+        fav_hash,
+    );
+    let key = ui.id().with(("filtered", series));
+    if let Some((old, rows)) = ui.data(|d| d.get_temp::<FilterCache>(key)) {
+        if old == sig {
+            return rows;
+        }
     }
+    let keep = |id: u32, category: &str, name: &str| {
+        (match cat.as_str() {
+            "all" | "recent" => true,
+            "favorites" => {
+                app.is_favorite(&format!("{}:{id}", if series { "series" } else { "vod" }))
+            }
+            v => v == category,
+        }) && (query.is_empty() || name.to_lowercase().contains(&query))
+    };
+    let mut rows: Vec<_> = if series {
+        app.library
+            .series
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| keep(v.id, &v.category_id, &v.name))
+            .map(|(i, _)| i)
+            .collect()
+    } else {
+        app.library
+            .movies
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| keep(v.id, &v.category_id, &v.name))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    if cat == "recent" {
+        rows.sort_by_key(|i| {
+            std::cmp::Reverse(if series {
+                app.library.series[*i].added
+            } else {
+                app.library.movies[*i].added
+            })
+        });
+    }
+    let rows = Arc::new(rows);
+    ui.data_mut(|d| d.insert_temp(key, (sig, rows.clone())));
+    rows
+}
+fn posters(app: &mut App, ui: &mut Ui, series: bool) {
+    let tv = app.tv;
+    ui.label(
+        RichText::new(if series { "Serien" } else { "Filme" })
+            .strong()
+            .size(18.0),
+    );
+    let mut reveal = false;
+    components::field(
+        ui,
+        "",
+        &mut app.catalog_queries[usize::from(series)],
+        "Titel suchen",
+        components::Kb::Text,
+        &mut reveal,
+    );
+    ui.add_space(6.0);
+    let rows = indices(app, ui, series);
+    let cat = if series {
+        app.series_cat.clone()
+    } else {
+        app.vod_cat.clone()
+    };
+    let cols = ((ui.available_width() / if tv { 100.0 } else { 112.0 }).floor() as usize).max(2);
+    let gap = 8.0;
+    let width = ((ui.available_width() - gap * (cols - 1) as f32) / cols as f32).max(24.0);
+    let art_h = (width * 1.4).min(if tv { 154.0 } else { 190.0 });
+    let row_h = art_h + 38.0;
     let selected = if series {
         app.selected_series
     } else {
         app.selected_movie
     };
-    let height = if tv { 48.0 } else { 62.0 };
+    let poster_scope = ui.id().with("poster-control");
     let mut choose = None;
-    let mut play = None;
     egui::ScrollArea::vertical()
-        .id_source(("titles", category, &search))
+        .id_source(("posters", &cat, &app.catalog_queries[usize::from(series)]))
         .auto_shrink([false, false])
-        .show(ui, |ui| {
-            if rows.is_empty() {
-                ui.label("Keine passenden Titel");
-            }
-            for entry in rows {
-                let (rect, r) =
-                    ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-                if ui.is_rect_visible(rect) {
-                    ui.painter().rect_filled(
-                        rect.shrink(2.0),
-                        10.0,
-                        if selected == Some(entry.id) {
-                            crate::theme::selection_surface(ui)
-                        } else {
-                            ui.visuals().faint_bg_color
-                        },
-                    );
-                    let cover = Rect::from_center_size(
-                        pos2(rect.left() + 22.0, rect.center().y),
-                        vec2(28.0, height - 10.0),
-                    );
-                    components::thumb(
-                        app,
-                        ui,
-                        &format!("library:{prefix}:{}", entry.id),
-                        &entry.cover,
-                        cover,
-                        &entry.name,
-                    );
-                    let x = cover.right() + 8.0;
-                    let w = (rect.right() - x - 8.0).max(1.0);
-                    components::draw_line(
-                        ui,
-                        pos2(x, rect.center().y - 8.0),
-                        &entry.name,
-                        tokens::medium(if tv { 14.0 } else { 15.0 }),
-                        ui.visuals().text_color(),
-                        w,
-                    );
-                    components::draw_line(
-                        ui,
-                        pos2(x, rect.center().y + 11.0),
-                        &entry.meta,
-                        tokens::reg(11.0),
-                        crate::theme::muted(ui),
-                        w,
-                    );
-                }
-                if hit(ui, &r, tv) {
-                    if !series && selected == Some(entry.id) {
-                        play = Some(entry.clone());
-                    } else {
-                        choose = Some(entry.id);
+        .show_rows(ui, row_h, rows.len().div_ceil(cols), |ui, range| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for row in range {
+                ui.horizontal_top(|ui| {
+                    for column in 0..cols {
+                        let Some(index) = rows.get(row * cols + column) else {
+                            break;
+                        };
+                        let Some(entry) = entry_at(app, series, *index) else {
+                            continue;
+                        };
+                        ui.push_id(("poster", entry.id), |ui| {
+                            let (rect, _) =
+                                ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
+                            let response =
+                                ui.interact(rect, poster_scope.with(entry.id), Sense::click());
+                            if ui.is_rect_visible(rect) {
+                                ui.painter().rect_filled(
+                                    rect.shrink(1.0),
+                                    10.0,
+                                    if selected == Some(entry.id) {
+                                        crate::theme::selection_surface(ui)
+                                    } else {
+                                        ui.visuals().faint_bg_color
+                                    },
+                                );
+                                let art = Rect::from_min_size(
+                                    rect.min + vec2(4.0, 4.0),
+                                    vec2((width - 8.0).max(1.0), art_h - 4.0),
+                                );
+                                components::thumb(
+                                    app,
+                                    ui,
+                                    &format!("poster:{}:{}", series, entry.id),
+                                    &entry.cover,
+                                    art,
+                                    &entry.name,
+                                );
+                                let mut job = egui::text::LayoutJob::simple(
+                                    entry.name.clone(),
+                                    tokens::medium(if tv { 11.0 } else { 13.0 }),
+                                    ui.visuals().text_color(),
+                                    (width - 8.0).max(1.0),
+                                );
+                                job.wrap.max_rows = 2;
+                                let galley = ui.fonts(|f| f.layout_job(job));
+                                ui.painter().galley(
+                                    pos2(rect.left() + 4.0, rect.top() + art_h + 4.0),
+                                    galley,
+                                    ui.visuals().text_color(),
+                                );
+                            }
+                            if hit(ui, &response, tv) {
+                                choose = Some(entry.id);
+                            }
+                        });
                     }
-                }
+                });
             }
         });
+    if rows.is_empty() {
+        ui.label("Keine passenden Titel");
+    }
     if let Some(id) = choose {
+        app.nav_collapsed = true;
         if series {
-            app.selected_series = Some(id);
-            app.series_season = 0;
-            app.request_series(id);
+            app.open_series(id);
         } else {
             app.selected_movie = Some(id);
         }
     }
-    if let Some(entry) = play {
-        app.play(PlayItem {
-            title: entry.name,
-            url: entry.url,
-            kind: PlayKind::Vod,
-            progress_key: format!("vod:{}", entry.id),
-        });
-    }
 }
-fn details_panel(app: &mut App, ui: &mut Ui, series: bool) {
+fn details(app: &mut App, ui: &mut Ui, series: bool) {
     let tv = app.tv;
     let selected = if series {
         app.selected_series
     } else {
         app.selected_movie
     };
-    let item = selected.and_then(|id| entries(app, series).into_iter().find(|v| v.id == id));
-    ui.label(
-        RichText::new(if series {
-            "Serie & Folgen"
+    let index = selected.and_then(|id| {
+        if series {
+            app.library.series.iter().position(|v| v.id == id)
         } else {
-            "Filmdetails"
-        })
-        .strong()
-        .size(if tv { 16.0 } else { 18.0 }),
-    );
-    ui.add_space(8.0);
-    let Some(entry) = item else {
-        ui.label(if series {
+            app.library.movies.iter().position(|v| v.id == id)
+        }
+    });
+    let entry = index.and_then(|i| entry_at(app, series, i));
+    let Some(entry) = entry else {
+        ui.heading(if series {
             "Serie auswählen"
         } else {
             "Film auswählen"
         });
-        ui.label(
-            RichText::new("Kategorien und Favoriten bleiben links sichtbar.")
-                .small()
-                .weak(),
-        );
+        ui.label("Poster auswählen für Details und Wiedergabe.");
         return;
     };
     let key = format!("{}:{}", if series { "series" } else { "vod" }, entry.id);
-    let mut play = false;
-    egui::ScrollArea::vertical()
-        .id_source(("details", series, entry.id))
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            ui.horizontal_top(|ui| {
-                let (cover, _) = ui.allocate_exact_size(vec2(68.0, 98.0), Sense::hover());
-                components::thumb(
-                    app,
-                    ui,
-                    &format!("library-detail:{key}"),
-                    &entry.cover,
-                    cover,
-                    &entry.name,
-                );
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(&entry.name).strong().size(if tv {
-                        16.0
-                    } else {
-                        17.0
-                    }));
-                    ui.label(&entry.meta);
-                    let r = ui.button(if app.is_favorite(&key) {
-                        "★ Favorit"
-                    } else {
-                        "☆ Merken"
-                    });
-                    if hit(ui, &r, tv) {
-                        app.toggle_favorite(&key);
-                    }
-                });
+    ui.horizontal_top(|ui| {
+        let (art, _) = ui.allocate_exact_size(vec2(36.0, 50.0), Sense::hover());
+        components::thumb(
+            app,
+            ui,
+            &format!("detail:{key}"),
+            &entry.cover,
+            art,
+            &entry.name,
+        );
+        ui.vertical(|ui| {
+            let mut job = egui::text::LayoutJob::simple(
+                entry.name.clone(),
+                tokens::medium(if tv { 15.0 } else { 17.0 }),
+                ui.visuals().text_color(),
+                ui.available_width(),
+            );
+            job.wrap.max_rows = 2;
+            ui.label(job);
+            if button(
+                ui,
+                if app.is_favorite(&key) {
+                    "★ Favorit"
+                } else {
+                    "☆ Merken"
+                },
+                tv,
+            ) {
+                app.toggle_favorite(&key);
+            }
+        });
+    });
+    if !entry.plot.is_empty() {
+        let mut job = egui::text::LayoutJob::simple(
+            entry.plot.clone(),
+            tokens::reg(if tv { 11.0 } else { 12.0 }),
+            crate::theme::muted(ui),
+            ui.available_width(),
+        );
+        job.wrap.max_rows = 2;
+        ui.label(job);
+        if button(ui, "Mehr lesen", tv) {
+            app.description_open = Some((entry.name.clone(), entry.plot.clone()));
+        }
+    }
+    if series {
+        series_details(app, ui, entry.id);
+    } else {
+        ui.label(&entry.meta);
+        if button(
+            ui,
+            if app.get_progress(&key) > 1 {
+                "▶ Fortsetzen"
+            } else {
+                "▶ Abspielen"
+            },
+            tv,
+        ) {
+            app.play(PlayItem {
+                title: entry.name,
+                url: entry.url,
+                kind: PlayKind::Vod,
+                progress_key: key,
             });
-            if !series {
-                play = button(
-                    ui,
-                    if app.get_progress(&key) > 1 {
-                        "▶ Fortsetzen"
-                    } else {
-                        "▶ Abspielen"
-                    },
-                    tv,
-                );
-            }
-            if !entry.plot.is_empty() {
-                ui.label(RichText::new(&entry.plot).small());
-            }
-            if series {
-                series_details(app, ui, entry.id);
-            }
-        });
-    if play {
-        app.play(PlayItem {
-            title: entry.name,
-            url: entry.url,
-            kind: PlayKind::Vod,
-            progress_key: key,
-        });
+        }
     }
 }
 fn series_details(app: &mut App, ui: &mut Ui, sid: u32) {
     let tv = app.tv;
     app.request_series(sid);
-    let Some(mut episodes) = app.series_episodes_for(sid).cloned() else {
+    let Some(source) = app.series_episodes_for(sid) else {
         if app.series_failed(sid) {
             ui.label("Folgen konnten nicht geladen werden.");
             if button(ui, "Erneut versuchen", tv) {
@@ -400,11 +456,25 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32) {
         }
         return;
     };
-    episodes.sort_by_key(|e| (e.season, e.episode, e.id));
-    if let Some((next, pos)) = app.series_resume_target(sid) {
+    type Cached = ((usize, usize), Arc<Vec<Episode>>);
+    let signature = (source.as_ptr() as usize, source.len());
+    let cache = ui.id().with(("episode-cache", sid));
+    let episodes = ui
+        .data(|d| d.get_temp::<Cached>(cache))
+        .filter(|v| v.0 == signature)
+        .map(|v| v.1)
+        .unwrap_or_else(|| {
+            let mut rows = source.clone();
+            rows.sort_by_key(|e| (e.season, e.episode, e.id));
+            let rows = Arc::new(rows);
+            ui.data_mut(|d| d.insert_temp(cache, (signature, rows.clone())));
+            rows
+        });
+    let target = app.series_resume_target(sid);
+    if let Some((next, pos)) = &target {
         let caption = format!(
-            "▶ {} · Staffel {} · Folge {}",
-            if pos > 1 { "Fortsetzen" } else { "Abspielen" },
+            "▶ {} · S{} F{}",
+            if *pos > 1 { "Fortsetzen" } else { "Abspielen" },
             next.season,
             next.episode
         );
@@ -414,33 +484,81 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32) {
         }
     }
     let mut seasons: Vec<_> = episodes.iter().map(|e| e.season).collect();
-    seasons.sort_unstable();
     seasons.dedup();
     if !seasons.contains(&app.series_season) {
-        app.series_season = seasons.first().copied().unwrap_or(1);
+        app.series_season = target
+            .as_ref()
+            .map(|v| v.0.season)
+            .or_else(|| seasons.first().copied())
+            .unwrap_or(1);
     }
-    ui.horizontal_wrapped(|ui| {
-        for season in &seasons {
-            let r = ui.selectable_label(app.series_season == *season, format!("Staffel {season}"));
-            if hit(ui, &r, tv) {
-                app.series_season = *season;
-            }
-        }
-    });
-    ui.separator();
+    let position_key = ui.id().with(("episode-position", sid));
+    let old = ui.data(|d| d.get_temp::<(u64, u32, Option<u32>)>(position_key));
+    let position = old
+        != Some((
+            app.series_open_revision,
+            app.series_season,
+            target.as_ref().map(|v| v.0.id),
+        ));
+    let season_before = app.series_season;
+    egui::ScrollArea::horizontal()
+        .id_source(("season-tabs", sid))
+        .max_height(34.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for s in seasons {
+                    let r = ui.selectable_label(app.series_season == s, format!("Staffel {s}"));
+                    if position && app.series_season == s {
+                        ui.scroll_to_rect(r.rect, Some(Align::Min));
+                    }
+                    if hit(ui, &r, tv) {
+                        app.series_season = s;
+                    }
+                }
+            });
+        });
     let season = app.series_season;
+    let rows: Vec<_> = episodes.iter().filter(|e| e.season == season).collect();
     let mut play = None;
-    ui.push_id(("season", sid, season), |ui| {
-        for e in episodes.iter().filter(|e| e.season == season) {
-            let label = format!("Folge {}", e.episode);
-            if button(
-                ui,
-                RichText::new(label).size(if tv { 14.0 } else { 15.0 }),
-                tv,
-            ) {
-                play = Some(e.clone());
+    let target_id = target
+        .as_ref()
+        .filter(|t| t.0.season == season)
+        .map(|v| v.0.id);
+    let scroll_to = if position || season != season_before {
+        target_id.or_else(|| rows.first().map(|e| e.id))
+    } else {
+        None
+    };
+    egui::ScrollArea::vertical()
+        .id_source(("episodes", sid, season))
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for e in rows {
+                let r = ui.add_sized(
+                    [ui.available_width(), if tv { 29.0 } else { 38.0 }],
+                    egui::SelectableLabel::new(
+                        target_id == Some(e.id),
+                        format!("Folge {}", e.episode),
+                    ),
+                );
+                if scroll_to == Some(e.id) {
+                    ui.scroll_to_rect(r.rect, Some(Align::Min));
+                }
+                if hit(ui, &r, tv) {
+                    play = Some(e.clone());
+                }
             }
-        }
+        });
+    ui.data_mut(|d| {
+        d.insert_temp(
+            position_key,
+            (
+                app.series_open_revision,
+                season,
+                target.as_ref().map(|v| v.0.id),
+            ),
+        )
     });
     if let Some(e) = play {
         app.play(PlayItem {
@@ -449,5 +567,32 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32) {
             kind: PlayKind::Episode,
             progress_key: format!("ep:{sid}:{}", e.id),
         });
+    }
+}
+pub fn description_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some((title, text)) = app.description_open.clone() else {
+        return;
+    };
+    let mut open = true;
+    let mut close = false;
+    egui::Window::new(title)
+        .id(egui::Id::new("description-dialog"))
+        .collapsible(false)
+        .resizable(false)
+        .open(&mut open)
+        .default_width((ctx.screen_rect().width() * 0.65).clamp(260.0, 720.0))
+        .show(ctx, |ui| {
+            if app.tv {
+                focus::begin_modal(0);
+            }
+            egui::ScrollArea::vertical()
+                .max_height(ctx.screen_rect().height() * 0.6)
+                .show(ui, |ui| {
+                    ui.label(text);
+                });
+            close = button(ui, "Schließen", app.tv);
+        });
+    if !open || close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        app.description_open = None;
     }
 }

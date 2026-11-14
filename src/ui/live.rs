@@ -14,9 +14,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let gap = 12.0;
     let width = available.width().max(1.0);
     let has_preview = true;
-    let category_w = (width * if tv { 0.19 } else { 0.22 }).clamp(
+    let category_w = (width * 0.25).clamp(
         if tv { 118.0 } else { 130.0 },
-        if tv { 250.0 } else { 220.0 },
+        if tv { 250.0 } else { 270.0 },
     );
     let preview_w = if has_preview {
         (width * 0.40)
@@ -75,7 +75,7 @@ pub fn paint_tv_columns(ui: &Ui, content: Rect, nav: Rect, preview: bool) {
 
 fn tv_columns(content: Rect, preview: bool) -> (f32, f32, f32) {
     let gap = 10.0;
-    let category_w = (content.width() * 0.18).clamp(116.0, 168.0);
+    let category_w = (content.width() * 0.25).clamp(170.0, 230.0);
     let preview_w = if preview {
         (content.width() * 0.37).clamp(220.0, 420.0)
     } else {
@@ -244,6 +244,7 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
         });
     if let Some(id) = selected {
         if app.live_cat != id {
+            app.nav_collapsed = true;
             app.live_cat = id;
             app.live_page = 0;
             app.scroll_to = None;

@@ -1,4 +1,11 @@
-import { useEffect, useState } from "preact/hooks";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
+import { createPortal } from "preact/compat";
 import { Item, Category, Watched, itemKey } from "./types";
 import { TVInput } from "./input";
 
@@ -35,15 +42,40 @@ export function EpisodePicker({
   history: Watched[];
   play: (i: Item, pos: number) => void;
 }) {
-  const seasons = [...new Set(episodes.map((e) => e.season || 1))].sort(
-    (a, b) => a - b,
-  );
-  const target = resumeEpisode(episodes, history);
-  const [season, setSeason] = useState(target?.item.season || seasons[0] || 1);
-  useEffect(
-    () => setSeason(target?.item.season || seasons[0] || 1),
+  const ordered = useMemo(
+    () =>
+      [...episodes].sort(
+        (a, b) =>
+          (a.season || 1) - (b.season || 1) ||
+          (a.episode || 1) - (b.episode || 1),
+      ),
     [episodes],
   );
+  const seasons = useMemo(
+    () => [...new Set(ordered.map((e) => e.season || 1))],
+    [ordered],
+  );
+  const target = useMemo(
+    () => resumeEpisode(ordered, history),
+    [ordered, history],
+  );
+  const [season, setSeason] = useState(target?.item.season || 1);
+  const tabs = useRef<HTMLDivElement>(null),
+    list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(
+    () => setSeason(target?.item.season || seasons[0] || 1),
+    [episodes, target?.item.id],
+  );
+  useLayoutEffect(() => {
+    const selected = tabs.current?.querySelector<HTMLElement>(".selected");
+    if (selected && tabs.current)
+      tabs.current.scrollLeft = Math.max(0, selected.offsetLeft - 12);
+    const episode = list.current?.querySelector<HTMLElement>(
+      '[aria-current="true"]',
+    );
+    if (list.current)
+      list.current.scrollTop = episode ? Math.max(0, episode.offsetTop - 6) : 0;
+  }, [season, episodes]);
   return (
     <div class="series-episodes">
       {target && (
@@ -51,13 +83,15 @@ export function EpisodePicker({
           class="primary series-play"
           onClick={() => play(target.item, target.position)}
         >
-          ▶ {target.position > 1 ? "Fortsetzen" : "Abspielen"} · Staffel{" "}
-          {target.item.season || 1} · Folge {target.item.episode || 1}
+          ▶ {target.position > 1 ? "Fortsetzen" : "Abspielen"} · S
+          {target.item.season || 1} F{target.item.episode || 1}
         </button>
       )}
-      <div class="season-buttons" aria-label="Staffeln">
+      <div ref={tabs} class="season-buttons" aria-label="Staffeln">
         {seasons.map((s) => (
           <button
+            key={s}
+            data-focus-key={`season:${s}`}
             class={s === season ? "selected" : ""}
             onClick={() => setSeason(s)}
           >
@@ -65,12 +99,14 @@ export function EpisodePicker({
           </button>
         ))}
       </div>
-      <div class="episode-list">
-        {episodes
+      <div ref={list} class="episode-list">
+        {ordered
           .filter((e) => (e.season || 1) === season)
-          .sort((a, b) => (a.episode || 0) - (b.episode || 0))
           .map((e) => (
             <button
+              key={e.id}
+              data-focus-key={itemKey(e)}
+              aria-current={target?.item.id === e.id ? "true" : undefined}
               onClick={() =>
                 play(
                   e,
@@ -80,13 +116,171 @@ export function EpisodePicker({
               }
             >
               <strong>Folge {e.episode || 1}</strong>
-              <span>▷</span>
+              <span>
+                {target?.item.id === e.id && target.position > 1
+                  ? "Fortsetzen ▷"
+                  : "▷"}
+              </span>
             </button>
           ))}
       </div>
-      {!episodes.length && (
-        <p>Folgen werden geladen oder sind nicht verfügbar.</p>
+      {!episodes.length && <p>Folgen werden geladen …</p>}
+    </div>
+  );
+}
+
+function Description({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null),
+    close = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (open) close.current?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.keyCode === 10009) {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", key, true);
+    return () => document.removeEventListener("keydown", key, true);
+  }, [open]);
+  return (
+    <>
+      <p class="description-excerpt">
+        {text || "Informationen werden vom Anbieter bereitgestellt."}
+      </p>
+      {text && (
+        <button ref={trigger} class="read-more" onClick={() => setOpen(true)}>
+          Mehr lesen
+        </button>
       )}
+      {open &&
+        createPortal(
+          <div class="scrim">
+            <section
+              class="modal glass"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Beschreibung"
+            >
+              <h2>Beschreibung</h2>
+              <p>{text}</p>
+              <button
+                ref={close}
+                onClick={() => {
+                  setOpen(false);
+                  trigger.current?.focus();
+                }}
+              >
+                Schließen
+              </button>
+            </section>
+          </div>,
+          document.getElementById("app")!,
+        )}
+    </>
+  );
+}
+
+// Only the viewport and adjacent rows exist in the DOM, irrespective of catalogue size.
+function PosterGrid({
+  items,
+  selected,
+  select,
+}: {
+  items: Item[];
+  selected: Item | null;
+  select: (i: Item) => void;
+}) {
+  const root = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState(0),
+    [width, setWidth] = useState(600),
+    [height, setHeight] = useState(700);
+  const columns = Math.max(2, Math.floor(width / 146)),
+    rowHeight = 248;
+  useLayoutEffect(() => {
+    const el = root.current!;
+    const resize = () => {
+      setWidth(el.clientWidth);
+      setHeight(el.clientHeight);
+    };
+    resize();
+    const obs = new ResizeObserver(resize);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    if (root.current) root.current.scrollTop = 0;
+    setTop(0);
+  }, [items]);
+  const previousColumns = useRef(columns);
+  useLayoutEffect(() => {
+    if (previousColumns.current !== columns && root.current) {
+      const anchor =
+        Math.floor(root.current.scrollTop / rowHeight) *
+        previousColumns.current;
+      const next = Math.floor(anchor / columns) * rowHeight;
+      root.current.scrollTop = next;
+      setTop(next);
+      previousColumns.current = columns;
+    }
+  }, [columns]);
+  const start = Math.max(0, Math.floor(top / rowHeight) - 1),
+    end = Math.min(
+      Math.ceil(items.length / columns),
+      start + Math.ceil(height / rowHeight) + 3,
+    );
+  const visible = items.slice(start * columns, end * columns);
+  return (
+    <div
+      ref={root}
+      class="catalog-title-list"
+      onScroll={(e) => setTop(e.currentTarget.scrollTop)}
+    >
+      <div style={{ height: start * rowHeight }} />
+      <div
+        class="catalog-grid"
+        data-focus-grid={columns}
+        style={{ gridTemplateColumns: `repeat(${columns},minmax(0,1fr))` }}
+      >
+        {visible.map((i, n) => (
+          <button
+            key={itemKey(i)}
+            data-grid-index={start * columns + n}
+            data-focus-key={itemKey(i)}
+            class={`catalog-poster ${selected?.id === i.id ? "selected" : ""}`}
+            onClick={() => select(i)}
+          >
+            <span class="poster-art">
+              {i.logo ? (
+                <img
+                  src={i.logo}
+                  alt=""
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = "hidden";
+                  }}
+                />
+              ) : (
+                <span>▷</span>
+              )}
+            </span>
+            <strong>{i.name}</strong>
+          </button>
+        ))}
+      </div>
+      <div
+        style={{
+          height:
+            Math.max(0, Math.ceil(items.length / columns) - end) * rowHeight,
+        }}
+      />
+      {!items.length && <p>Keine passenden Titel.</p>}
     </div>
   );
 }
@@ -122,14 +316,18 @@ export function CatalogBrowser({
   toggle: (i: Item) => void;
   play: (i: Item, pos: number) => void;
 }) {
-  const filtered = items.filter(
-    (i) =>
-      (category === "all" ||
-        (category === "favorites"
-          ? favorites.some((f) => itemKey(f) === itemKey(i))
-          : i.category === category)) &&
-      i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
-  );
+  const filtered = useMemo(() => {
+    const keys = new Set(favorites.map(itemKey)),
+      q = query.toLocaleLowerCase();
+    return items.filter(
+      (i) =>
+        (category === "all" ||
+          (category === "favorites"
+            ? keys.has(itemKey(i))
+            : i.category === category)) &&
+        i.name.toLocaleLowerCase().includes(q),
+    );
+  }, [items, category, query, favorites]);
   const item = detail?.id === selected?.id ? detail : selected;
   return (
     <div class="catalog-browser">
@@ -142,7 +340,10 @@ export function CatalogBrowser({
             ...categories,
           ].map((c) => (
             <button
+              key={c.id}
+              data-focus-key={`category:${c.id}`}
               class={category === c.id ? "selected" : ""}
+              title={c.name}
               onClick={() => setCategory(c.id)}
             >
               {c.name}
@@ -159,34 +360,31 @@ export function CatalogBrowser({
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
-        <div class="catalog-title-list">
-          {filtered.map((i) => (
-            <button
-              data-focus-key={itemKey(i)}
-              class={`catalog-title ${selected?.id === i.id ? "selected" : ""}`}
-              onClick={() => select(i)}
-            >
-              {i.logo && <img src={i.logo} loading="lazy" alt="" />}
-              <strong>{i.name}</strong>
-            </button>
-          ))}
-          {!filtered.length && <p>Keine passenden Titel.</p>}
-        </div>
+        <PosterGrid items={filtered} selected={selected} select={select} />
       </section>
       <aside class="catalog-details" data-focus-zone="details">
         <h2>{item?.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
         {item ? (
-          <div class="catalog-detail-scroll">
+          <div class="catalog-detail-scroll" key={itemKey(item)}>
             <div class="catalog-heading">
               {item.logo && <img src={item.logo} alt="" />}
-              <h2>{item.name}</h2>
+              <div>
+                <h2>{item.name}</h2>
+                <button onClick={() => toggle(item)}>
+                  {favorites.some((f) => itemKey(f) === itemKey(item))
+                    ? "★ Favorit"
+                    : "☆ Merken"}
+                </button>
+              </div>
             </div>
-            <button onClick={() => toggle(item)}>
-              {favorites.some((f) => itemKey(f) === itemKey(item))
-                ? "★ Favorit"
-                : "☆ Merken"}
-            </button>
-            {item.kind !== "series" && (
+            <Description text={item.description || ""} />
+            {item.kind === "series" ? (
+              <EpisodePicker
+                episodes={episodes}
+                history={history}
+                play={play}
+              />
+            ) : (
               <button
                 class="primary"
                 onClick={() =>
@@ -199,17 +397,6 @@ export function CatalogBrowser({
               >
                 ▶ Abspielen / Fortsetzen
               </button>
-            )}
-            <p>
-              {item.description ||
-                "Informationen werden vom Anbieter bereitgestellt."}
-            </p>
-            {item.kind === "series" && (
-              <EpisodePicker
-                episodes={episodes}
-                history={history}
-                play={play}
-              />
             )}
           </div>
         ) : (

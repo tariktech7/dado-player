@@ -51,13 +51,15 @@ fn nav(ui: &mut Ui, app: &mut App, label: &str, v: View) {
         symbol,
         color,
     );
-    ui.painter().text(
-        egui::pos2(rect.left() + 40.0, y),
-        Align2::LEFT_CENTER,
-        label,
-        FontId::proportional(14.5),
-        color,
-    );
+    if !app.nav_collapsed {
+        ui.painter().text(
+            egui::pos2(rect.left() + 40.0, y),
+            Align2::LEFT_CENTER,
+            label,
+            FontId::proportional(14.5),
+            color,
+        );
+    }
 
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -91,6 +93,27 @@ fn provider_chip(ui: &mut Ui, kind: ProfileKind) {
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    if app.nav_collapsed {
+        if ui.rect_contains_pointer(ui.max_rect()) {
+            app.nav_collapsed = false;
+            ui.ctx().request_repaint();
+        }
+        ui::brand_mark(ui, 32.0);
+        ui.add_space(18.0);
+        for (label, view) in [
+            ("Startseite", View::Home),
+            ("Live TV", View::Live),
+            ("Filme", View::Movies),
+            ("Serien", View::Series),
+            ("Suche", View::Search),
+            ("Favoriten", View::Favorites),
+            ("Fortsetzen", View::Continue),
+            ("Einstellungen", View::Settings),
+        ] {
+            nav(ui, app, label, view);
+        }
+        return;
+    }
     theme::ambient(ui, ui.max_rect());
     ui.add_space(10.0);
     ui.horizontal(|ui| {

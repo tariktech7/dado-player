@@ -31,6 +31,7 @@ thread_local! {
 
 #[derive(Default)]
 struct State {
+    desired_id: Option<egui::Id>,
     current_zone: Option<u8>,
     zones: Vec<Option<u8>>,
     frame_zones: Vec<Option<u8>>,
@@ -91,6 +92,8 @@ enum Dir {
 pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, spatial: bool) {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
+        let identity_changed =
+            screen != s.screen || modal != s.modal_last || s.queued_idx.is_some();
         s.spatial = spatial;
         s.frame_rects.clear();
         s.frame_ids.clear();
@@ -176,6 +179,11 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
             }
         }
         s.idx = s.idx.min(s.count.saturating_sub(1));
+        s.desired_id = if spatial && !identity_changed {
+            s.ids.get(s.idx).copied()
+        } else {
+            None
+        };
         s.seen = 0;
         s.focus_rect = None;
     });
@@ -184,6 +192,14 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
 /// Set a semantic column for subsequent controls. Column memory uses stable widget IDs.
 pub fn set_zone(zone: u8) {
     STATE.with(|cell| cell.borrow_mut().current_zone = Some(zone));
+}
+pub fn current_zone() -> Option<u8> {
+    STATE.with(|cell| {
+        let s = cell.borrow();
+        s.active
+            .then(|| s.zones.get(s.idx).copied().flatten())
+            .flatten()
+    })
 }
 fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize> {
     let Some(zone) = s.zones.get(from).copied().flatten() else {
@@ -286,6 +302,7 @@ pub fn begin_modal(initial: usize) {
         s.modal_started = true;
         if s.reset_modal_focus {
             s.idx = initial;
+            s.desired_id = None;
             s.reset_modal_focus = false;
         }
     });
@@ -315,7 +332,10 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
         s.frame_ids.push(resp.id);
         let zone = s.current_zone;
         s.frame_zones.push(zone);
-        let focused = s.active && i == s.idx;
+        let focused = s.active && s.desired_id.map(|id| id == resp.id).unwrap_or(i == s.idx);
+        if focused {
+            s.idx = i;
+        }
 
         let raw = resp.clicked();
         if (focused || raw) && s.spatial {
@@ -502,5 +522,39 @@ mod tests {
         };
         assert_eq!(zoned_next(&s, &rects, 1, Dir::Right), Some(4));
         assert_eq!(zoned_next(&s, &rects, 2, Dir::Right), Some(3));
+    }
+    #[test]
+    fn focus_survives_virtual_rows_changing_registration_order() {
+        let wanted = egui::Id::new("wanted");
+        let other = egui::Id::new("other");
+        STATE.with(|cell| {
+            *cell.borrow_mut() = State {
+                screen: 99,
+                active: true,
+                spatial: true,
+                idx: 1,
+                count: 2,
+                ids: vec![other, wanted],
+                rects: vec![rect(0.0, 0.0), rect(100.0, 0.0)],
+                zones: vec![Some(2), Some(2)],
+                ..Default::default()
+            }
+        });
+        begin(&[RemoteKey::Ok], 99, false, false, true);
+        let ctx = egui::Context::default();
+        let mut activated = None;
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                for id in [wanted, other] {
+                    let r = ui.interact(rect(0.0, 0.0), id, egui::Sense::click());
+                    if clicked(ui, &r) {
+                        activated = Some(id);
+                    }
+                }
+            });
+        });
+        assert_eq!(activated, Some(wanted));
+        assert_eq!(index(), Some(0));
+        end();
     }
 }

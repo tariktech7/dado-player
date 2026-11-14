@@ -1,6 +1,6 @@
 # Gemeinsamer TV-UI-Vertrag
 
-Gilt für Android-TV-Modus, Samsung Tizen und zukünftiges LG webOS. Basis: Android 0.2.7 / Tizen 0.1.5.
+Gilt für Android-TV-Modus, Samsung Tizen und zukünftiges LG webOS. Basis: Android 0.2.8 / Tizen 0.1.6.
 
 ## Fläche und Spalten
 
@@ -22,7 +22,7 @@ Navigation und Senderspalte: dezenter dunkler Hintergrund (Schwarz mit Alpha 28/
 laufen über die volle Bildschirmhöhe; Bedienung bleibt innerhalb der Safe Area.
 
 Navigation: 16 % der sicheren Breite, begrenzt auf 128–176 Punkte, danach 12 Punkte Abstand.
-Kategorien: 18 % der restlichen Inhaltsbreite, begrenzt auf 116–168 Punkte. Abstand
+Kategorien im nativen TV-Modus: 25 % der restlichen Inhaltsbreite, begrenzt auf 170–230 Punkte. Abstand
 zwischen Inhaltsspalten: 10 Punkte. Vorschau: 37 % der Inhaltsbreite, begrenzt auf
 220–420 Punkte. Der Rest gehört den Sendern. Lange Titel werden gekürzt;
 die Vorschau zeigt die Details.
@@ -66,7 +66,7 @@ Android-Emulator-Aufnahmen ersetzen keine LG-/Samsung-Geräteprüfung.
 
 ## Gemeinsamer Ablauf ab 14.11.2026
 
-- Filme und Serien: Navigation → Kategorien → Titel → Details. Favoriten steht zuerst in der
+- Filme und Serien: Navigation → Kategorien → Poster-Raster → Details. Favoriten steht zuerst in der
   Kategorienliste. Der rechte Bereich bleibt auch ohne Auswahl reserviert.
 - Live-Vorschau ist immer sichtbar, mit einer leeren Hinweiskarte vor der ersten Auswahl.
 - Bereiche behalten eigene Kategorie, Suchtext, Auswahl und Scrollposition. Ein Wechsel setzt
@@ -96,3 +96,23 @@ kehrt zum Sender zurück. Die Höhe des aktuellen Elements bestimmt diese Rückk
 Das gilt für Navigation, Kategorien, Titel und Details sowie die zwei Startseitenspalten.
 Auf horizontalen Reihen bewegt Links/Rechts zunächst innerhalb der Reihe; am Ende ist die
 benachbarte Spalte erreichbar. Hoch/Runter bleibt in der aktuellen Spalte.
+
+
+## Poster und kompakte Seriendetails, Version 0.1.6 / 0.2.8 / 0.5.5
+
+Hauptnavigation: beim Fokus in Inhaltsspalten zu einer reinen Icon-Leiste einklappen;
+Rückkehr des Fokus in die Hauptnavigation klappt sie wieder auf. Tizen: 276 → 80
+Referenzpixel, Kategorien 320 Referenzpixel. Native TV-Leiste: 128–176 → 48 Punkte.
+Desktop: 224 → 60 Punkte, Aufklappen über Maus oder Pfeil links. Telefon nutzt weiterhin
+seine untere Navigation. Fokusgedächtnis bleibt bei der Größenänderung erhalten.
+
+Filme und Serien verwenden Poster mit zweizeiligem Titel darunter. Die Raster erzeugen nur
+sichtbare Reihen plus einen kleinen Puffer; keine vollständige UI-Liste eines großen Katalogs.
+Kategorien/Suchfilter werden beim Ändern ihrer Eingaben berechnet, nicht pro Player-Statusupdate.
+Einzelne Anbieter-Details werden erst nach Auswahl geladen und zwischengespeichert.
+
+Seriendetails: kompakter Kopf, Beschreibung höchstens zwei Zeilen, „Mehr lesen“ für den Volltext.
+Staffelbuttons stehen in einer horizontal scrollbaren Zeile. Die Folgenliste darunter scrollt
+unabhängig vom Kopf und bleibt sofort sichtbar. Ohne neue Auswahl springt das Öffnen anhand
+des gespeicherten Fortschritts zur passenden Staffel und Folge; die bestehende 60-Sekunden-
+Regel für den Play-Button gilt weiterhin. Staffelwechsel setzt nur die Folgenansicht um.
