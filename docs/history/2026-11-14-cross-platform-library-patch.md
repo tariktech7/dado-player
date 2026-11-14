@@ -65,3 +65,18 @@ AKTUELL.json mit SHA-256. Vorherige Tizen-Versionen nach Plattform/Version archi
 IPA wurde nach Archiv/iOS/0.2.1-Build-4 verschoben, damit sie nicht als aktueller Patch erscheint.
 Vorherige lokale EXE/APK vor der letzten Fokuskorrektur zusätzlich im Archiv gesichert.
 packaging/organize_releases.py wiederholt diese Ordnung nach späteren Builds, ohne zu löschen.
+
+
+## Abschließende Paketprüfung
+
+Android-Emulator: Spaltenrückkehr Sport → Motorsport HD → Sport → Motorsport HD
+mit D-pad geprüft. Home → rechte Favoriten-EPG-Spalte ebenfalls per D-pad erreicht.
+Windows-One-File-Endprüfung mit dem endgültigen Paket erneut bestanden.
+Aktueller iOS-Run 43601485417 (Quellstand 4e29e11) scheitert vor Jobstart am Billing.
+
+| Paket | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Dado-Player.exe | 54968037 | a9965f86636b10cb6ea65d5cf780275165aa4b2f1ffb36695c8fa0e35d3f424b |
+| Dado-Player-arm64-debug.apk | 44970535 | 2dab459aa319de408f9a8fe76fe7918b1b4ba4564195c23ada52839e239a643b |
+| Dado-Player-Tizen-0.1.5.wgt | 911676 | 9b6b15a7891f0f6d5ad3d302d11b1d2db830ff0b5480d925ca1a0cb9f47719b4 |
+| Dado-Player-Tizen-0.1.5-unsigned.wgt | 924541 | a9e84240c23f55435931367a930e3bc3d4dc9f4ca89417d62cd3bd58e85d6f5c |
