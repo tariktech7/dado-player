@@ -64,3 +64,11 @@ Die TV-Aufteilung ist auf die übliche Arbeitsfläche von 960 × 540 dp ausgeleg
 Auf Android-TV-Geräten aktiviert die Geräteerkennung den TV-Modus automatisch. Zum Ausprobieren auf anderen Android-Geräten unter Einstellungen → Fernsehen → TV-Modus „Immer“ wählen. Pfeile navigieren, OK startet Vorschau bzw. Player, Zurück schließt zuerst den Player bzw. die Vorschau. Am Hauptmenü legt Zurück die native Hauptaktivität in den Hintergrund, damit das Wiederöffnen keinen zweiten winit-Eventloop anfordert.
 
 Die Abnahme dieses Stands erfolgte im Android-Emulator mit Demodaten und Fernbedienungstasten, nicht auf echter 55-/77-Zoll-Hardware. Lesbarkeit hängt außerdem vom Sitzabstand und der Geräteskalierung ab. Die letzten iOS-Änderungen sind weiterhin mangels gestartetem macOS-Runner nicht in einer neuen IPA bestätigt.
+
+### Android TV 0.2.5: kompakte Ansicht
+
+Die TV-Navigation ist schmaler, Schrift, Logos und Karten sind kleiner. Der Kategoriename („Alle Sender“) liegt in der oberen Markenleiste. Kategorienüberschrift, Suchfeld und Vorschauüberschrift teilen sich die zweite Kopfzeile. Ein zusätzlicher Überschriften-/Senderzählerblock über der Liste entfällt.
+
+Die Liste verwendet die restliche Höhe für mindestens sieben vollständige Zeilen mit geöffneter Vorschau. Die Zeilenhöhe wird aus `(Listenhöhe - 6 × 4 dp Abstand) / 7` berechnet und auf 48–58 dp begrenzt. Die drei Textzeilen werden nach den tatsächlichen Schriftmetriken platziert. Auf größeren logischen Arbeitsflächen bleiben zusätzliche Zeilen sichtbar. Menü und Kategorien verwenden kompakte Zeilen und einen dezenteren Fernbedienungsfokus.
+
+Der Layouttest prüft mindestens sieben Sender sowie die Ausrichtung von Marken-/Kategorientitel und Kategorien-/Suchzeile. Full-HD- und 4K-Aufnahmen mit Vorschau und Demodaten bestätigen sieben vollständige Zeilen im Emulator. Android-Version 0.2.5, Build 9; Windows und iOS wurden für diesen TV-Änderungssatz nicht neu paketiert.
