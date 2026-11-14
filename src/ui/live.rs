@@ -313,7 +313,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                 if favorite {
                     components::Icon::StarOn
                 } else {
-                    components::Icon::StarOff
+                    components::Icon::Star
                 },
                 theme::accent(ui),
             );
