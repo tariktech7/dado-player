@@ -455,7 +455,8 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
      * activity can see it, but the system back callback still arrives.
      *
      * <p>The callback stays enabled. When the UI has nothing to pop, back means
-     * "leave the app", which for a single-activity app is {@code finish()}.
+     * "leave the app". Keep the native root activity in its background task:
+     * winit's process-wide event loop cannot be recreated after finish().
      */
     private void installBackCallback() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -465,7 +466,7 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
                 if (nativeCanGoBack()) {
                     nativeRequestBack();
                 } else {
-                    finish();
+                    moveTaskToBack(true);
                 }
             }
         });
@@ -669,7 +670,7 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
         if (nativeCanGoBack()) {
             nativeRequestBack();
         } else {
-            super.onBackPressed();
+            moveTaskToBack(true);
         }
     }
 }
