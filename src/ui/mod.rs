@@ -14,7 +14,16 @@ pub mod vod;
 
 use crate::app::App;
 use crate::theme;
-use egui::{Align2, Color32, FontId, Image, Response, RichText, Rounding, Sense, Stroke, Ui, Vec2};
+use egui::{Align2, Color32, FontId, Response, RichText, Rounding, Sense, Stroke, Ui, Vec2};
+
+/// Center an entire image without cropping or changing its aspect ratio.
+pub fn contain_rect(bounds: egui::Rect, image_size: Vec2) -> egui::Rect {
+    if image_size.x <= 0.0 || image_size.y <= 0.0 || !image_size.is_finite() {
+        return egui::Rect::from_center_size(bounds.center(), Vec2::ZERO);
+    }
+    let scale = (bounds.width() / image_size.x).min(bounds.height() / image_size.y);
+    egui::Rect::from_center_size(bounds.center(), image_size * scale)
+}
 
 /// Width of one poster card (image + padding).
 pub const CARD_W: f32 = 148.0;
@@ -75,7 +84,13 @@ pub fn image_or_placeholder(app: &mut App, ui: &mut Ui, key: &str, url: &str, si
     if !url.is_empty() {
         app.request_image(key.to_string(), url.to_string());
         if let Some(tex) = app.image(key) {
-            ui.add(Image::new(tex).fit_to_exact_size(size));
+            let (bounds, _) = ui.allocate_exact_size(size, Sense::hover());
+            ui.painter().image(
+                tex.id(),
+                contain_rect(bounds, tex.size_vec2()),
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
             return;
         }
     }
@@ -310,5 +325,27 @@ pub fn fmt_time(secs: f64) -> String {
         format!("{}:{:02}:{:02}", h, m, sec)
     } else {
         format!("{:02}:{:02}", m, sec)
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    #[test]
+    fn logos_keep_their_aspect_ratio_and_stay_inside_the_slot() {
+        let slot = egui::Rect::from_min_size(egui::pos2(17.0, 23.0), egui::vec2(34.0, 34.0));
+        for size in [
+            egui::vec2(320.0, 80.0),
+            egui::vec2(80.0, 160.0),
+            egui::vec2(40.0, 40.0),
+        ] {
+            let fitted = super::contain_rect(slot, size);
+            assert!(slot.contains_rect(fitted));
+            assert_eq!(fitted.center(), slot.center());
+            assert!((fitted.width() / fitted.height() - size.x / size.y).abs() < 0.001);
+        }
+        assert_eq!(
+            super::contain_rect(slot, egui::Vec2::ZERO).size(),
+            egui::Vec2::ZERO
+        );
     }
 }

@@ -2765,6 +2765,26 @@ mod tests {
         app.active_profile = Some(Profile::new("TV fixture", ProfileKind::M3u));
         let playlist = format!("#EXTM3U\n{}", (1..=16).map(|i| format!("#EXTINF:-1 group-title=\"Sport\",Dado Kanal {i:02}\nhttps://example.invalid/{i}\n")).collect::<String>());
         app.library = crate::client::parse_m3u(&playlist);
+        let now = chrono::Utc::now().timestamp();
+        for channel in &app.library.channels {
+            app.epg.insert(
+                channel.id,
+                vec![
+                    crate::types::EpgEntry {
+                        title: "Heute".into(),
+                        description: String::new(),
+                        start: now - 60,
+                        end: now + 60,
+                    },
+                    crate::types::EpgEntry {
+                        title: "Morgen".into(),
+                        description: String::new(),
+                        start: now + 60,
+                        end: now + 120,
+                    },
+                ],
+            );
+        }
         app.tv = true;
         app.tv_nav = 0;
         app.view = View::Live;
@@ -2805,11 +2825,11 @@ mod tests {
             let channels: Vec<_> = text
                 .iter()
                 .filter(|(name, rect)| {
-                    name.starts_with("Dado Kanal ") && rect.center().y + 40.0 <= height * 0.95
+                    name.starts_with("Dado Kanal ") && rect.center().y + 25.0 <= height * 0.95
                 })
                 .collect();
             assert!(
-                channels.len() >= 7,
+                channels.len() >= 10,
                 "Only {} complete channel rows at {width}x{height}: {text:?}",
                 channels.len()
             );
@@ -2825,11 +2845,18 @@ mod tests {
                     < 2.0
             );
             assert!(
-                (rect_for("Kategorien").center().y - rect_for("Sender suchen").center().y).abs()
+                (rect_for("Kategorien").center().y - rect_for("Alle Sender").center().y).abs()
                     < 2.0,
-                "Category/search alignment: {:?} {:?}",
+                "Category/title alignment: {:?} {:?}",
                 rect_for("Kategorien"),
-                rect_for("Sender suchen")
+                rect_for("Alle Sender")
+            );
+            let current = rect_for("Jetzt: Heute");
+            let next = rect_for("Danach: Morgen");
+            assert!((current.center().y - next.center().y).abs() < 1.0);
+            assert!(
+                next.left() - current.right() >= 23.0,
+                "EPG columns overlap: {current:?} {next:?}"
             );
         }
     }

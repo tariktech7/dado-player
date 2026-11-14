@@ -1,6 +1,8 @@
 # Dado Player — Samsung Smart TV (Tizen) Porting Plan
 
-**Status:** single source of truth for TV work. Supersedes all earlier notes in this folder.
+**Status: HISTORISCH.** Ersetzt durch [README.md](README.md), [UI-SPEC.md](UI-SPEC.md)
+und [TECHNICAL-PLAN.md](TECHNICAL-PLAN.md) für LG webOS **und** Samsung Tizen.
+Der ursprüngliche Stand ist unter docs/history/2026-11-07-samsung-porting-plan.md erhalten.
 **Basis:** the TV architecture and packaging workflow of IPTVnator
 (`references/iptvnator/docs/architecture/tv-application.md`,
 `references/iptvnator/apps/tv/tizen/README.md`,

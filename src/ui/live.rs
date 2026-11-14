@@ -55,23 +55,44 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 }
 
 /// TV keeps the category title in the brand row and search in the column
-/// header, leaving the full remaining height for seven or more channel rows.
-pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
-    number_jump(app, ui);
-    ui.ctx()
-        .request_repaint_after(std::time::Duration::from_secs(30));
+/// header, leaving the full remaining height for ten or more channel rows.
+pub fn paint_tv_columns(ui: &Ui, content: Rect, nav: Rect, preview: bool) {
+    let (category_w, channel_w, gap) = tv_columns(content, preview);
+    let screen = ui.ctx().screen_rect();
+    let channel_x = content.left() + category_w + gap;
+    let shade = Color32::from_black_alpha(28);
+    for (left, right) in [
+        (screen.left(), nav.right() + 6.0),
+        (channel_x - gap * 0.5, channel_x + channel_w + gap * 0.5),
+    ] {
+        ui.painter().rect_filled(
+            Rect::from_min_max(pos2(left, screen.top()), pos2(right, screen.bottom())),
+            0.0,
+            shade,
+        );
+    }
+}
+
+fn tv_columns(content: Rect, preview: bool) -> (f32, f32, f32) {
     let gap = 10.0;
     let category_w = (content.width() * 0.18).clamp(116.0, 168.0);
-    let preview_w = if app.preview.is_some() {
+    let preview_w = if preview {
         (content.width() * 0.37).clamp(220.0, 420.0)
     } else {
         0.0
     };
-    let channel_w = (content.width()
-        - category_w
-        - preview_w
-        - gap * if app.preview.is_some() { 2.0 } else { 1.0 })
-    .max(1.0);
+    (
+        category_w,
+        (content.width() - category_w - preview_w - gap * if preview { 2.0 } else { 1.0 }).max(1.0),
+        gap,
+    )
+}
+
+pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
+    number_jump(app, ui);
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_secs(30));
+    let (category_w, channel_w, gap) = tv_columns(content, app.preview.is_some());
     let channels_x = content.left() + category_w + gap;
     let title = match app.live_cat.as_str() {
         "all" => "Alle Sender",
@@ -88,14 +109,14 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         ui,
         pos2(channels_x, title_row.center().y),
         title,
-        tokens::bold(20.0),
+        tokens::bold(18.0),
         tokens::text(ui),
         channel_w,
     );
-    let header_h = 32.0;
+    let header_h = 28.0;
     components::draw_line(
         ui,
-        pos2(content.left(), content.top() + header_h * 0.5),
+        pos2(content.left(), title_row.center().y),
         "Kategorien",
         tokens::medium(16.0),
         tokens::text(ui),
@@ -117,10 +138,10 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
     if focus::clicked(&search_ui, &query) {
         query.request_focus();
     }
-    let body_y = content.top() + header_h + 6.0;
+    let body_y = content.top() + header_h + 4.0;
     let mut category_ui = ui.child_ui(
         Rect::from_min_max(
-            pos2(content.left(), body_y),
+            pos2(content.left(), content.top()),
             pos2(content.left() + category_w, content.bottom()),
         ),
         Layout::top_down(Align::Min),
@@ -134,7 +155,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         ),
         Layout::top_down(Align::Min),
     );
-    channel_ui.spacing_mut().item_spacing.y = 4.0;
+    channel_ui.spacing_mut().item_spacing.y = 3.0;
     channels(app, &mut channel_ui, false);
     if app.preview.is_some() {
         let preview_rect = Rect::from_min_max(
@@ -276,20 +297,16 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 .color(theme::muted(ui)),
         );
     }
-    let tv_row_h = ((ui.available_height() - 6.0 * 4.0) / 7.0).clamp(48.0, 58.0);
-    let (name_size, epg_size) = if tv_row_h < 54.0 {
-        (14.0, 11.5)
-    } else {
-        (16.0, 12.5)
-    };
+    let tv_row_h = ((ui.available_height() - 9.0 * 3.0) / 10.0).clamp(34.0, 40.0);
+    let (name_size, epg_size) = (13.0, 10.0);
     let (name_y, current_y, next_y) = ui.fonts(|fonts| {
         let name_h = fonts.row_height(&tokens::reg(name_size));
         let epg_h = fonts.row_height(&tokens::reg(epg_size));
-        let top = ((tv_row_h - name_h - 2.0 * epg_h) * 0.5).max(0.0);
+        let top = ((tv_row_h - name_h - epg_h) * 0.5).max(0.0);
         (
             top + name_h * 0.5,
             top + name_h + epg_h * 0.5,
-            top + name_h + epg_h * 1.5,
+            top + name_h + epg_h * 0.5,
         )
     });
     let now = chrono::Utc::now().timestamp();
@@ -322,8 +339,8 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             .request_repaint_after(std::time::Duration::from_millis(250));
                     }
                     let logo = Rect::from_min_size(
-                        r.rect.min + vec2(8.0, if tv { (tv_row_h - 28.0) * 0.5 } else { 15.0 }),
-                        Vec2::splat(if tv { 28.0 } else { 34.0 }),
+                        r.rect.min + vec2(8.0, if tv { (tv_row_h - 24.0) * 0.5 } else { 15.0 }),
+                        Vec2::splat(if tv { 24.0 } else { 34.0 }),
                     );
                     components::thumb(
                         app,
@@ -337,7 +354,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     let width = (r.rect.right() - x - 10.0).max(1.0);
                     let (current, next) =
                         epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now);
-                    for (offset, text, size, color) in [
+                    for (line, (offset, text, size, color)) in [
                         (
                             if tv { name_y } else { 20.0 },
                             channel.name,
@@ -362,14 +379,23 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             if tv { epg_size } else { 12.0 },
                             theme::muted(ui),
                         ),
-                    ] {
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    {
+                        let epg_width = ((width - 24.0) * 0.5).max(1.0);
+                        let line_x = if tv && line == 2 {
+                            x + epg_width + 24.0
+                        } else {
+                            x
+                        };
                         components::draw_line(
                             ui,
-                            pos2(x, r.rect.top() + offset),
+                            pos2(line_x, r.rect.top() + offset),
                             &text,
                             tokens::reg(size),
                             color,
-                            width,
+                            if tv && line > 0 { epg_width } else { width },
                         );
                     }
                 }

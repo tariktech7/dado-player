@@ -646,9 +646,7 @@ fn channel_logo(app: &mut App, ui: &Ui, key: &str, url: &str, rect: egui::Rect, 
         let cache = format!("home-channel:{key}");
         app.request_image(cache.clone(), url.to_owned());
         if let Some(tex) = app.image(&cache) {
-            let size = tex.size_vec2();
-            let scale = (rect.width() / size.x).min(rect.height() / size.y);
-            let image_rect = egui::Rect::from_center_size(rect.center(), size * scale);
+            let image_rect = crate::ui::contain_rect(rect, tex.size_vec2());
             ui.painter().image(
                 tex.id(),
                 image_rect,

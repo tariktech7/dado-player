@@ -167,6 +167,9 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
         .frame(Frame::none().fill(bg))
         .show(ctx, |ui| {
             ui.painter().rect_filled(ctx.screen_rect(), 0.0, bg);
+            if app.tv_nav == 0 {
+                crate::ui::live::paint_tv_columns(ui, g.content, g.headers, app.preview.is_some());
+            }
             paint_brand(ui, g.brand, app);
 
             let mut metas: Vec<Meta> = Vec::new();
@@ -402,7 +405,11 @@ fn tv_card(
         if let Some(tex) = app.image(&c.key) {
             p.image(
                 tex.id(),
-                art,
+                if c.key.starts_with("logo:") {
+                    crate::ui::contain_rect(art, tex.size_vec2())
+                } else {
+                    art
+                },
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
             );

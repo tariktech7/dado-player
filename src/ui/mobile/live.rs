@@ -276,7 +276,7 @@ pub fn epg_sheet(app: &mut App, ctx: &Context, l: &Layout) {
                 if let Some(tex) = app.image(&logo_key) {
                     ui.painter().image(
                         tex.id(),
-                        logo_r,
+                        crate::ui::contain_rect(logo_r, tex.size_vec2()),
                         Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                         Color32::WHITE,
                     );

@@ -1,5 +1,14 @@
 # Dado Player
 
+Aktuell: Android **0.2.6 / Build 10**, Windows portable **0.5.3**. TV-Kopfzeilen liegen
+auf einer Höhe, Navigation und Sender haben dezent dunklere Spalten. Kompakte
+zweizeilige Senderkarten zeigen Jetzt/Danach nebeneinander; bei 960×540 Punkten
+passen mindestens zehn vollständige Zeilen mit Vorschau. Senderlogos werden in
+Listen, Suche, Verlauf, Favoriten und auf der Startseite proportional eingepasst.
+LG-/Samsung-Vorbereitung: [SmartTV/README.md](SmartTV/README.md).
+Die veröffentlichte iOS-IPA bleibt ausdrücklich **0.2.1 / Build 4**; Änderungen am
+gemeinsamen Quellcode sind noch nicht in einer neuen IPA verfügbar.
+
 [Downloads für Windows, Android und iOS auf GitHub Releases](https://github.com/tariktech7/dado-player/releases/latest)
 
 Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Datenmodell und egui-Oberfläche. Alle drei Apps verwenden dieselbe Crate und dieselbe Cargo.lock.
@@ -12,7 +21,7 @@ Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Daten
 
 Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wird mit `packaging/build_portable.py` aus dem Inhalt von dist gebaut. Der Cargo-Build aktualisiert dist nicht. Android benötigt JDK, Android SDK, NDK, cargo-ndk und für den lokalen signierten Build den vorhandenen Projektschlüssel. Details zum Swift-Host stehen in [ios/README.md](ios/README.md).
 
-[AGENTS.md](AGENTS.md) beschreibt Zuständigkeiten und Prüfungen. SmartTV/ enthält den separaten Portierungsplan. references/ enthält Vergleichsmaterial. probe/ und .workbuddy-ai/ enthalten Prüfwerkzeuge und historische Aufnahmen. Frühere Baupläne und Prüfberichte stehen unter docs/history/.
+[AGENTS.md](AGENTS.md) beschreibt Zuständigkeiten und Prüfungen. [SmartTV/README.md](SmartTV/README.md) enthält die gemeinsame UI- und Technikvorbereitung für LG webOS und Samsung Tizen. references/ enthält Vergleichsmaterial. probe/ und .workbuddy-ai/ enthalten Prüfwerkzeuge und historische Aufnahmen. Frühere Baupläne und Prüfberichte stehen unter docs/history/.
 
 ## Portable Windows-Updates
 

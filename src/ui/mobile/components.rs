@@ -711,7 +711,7 @@ pub fn thumb(app: &mut App, ui: &Ui, key: &str, url: &str, rect: Rect, title: &s
         if let Some(tex) = app.image(key) {
             ui.painter().image(
                 tex.id(),
-                rect,
+                crate::ui::contain_rect(rect, tex.size_vec2()),
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
             );

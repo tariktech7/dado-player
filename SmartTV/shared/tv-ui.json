@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "status": "porting-contract-not-runtime-input",
+  "referenceCanvas": {"width": 960, "height": 540, "unit": "logical-points"},
+  "safeArea": {"fraction": 0.05, "minimum": 20},
+  "header": {"brandHeight": 30, "titleFont": 18, "categoryFont": 16, "searchHeight": 28, "searchBottomGap": 4},
+  "columns": {"navigationFraction": 0.16, "navigationMin": 128, "navigationMax": 176, "navigationGap": 12, "categoryFraction": 0.18, "categoryMin": 116, "categoryMax": 168, "previewFraction": 0.37, "previewMin": 220, "previewMax": 420, "gap": 10, "darkOverlayAlpha": 28, "darkColumns": ["navigation", "channels"]},
+  "channels": {"targetVisibleRows": 10, "rowMin": 34, "rowMax": 40, "rowGap": 3, "nameFont": 13, "epgFont": 10, "epgColumns": 2, "epgColumnGap": 24, "logoSlot": 24, "logoFit": "contain"}
+}
