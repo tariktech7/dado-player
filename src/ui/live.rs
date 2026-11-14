@@ -11,20 +11,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .request_repaint_after(std::time::Duration::from_secs(30));
     let tv = app.tv;
     let available = ui.available_rect_before_wrap();
-    let gap = if tv { 18.0 } else { 12.0 };
+    let gap = 12.0;
     let width = available.width().max(1.0);
     let has_preview = app.preview.is_some();
-    let category_w = (width * 0.22).clamp(
-        if tv { 140.0 } else { 130.0 },
+    let category_w = (width * if tv { 0.19 } else { 0.22 }).clamp(
+        if tv { 118.0 } else { 130.0 },
         if tv { 250.0 } else { 220.0 },
     );
     let preview_w = if has_preview {
-        (width * 0.40).clamp(240.0, 600.0)
+        (width * 0.40)
+            .clamp(180.0, 600.0)
+            .min((width - category_w - gap * 2.0) * 0.55)
     } else {
         0.0
     };
-    let channel_w = (width - category_w - preview_w - gap * if has_preview { 2.0 } else { 1.0 })
-        .max(if tv { 240.0 } else { 220.0 });
+    let channel_w =
+        (width - category_w - preview_w - gap * if has_preview { 2.0 } else { 1.0 }).max(1.0);
     egui::ScrollArea::horizontal()
         .id_source("live-columns-horizontal")
         .auto_shrink([false, false])
@@ -78,7 +80,11 @@ fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Re
 
 fn categories(app: &mut App, ui: &mut Ui) {
     let tv = app.tv;
-    ui.heading("Kategorien");
+    ui.label(
+        RichText::new("Kategorien")
+            .size(if tv { 20.0 } else { 22.0 })
+            .strong(),
+    );
     ui.add_space(10.0);
     let mut list = vec![
         ("all".to_owned(), "Alle Sender".to_owned()),
@@ -99,7 +105,7 @@ fn categories(app: &mut App, ui: &mut Ui) {
                 let r = row(
                     ui,
                     ("category", &id),
-                    if tv { 62.0 } else { 44.0 },
+                    if tv { 48.0 } else { 44.0 },
                     app.live_cat == id,
                 );
                 if ui.is_rect_visible(r.rect) {
@@ -107,7 +113,7 @@ fn categories(app: &mut App, ui: &mut Ui) {
                         ui,
                         pos2(r.rect.left() + 12.0, r.rect.center().y),
                         &name,
-                        tokens::medium(if tv { 22.0 } else { 14.0 }),
+                        tokens::medium(if tv { 18.0 } else { 14.0 }),
                         ui.visuals().text_color(),
                         r.rect.width() - 24.0,
                     );
@@ -187,7 +193,7 @@ fn channels(app: &mut App, ui: &mut Ui) {
                 let r = row(
                     ui,
                     ("channel", id),
-                    if tv { 116.0 } else { 90.0 },
+                    if tv { 96.0 } else { 90.0 },
                     app.is_previewing(&key),
                 );
                 if app.scroll_to == Some(id) {
@@ -203,7 +209,7 @@ fn channels(app: &mut App, ui: &mut Ui) {
                     }
                     let logo = Rect::from_min_size(
                         r.rect.min + vec2(10.0, 15.0),
-                        Vec2::splat(if tv { 46.0 } else { 34.0 }),
+                        Vec2::splat(if tv { 38.0 } else { 34.0 }),
                     );
                     components::thumb(
                         app,
@@ -221,11 +227,11 @@ fn channels(app: &mut App, ui: &mut Ui) {
                         (
                             if tv { 24.0 } else { 20.0 },
                             channel.name,
-                            if tv { 22.0 } else { 15.0 },
+                            if tv { 20.0 } else { 15.0 },
                             ui.visuals().text_color(),
                         ),
                         (
-                            if tv { 56.0 } else { 45.0 },
+                            if tv { 50.0 } else { 45.0 },
                             current.map(|s| format!("Jetzt: {s}")).unwrap_or_else(|| {
                                 if app.epg_pending(id) {
                                     "EPG wird geladen …".into()
@@ -233,13 +239,13 @@ fn channels(app: &mut App, ui: &mut Ui) {
                                     "Kein aktuelles EPG".into()
                                 }
                             }),
-                            if tv { 18.0 } else { 12.0 },
+                            if tv { 16.0 } else { 12.0 },
                             theme::muted(ui),
                         ),
                         (
-                            if tv { 84.0 } else { 68.0 },
+                            if tv { 76.0 } else { 68.0 },
                             next.map(|s| format!("Danach: {s}")).unwrap_or_default(),
-                            if tv { 18.0 } else { 12.0 },
+                            if tv { 16.0 } else { 12.0 },
                             theme::muted(ui),
                         ),
                     ] {

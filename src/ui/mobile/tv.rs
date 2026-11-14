@@ -63,13 +63,13 @@ const SHORT_HEADERS: [&str; HEADER_COUNT] = [
 // ---- 10-foot scale (§23.4 P1) ----
 /// 5 % safe area on each edge, with a floor for small windows.
 const OVERSCAN_MIN: f32 = 20.0;
-const BRAND_H: f32 = 52.0;
-const HEADER_ROW_H: f32 = 62.0;
-const COLUMN_GAP: f32 = 20.0;
+const BRAND_H: f32 = 40.0;
+const HEADER_ROW_H: f32 = 46.0;
+const COLUMN_GAP: f32 = 16.0;
 const RAIL_GAP: f32 = 16.0;
 const MAX_CARDS: usize = 24;
 const FS_BRAND: f32 = 26.0;
-const FS_HEADER: f32 = 24.0;
+const FS_HEADER: f32 = 20.0;
 const FS_HERO: f32 = 38.0;
 const FS_HERO_SUB: f32 = 24.0;
 const FS_RAIL: f32 = 24.0;
@@ -87,7 +87,7 @@ fn geom(ctx: &Context) -> Geom {
     let r = ctx.screen_rect();
     let ox = (r.width() * 0.05).max(OVERSCAN_MIN);
     let oy = (r.height() * 0.05).max(OVERSCAN_MIN);
-    let rail_w = ((r.width() - 2.0 * ox) * 0.26).clamp(160.0, 280.0);
+    let rail_w = ((r.width() - 2.0 * ox) * 0.20).clamp(156.0, 224.0);
     let content_x = ox + rail_w + COLUMN_GAP;
     let content_right = (r.max.x - ox).max(content_x + 120.0);
     let brand = Rect::from_min_size(pos2(ox, oy), vec2(content_right - ox, BRAND_H));
@@ -191,21 +191,11 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
         });
 }
 
-fn paint_brand(ui: &Ui, rect: Rect, app: &App) {
-    let p = ui.painter();
-    // Brand mark: accent square with a play triangle, painted rather than typed
-    // so it cannot turn into a missing glyph.
+fn paint_brand(ui: &mut Ui, rect: Rect, app: &App) {
+    let p = ui.painter().clone();
     let mark = Rect::from_min_size(pos2(rect.left(), rect.center().y - 17.0), Vec2::splat(34.0));
-    p.rect_filled(mark, Rounding::same(9.0), tokens::accent_fill());
-    p.add(egui::Shape::convex_polygon(
-        vec![
-            pos2(mark.left() + 12.0, mark.top() + 8.0),
-            pos2(mark.right() - 9.0, mark.center().y),
-            pos2(mark.left() + 12.0, mark.bottom() - 8.0),
-        ],
-        Color32::WHITE,
-        Stroke::NONE,
-    ));
+    let mut brand_ui = ui.child_ui(mark, egui::Layout::top_down(Align::Min));
+    crate::ui::brand_mark(&mut brand_ui, 34.0);
     components::draw_line(
         ui,
         pos2(mark.right() + 14.0, rect.center().y),
@@ -240,8 +230,9 @@ fn paint_brand(ui: &Ui, rect: Rect, app: &App) {
 
 fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
     let w = ui.available_width();
-    let narrow = w < 210.0;
-    let fs = if narrow { 20.0 } else { FS_HEADER };
+    let narrow = w < 156.0;
+    let fs = FS_HEADER;
+    ui.spacing_mut().item_spacing.y = 4.0;
     let mut activate: Option<usize> = None;
     for (i, (ic, label, desc)) in HEADERS.iter().enumerate() {
         let (rect, resp) = ui.allocate_exact_size(vec2(w, HEADER_ROW_H), Sense::click());
@@ -270,7 +261,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         };
         components::icon(
             ui,
-            Rect::from_center_size(pos2(rect.left() + 30.0, rect.center().y), Vec2::splat(26.0)),
+            Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), Vec2::splat(22.0)),
             *ic,
             if selected {
                 tokens::accent_text(ui)
@@ -280,7 +271,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         );
         components::draw_line(
             ui,
-            pos2(rect.left() + 56.0, rect.center().y),
+            pos2(rect.left() + 40.0, rect.center().y),
             if narrow { SHORT_HEADERS[i] } else { label },
             if selected {
                 tokens::bold(fs)
@@ -288,7 +279,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
                 tokens::medium(fs)
             },
             color,
-            (w - 62.0).max(40.0),
+            (w - 46.0).max(40.0),
         );
         metas.push(Meta {
             title: label.to_string(),

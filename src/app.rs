@@ -2749,6 +2749,64 @@ fn redact(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn tv_live_navigation_and_preview_fit_the_standard_tv_canvas() {
+        use egui::epaint::Shape;
+        fn labels(shape: &Shape, out: &mut Vec<(String, egui::Rect)>) {
+            match shape {
+                Shape::Text(t) => out.push((
+                    t.galley.job.text.clone(),
+                    egui::Rect::from_min_size(t.pos, t.galley.size()),
+                )),
+                Shape::Vec(shapes) => shapes.iter().for_each(|s| labels(s, out)),
+                _ => {}
+            }
+        }
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("TV fixture", ProfileKind::M3u));
+        app.library = crate::client::parse_m3u(
+            "#EXTM3U\n#EXTINF:-1 group-title=\"Sport\",Dado Sport HD\nhttps://example.invalid/test",
+        );
+        app.tv = true;
+        app.tv_nav = 0;
+        app.view = View::Live;
+        app.preview = Some(PlayItem {
+            title: "Dado Sport HD".into(),
+            url: "https://example.invalid/test".into(),
+            kind: PlayKind::Live,
+            progress_key: "live:1".into(),
+        });
+        for (width, height) in [(960.0, 540.0), (1280.0, 720.0)] {
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            crate::theme::apply(&ctx, true);
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, height),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| crate::ui::mobile::show(&mut app, ctx),
+            );
+            let mut text = Vec::new();
+            for shape in &output.shapes {
+                labels(&shape.shape, &mut text);
+            }
+            for required in ["Kategorien", "Einstellungen", "Vorschau"] {
+                let (_, rect) = text
+                    .iter()
+                    .find(|(name, _)| name == required)
+                    .unwrap_or_else(|| panic!("Missing {required}: {text:?}"));
+                assert!(
+                    rect.right() <= width * 0.95 + 1.0 && rect.bottom() <= height * 0.95 + 1.0,
+                    "{required} is clipped at {width}x{height}: {rect:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn mobile_home_keeps_channels_compact_and_favorites_separate_at_phone_sizes() {
         use egui::epaint::Shape;
         fn texts(shape: &Shape, out: &mut Vec<String>) {
