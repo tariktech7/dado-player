@@ -253,11 +253,11 @@ extern "system" {
 #[link(name = "gdiplus")]
 extern "system" {
     fn GdiplusStartup(
-        token: *mut u32,
+        token: *mut usize,
         input: *const GdiplusStartupInput,
         output: *mut std::ffi::c_void,
     ) -> u32;
-    fn GdiplusShutdown(token: u32);
+    fn GdiplusShutdown(token: usize);
     fn GdipCreateFromHDC(hdc: HDC, graphics: *mut *mut std::ffi::c_void) -> u32;
     fn GdipDeleteGraphics(graphics: *mut std::ffi::c_void) -> u32;
     fn GdipSetSmoothingMode(graphics: *mut std::ffi::c_void, mode: i32) -> u32;
@@ -351,7 +351,7 @@ static LOGO: OnceLock<Option<LogoBitmap>> = OnceLock::new();
 // Spinner angle in degrees, advanced by the timer on the UI thread.
 static SPIN_ANGLE: AtomicU32 = AtomicU32::new(0);
 // GDI+ token, valid for the lifetime of the splash window.
-static GDI_TOKEN: OnceLock<u32> = OnceLock::new();
+static GDI_TOKEN: OnceLock<usize> = OnceLock::new();
 
 fn decode_logo() -> Option<LogoBitmap> {
     let bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/logo.rgba"));
@@ -578,7 +578,7 @@ impl Splash {
             }
 
             // Start GDI+ once for the splash's lifetime.
-            let mut token = 0u32;
+            let mut token = 0usize;
             let input = GdiplusStartupInput {
                 gdiplus_version: 1,
                 debug_event_callback: 0,
@@ -1009,6 +1009,36 @@ fn main() {
 
 #[cfg(test)]
 mod update_tests {
+    #[test]
+    fn gdiplus_uses_pointer_sized_token_without_overwriting_neighbors() {
+        #[repr(C)]
+        struct Guard {
+            before: usize,
+            token: usize,
+            after: usize,
+        }
+        let mut guard = Guard {
+            before: 0x1357_2468,
+            token: 0,
+            after: 0x2468_1357,
+        };
+        let input = super::GdiplusStartupInput {
+            gdiplus_version: 1,
+            debug_event_callback: 0,
+            suppress_background_thread: 0,
+            suppress_external_codecs: 0,
+        };
+        unsafe {
+            assert_eq!(
+                super::GdiplusStartup(&mut guard.token, &input, std::ptr::null_mut()),
+                0
+            );
+            assert_ne!(guard.token, 0);
+            assert_eq!(guard.before, 0x1357_2468);
+            assert_eq!(guard.after, 0x2468_1357);
+            super::GdiplusShutdown(guard.token);
+        }
+    }
     #[test]
     fn detects_same_size_corruption_in_cached_runtime() {
         let dir = tempfile::tempdir().unwrap();
