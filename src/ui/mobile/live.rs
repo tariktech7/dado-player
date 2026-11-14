@@ -19,31 +19,43 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
     // ---- category chips ----
     let mut labels: Vec<(String, bool)> = Vec::with_capacity(app.library.live_categories.len() + 1);
     labels.push(("Alle".to_string(), app.live_cat == "all"));
+    labels.push(("Favoriten".to_string(), app.live_cat == "favorites"));
     for c in &app.library.live_categories {
         labels.push((c.name.clone(), app.live_cat == c.id));
     }
     if let Some(i) = components::chip_row(ui, &labels, l.pad) {
         app.live_cat = if i == 0 {
             "all".to_string()
+        } else if i == 1 {
+            "favorites".to_string()
         } else {
-            app.library.live_categories[i - 1].id.clone()
+            app.library.live_categories[i - 2].id.clone()
         };
         app.live_page = 0;
     }
     ui.add_space(6.0);
 
     // ---- filter ----
-    let cat = if app.live_cat == "all" {
+    let favorites_only = app.live_cat == "favorites";
+    let cat = if app.live_cat == "all" || favorites_only {
         None
     } else {
         Some(app.live_cat.clone())
     };
     let q = app.live_q.trim().to_lowercase();
+    let mut favorite_keys: Vec<_> = if favorites_only {
+        app.favorites.iter().collect()
+    } else {
+        Vec::new()
+    };
+    favorite_keys.sort_unstable();
     let key = ui.id().with((
         "channels",
         app.catalog_generation(),
         &cat,
         &q,
+        favorites_only,
+        favorite_keys,
         app.library.channels.len(),
     ));
     let slot = ui.id().with("filtered-channels");
@@ -58,6 +70,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 .iter()
                 .enumerate()
                 .filter(|(_, c)| cat.as_ref().is_none_or(|id| &c.category_id == id))
+                .filter(|(_, c)| !favorites_only || app.is_favorite(&format!("live:{}", c.id)))
                 .filter(|(_, c)| q.is_empty() || c.name.to_lowercase().contains(&q))
                 .map(|(i, _)| i)
                 .collect();

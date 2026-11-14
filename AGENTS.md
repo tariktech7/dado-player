@@ -9,6 +9,7 @@ Browser-API-Simulation, gültige Gerätesignierung und echte TV-Wiedergabe getre
 Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als funktionierendes Ziel ausgeben.
 
 - Gemeinsame Funktionen in src/ entwickeln. Betriebssystem-Aufrufe in src/platform/windows, android oder ios kapseln. Native Hosts, Signierung und Paketierung gehören zum jeweiligen Ziel. Die gemeinsamen Benutzerabläufe über die Plattform-Fassade anbinden.
+- Touch-Oberflächen für Filme/Serien verwenden eigene volle Seiten (library::show_touch), keine verkleinerten Desktop-/TV-Spalten. Kategorien als Dropdown, Suche im Tab, Details mit Zurück und Rand-Wischgeste. Folgen mit dem gesamten Detailinhalt vertikal scrollen; nur Staffelbuttons horizontal. TV-Modus behält seine Spalten und Fokuszonen.
 - Ein Build-Einstieg pro Ziel gemäß README.md. Bestehende Aufrufe unter probe/ sind Weiterleitungen für ältere Werkzeuge. Bei Änderungen an Pfaden, SDKs, Artefakten oder Voraussetzungen im selben Änderungssatz README, CI und aufrufende Skripte abgleichen.
 - Gemeinsame Rust-Änderungen mit cargo fmt --all -- --check und cargo test --locked --all-targets auf Windows prüfen. Für Android den Gradle-/NDK-Build, für iOS den Geräte-Build mit Apple-SDK prüfen. cargo check --features ios-check --lib deckt nur einen Teil des iOS-Codes ab.
 - Bei iOS-ABI-Änderungen Header, Rust-Bridge und Swift-Host zusammen ändern. Einen erfolgreichen Paketbuild, eine gültige Gerätesignatur und einen Wiedergabetest auf Hardware getrennt protokollieren.

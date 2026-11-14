@@ -298,13 +298,20 @@ fn tv_style(ctx: &Context) {
 
 /// App bar + page + bottom navigation.
 fn shell(app: &mut App, ctx: &Context, l: &Layout) {
+    let mut detail_page = catalog_detail(app);
+    if detail_page && edge_back(ctx, l.side) {
+        app.mobile_back();
+        detail_page = false;
+    }
     let bar_color = ctx.style().visuals.window_fill;
     let page_color = ctx.style().visuals.panel_fill;
 
     // ---- bottom navigation (with the gesture-bar inset) ----
     let mut open_more = false;
     let mut page_layout = l.clone();
-    if l.w - 2.0 * l.side >= 720.0 && !l.compact_height() {
+    if detail_page {
+        // Detail pages own the full content height; the top bar supplies Back.
+    } else if l.w - 2.0 * l.side >= 720.0 && !l.compact_height() {
         let width = 104.0 + l.side;
         egui::SidePanel::left("library-rail")
             .exact_width(width)
@@ -379,7 +386,11 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
                 app.mobile_back();
             }
             if out.action {
-                app.view = View::Search;
+                match app.view {
+                    View::Movies => crate::ui::library::toggle_touch_search(app, ctx, false),
+                    View::Series => crate::ui::library::toggle_touch_search(app, ctx, true),
+                    _ => app.view = View::Search,
+                }
             }
         });
 
@@ -412,23 +423,22 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
 
 /// Title, back button and right-hand action per screen.
 fn bar_content(app: &App) -> (String, bool, Option<(Icon, &'static str)>) {
+    if catalog_detail(app) {
+        return (
+            if app.view == View::Series {
+                "Serie"
+            } else {
+                "Film"
+            }
+            .into(),
+            true,
+            None,
+        );
+    }
     let search_action = Some((Icon::Search, "Suche"));
     match app.view {
         View::Live => ("Live TV".to_string(), false, search_action),
-        View::Movies => (
-            if app.vod_cat == "all" {
-                "Filme".to_string()
-            } else {
-                app.library
-                    .vod_categories
-                    .iter()
-                    .find(|c| c.id == app.vod_cat)
-                    .map(|c| c.name.clone())
-                    .unwrap_or_else(|| "Filme".to_string())
-            },
-            false,
-            search_action,
-        ),
+        View::Movies => ("Filme".into(), false, search_action),
         View::Series => ("Serien".to_string(), false, search_action),
         View::Home => ("Startseite".to_string(), false, search_action),
         View::Search => ("Suche".to_string(), true, None),
@@ -437,4 +447,47 @@ fn bar_content(app: &App) -> (String, bool, Option<(Icon, &'static str)>) {
         View::Settings => ("Einstellungen".to_string(), false, None),
         View::Player | View::Login => (String::new(), false, None),
     }
+}
+
+fn catalog_detail(app: &App) -> bool {
+    (app.view == View::Series && app.selected_series.is_some())
+        || (app.view == View::Movies && app.selected_movie.is_some())
+}
+
+/// Only a horizontal gesture starting at the left edge is a page-back gesture.
+/// Do not compete with vertical episode scrolling or horizontal season swipes.
+fn edge_back(ctx: &Context, side: f32) -> bool {
+    let id = egui::Id::new("catalog-edge-back");
+    let mut start = ctx.data(|d| d.get_temp::<egui::Pos2>(id));
+    let mut back = false;
+    let edge = ctx.screen_rect().left() + side + 24.0;
+    if ctx.memory(|m| m.any_popup_open()) {
+        return false;
+    }
+    ctx.input(|i| {
+        for event in &i.events {
+            if let egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                ..
+            } = event
+            {
+                if *pressed {
+                    start = (pos.x <= edge).then_some(*pos);
+                } else if let Some(origin) = start.take() {
+                    let delta = *pos - origin;
+                    back = delta.x >= 72.0 && delta.x > delta.y.abs() * 1.5;
+                }
+            }
+        }
+    });
+    ctx.data_mut(|d| {
+        if let Some(start) = start {
+            d.insert_temp(id, start);
+        } else {
+            d.remove::<egui::Pos2>(id);
+        }
+    });
+    back
 }

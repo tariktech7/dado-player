@@ -66,11 +66,13 @@ The ios.yml workflow runs the device build and uploads Dado-Player-unsigned.ipa 
 
 GitHub Actions currently rejects jobs before execution because of an account billing/spending restriction. There is no runner queue ETA for this failure. See [local setup status](../docs/history/2026-11-14-local-ios-build-setup.md).
 
-The Windows/WSL device package **0.2.5 / build 7** was built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
+The Windows/WSL device package **0.2.6 / build 8** was built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
 
 Use the same `bash ios/build.sh --ipa` entry point inside WSL with the Linux Swift/Rust tools on PATH and xtool's Darwin artifact installed. Set `CARGO_TARGET_DIR` to a Linux-filesystem cache (locally `/home/dado-build/.cache/dadoplayer/target`) to keep Windows outputs separate. Swift uses a separate cache under `~/.cache/dadoplayer/swift-build`; `DADO_SWIFT_BUILD_DIR` overrides it.
 
 The script reads the Darwin SDK metadata for Rust's sysroot and C compiler, then clears SDKROOT before SwiftPM compiles its Linux-hosted manifest. SwiftPM uses `--swift-sdk darwin` with the bare device triple and the package's iOS 15 minimum. On macOS the storyboard/ibtool path is preserved; Linux uses the supported iOS 14+ UILaunchScreen dictionary instead of a missing compiled storyboard. Package checks do not replace an iPhone layout/playback test.
+
+SwiftPM does not track the external Rust archive referenced through the linker flags. The build therefore cleans the Swift package's outputs before rebuilding/linking the host, on macOS and WSL, so Rust-only changes cannot silently reuse an old executable. Rust's own build cache is retained.
 
 ## Dado and Apple controls
 

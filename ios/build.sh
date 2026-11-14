@@ -103,8 +103,9 @@ print((bundle / metadata['targetTriples'][sys.argv[2]]['sdkRootPath']).resolve()
 PY
 )"
     [ -d "$SDK_PATH" ] || { echo "!! Missing Darwin SDK: $SDK_PATH" >&2; exit 1; }
+    SWIFT_BUILD_DIR="${DADO_SWIFT_BUILD_DIR:-$HOME/.cache/dadoplayer/swift-build}"
     SWIFT_SDK_ARGS=(--swift-sdk darwin --build-system native
-        --scratch-path "${DADO_SWIFT_BUILD_DIR:-$HOME/.cache/dadoplayer/swift-build}")
+        --scratch-path "$SWIFT_BUILD_DIR")
     export SDKROOT="$SDK_PATH"
     # Native C/Objective-C dependencies must target Apple, never Linux headers.
     export CC_aarch64_apple_ios="$(command -v clang)"
@@ -231,6 +232,15 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     else
         TRIPLES=("$SWIFT_TRIPLE" "arm64-apple-ios")
     fi
+
+    # Vendor/libdadoplayer.a is linked by an unsafe -l flag, so SwiftPM does
+    # not know it is an input that changed. Clear only SwiftPM's build outputs
+    # before linking; otherwise a Rust-only UI change can ship the old binary.
+    SWIFT_CLEAN_ARGS=(--package-path ios)
+    if [ "$LINUX_SDK" -eq 1 ]; then
+        SWIFT_CLEAN_ARGS+=(--scratch-path "$SWIFT_BUILD_DIR")
+    fi
+    swift package "${SWIFT_CLEAN_ARGS[@]}" clean
 
     BIN=""
     for triple in "${TRIPLES[@]}"; do

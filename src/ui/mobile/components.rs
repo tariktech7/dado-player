@@ -482,8 +482,14 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
 
         let color = if selected { accent_text(ui) } else { muted(ui) };
         // Material-style pill behind the active icon.
-        let pill =
-            Rect::from_center_size(pos2(cell.center().x, cell.top() + 18.0), vec2(52.0, 30.0));
+        let g = fit(ui, label, medium(FS_CAP), color, cell_w - 6.0);
+        // Centre the complete icon + label group, independent of font metrics.
+        let group_h = 30.0 + 3.0 + g.size().y;
+        let group_top = cell.center().y - group_h * 0.5;
+        let pill = Rect::from_center_size(
+            pos2(cell.center().x, group_top + 15.0),
+            vec2(52.0_f32.min(cell_w - 4.0), 30.0),
+        );
         if selected {
             ui.painter()
                 .rect_filled(pill, Rounding::same(15.0), accent_soft(ui));
@@ -494,8 +500,7 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
             ic,
             color,
         );
-        let g = fit(ui, label, medium(FS_CAP), color, cell_w - 6.0);
-        let ty = cell.bottom() - g.size().y - 4.0;
+        let ty = group_top + 33.0;
         ui.painter()
             .galley(pos2(cell.center().x - g.size().x * 0.5, ty), g, color);
 

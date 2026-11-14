@@ -1391,6 +1391,7 @@ impl App {
             || self.mobile_more
             || self.view == View::Player
             || (self.view == View::Series && self.selected_series.is_some())
+            || (self.view == View::Movies && self.selected_movie.is_some())
         {
             return true;
         }
@@ -1431,6 +1432,10 @@ impl App {
         }
         if self.view == View::Series && self.selected_series.is_some() {
             self.selected_series = None;
+            return true;
+        }
+        if self.view == View::Movies && self.selected_movie.is_some() {
+            self.selected_movie = None;
             return true;
         }
         if self.tv && self.active_profile.is_some() {
@@ -2962,6 +2967,116 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn phone_catalogue_has_full_page_details_and_edge_back() {
+        use egui::{epaint::Shape, pos2, vec2, Event, PointerButton, RawInput, Rect};
+        fn labels(shape: &Shape, out: &mut Vec<(String, Rect)>) {
+            match shape {
+                Shape::Text(t) => out.push((
+                    t.galley.job.text.clone(),
+                    Rect::from_min_size(t.pos, t.galley.size()),
+                )),
+                Shape::Vec(s) => s.iter().for_each(|s| labels(s, out)),
+                _ => {}
+            }
+        }
+        for (w, h) in [
+            (320.0, 568.0),
+            (393.0, 852.0),
+            (852.0, 393.0),
+            (768.0, 1024.0),
+        ] {
+            let mut app = App::test_app();
+            app.active_profile = Some(Profile::new("Phone fixture", ProfileKind::M3u));
+            app.library.loaded = true;
+            app.library.series = vec![crate::types::Series {
+                id: 42,
+                name: "Testserie".into(),
+                added: None,
+                cover: String::new(),
+                category_id: "1".into(),
+                plot: "Eine Beschreibung für die mobile Detailseite.".into(),
+            }];
+            app.series_episodes.insert(
+                42,
+                (1..=30)
+                    .map(|n| crate::types::Episode {
+                        id: n,
+                        series_id: 42,
+                        season: 1,
+                        episode: n,
+                        title: "provider.file.name".into(),
+                        container_extension: "mp4".into(),
+                        stream_url: String::new(),
+                    })
+                    .collect(),
+            );
+            app.view = View::Series;
+            app.tv = false;
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            crate::theme::apply(&ctx, true);
+            let draw = |app: &mut App, events: Vec<Event>| {
+                let output = ctx.run(
+                    RawInput {
+                        screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(w, h))),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| crate::ui::mobile::show(app, ctx),
+                );
+                let mut text = Vec::new();
+                for s in output.shapes {
+                    if app.selected_series.is_none() && (w < 720.0 || h < 400.0) {
+                        let mut row_labels = Vec::new();
+                        labels(&s.shape, &mut row_labels);
+                        if row_labels.iter().any(|(t, _)| t == "Testserie") {
+                            assert!(
+                                s.clip_rect.bottom() <= h - crate::ui::mobile::tokens::NAV_H + 1.0,
+                                "Poster must not paint over bottom navigation: {:?}",
+                                s.clip_rect
+                            );
+                        }
+                    }
+                    labels(&s.shape, &mut text);
+                }
+                text
+            };
+            draw(&mut app, vec![]);
+            let text = draw(&mut app, vec![]);
+            assert!(!text
+                .iter()
+                .any(|(t, _)| t == "Kategorien" || t == "Serie auswählen"));
+            let poster = text.iter().find(|(t, _)| t == "Testserie").unwrap().1;
+            assert!(poster.left() >= 12.0 && poster.right() <= w - 12.0);
+            app.open_series(42);
+            draw(&mut app, vec![]);
+            let text = draw(&mut app, vec![]);
+            assert!(text.iter().any(|(t, _)| t == "Staffel 1"));
+            assert!(!text.iter().any(|(t, _)| t == "Live" || t == "Mehr"));
+            // A vertical gesture starting at the edge must keep the detail open.
+            let pointer = |x, y, pressed| Event::PointerButton {
+                pos: pos2(x, y),
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            };
+            draw(&mut app, vec![pointer(8.0, 180.0, true)]);
+            draw(&mut app, vec![pointer(12.0, 80.0, false)]);
+            assert_eq!(app.selected_series, Some(42));
+            draw(&mut app, vec![pointer(8.0, 180.0, true)]);
+            draw(&mut app, vec![pointer(150.0, 185.0, false)]);
+            assert_eq!(app.selected_series, None, "edge swipe at {w}x{h}");
+            assert!(app.view == View::Series);
+            app.view = View::Movies;
+            app.selected_movie = Some(77);
+            assert!(app.mobile_can_back());
+            assert!(app.mobile_back());
+            assert!(app.view == View::Movies);
+            assert_eq!(app.selected_movie, None);
+        }
+    }
+
     #[test]
     fn tv_live_navigation_and_preview_fit_the_standard_tv_canvas() {
         use egui::epaint::Shape;
