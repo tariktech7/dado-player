@@ -34,3 +34,5 @@ iOS: Rust-Gerätearchiv und Swift-Host unter WSL mit iPhoneOS 27.3 neu gebaut. D
 | Dado-Player-unsigned.ipa | 5732187 | 7b4e1e53cc21f636eededdc048134014d3343433dd13fef29f1cd0f5a90d2ca0 |
 
 Die vorherige Android-Version 0.2.8 und iOS 0.2.5/Build 7 wurden unverändert in Releases/Archiv erhalten. Releases/README.md und AKTUELL.json zeigen die neuen Pakete. Xcode-XIP und lokale SDKs bleiben außerhalb von Git und Releases.
+
+Veröffentlicht auf [GitHub Releases](https://github.com/tariktech7/dado-player/releases/tag/dado-mobile-2026-11-14), Quellstand `895b097`. Alle fünf Assets anhand von Dateigröße und GitHub-SHA-256 geprüft. Mobile Update-Labels: `android-build-13` und `ios-build-8`. Emulator und synthetischer Anbieterserver wurden nach der Prüfung beendet.
