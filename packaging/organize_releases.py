@@ -33,15 +33,21 @@ def main():
         if version and version[1] != tv:
             archive(file, "Samsung-Tizen", version[1])
     ipa = RELEASES / "Dado-Player-unsigned.ipa"
-    ios = {"status": "Kein aktueller Geräte-Build; GitHub macOS-Runner durch Billing blockiert"}
+    ios = {"status": "Kein aktueller Geräte-Build vorhanden"}
+    current_ipa = None
     if ipa.exists():
         with zipfile.ZipFile(ipa) as package:
             info = next(n for n in package.namelist() if re.fullmatch(r"Payload/[^/]+\.app/Info.plist", n))
             metadata = plistlib.loads(package.read(info))
         source = plistlib.loads((ROOT / "ios/Info.plist").read_bytes())
-        if metadata["CFBundleVersion"] != source["CFBundleVersion"]:
+        if any(metadata[key] != source[key] for key in ("CFBundleVersion", "CFBundleShortVersionString")):
             version = f"{metadata['CFBundleShortVersionString']}-Build-{metadata['CFBundleVersion']}"
             archive(ipa, "iOS", version)
+        else:
+            current_ipa = metadata
+            ios = dict(status="Aktueller Geräte-Build; vor Installation mit eigener Apple-ID signieren",
+                       version=metadata["CFBundleShortVersionString"], build=metadata["CFBundleVersion"],
+                       file=ipa.name)
     windows = (ROOT / "windows/VERSION").read_text().strip()
     versioned_windows = f"Dado-Player-Windows-{windows}.exe"
     windows_file = versioned_windows if (RELEASES / versioned_windows).exists() else "Dado-Player.exe"
@@ -63,15 +69,22 @@ def main():
         if file.exists():
             current.append(dict(platform=platform, version=version, file=name, bytes=file.stat().st_size,
                                 sha256=hashlib.sha256(file.read_bytes()).hexdigest()))
+    if current_ipa:
+        current.append(dict(platform="iOS (AltStore/Sideloadly)",
+                            version=f"{ios['version']} / Build {ios['build']}", file=ipa.name,
+                            bytes=ipa.stat().st_size, sha256=hashlib.sha256(ipa.read_bytes()).hexdigest()))
     (RELEASES / "AKTUELL.json").write_text(json.dumps(dict(packages=current, ios=ios), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     lines = ["# Aktuelle Dado-Player-Downloads", "", "| Plattform | Version | Datei |", "| --- | --- | --- |"]
     lines += [f"| {p['platform']} | {p['version']} | [{p['file']}]({p['file']}) |" for p in current]
     if legacy_windows:
         lines += ["", "Hinweis: Dado-Player.exe ist noch die bisherige geöffnete/gesperrte Datei. Für die neue Windows-Version die oben verlinkte Datei mit Versionsnummer verwenden."]
+    ios_note = ("iOS: Aktuelle IPA mit AltStore/Sideloadly und eigener Apple-ID signieren und installieren. "
+                "Ein Paketbuild ersetzt keinen Wiedergabetest auf dem iPhone." if current_ipa else
+                "iOS: Kein aktueller Geräte-Build. Alte IPA-Dateien unter Archiv/iOS enthalten die aktuellen Änderungen nicht.")
     lines += ["", "Windows: portable EXE direkt starten. Android: signierte APK installieren; der historische Dateiname enthält weiterhin ‚debug‘.",
               "Samsung: signierte WGT für den eingerichteten Entwickler-TV. Installation über den PC; nicht per USB-Dateiauswahl.",
               "Die unsignierte WGT ist nur für Entwickler und benötigt ein Samsung-Zertifikat für das jeweilige Gerät.",
-              "", "iOS: Hier liegt bewusst keine angeblich neue IPA. Die alte IPA 0.2.1/Build 4 ist unter Archiv/iOS abgelegt und enthält die aktuellen Änderungen nicht.",
+              "", ios_note,
               "", "Archiv enthält vorherige Builds nach Plattform und Version. Es wurde kein Paket gelöscht.",
               "AKTUELL.json enthält Dateigrößen und SHA-256 zur Kontrolle.", ""]
     (RELEASES / "README.md").write_text("\n".join(lines), encoding="utf-8")

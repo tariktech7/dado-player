@@ -59,7 +59,7 @@ else
     SWIFT_TRIPLE="arm64-apple-ios15.0"
 fi
 
-LIB="target/$TARGET/release/libdadoplayer.a"
+LIB="${CARGO_TARGET_DIR:-target}/$TARGET/release/libdadoplayer.a"
 VENDOR="ios/Vendor/libdadoplayer.a"
 IPA="Dado-Player-unsigned.ipa"
 
@@ -83,13 +83,39 @@ fi
 # (Xcode installed under a path with spaces) would silently become a bogus flag.
 SDK_PATH=""
 SWIFT_SDK_ARGS=()
+LINUX_SDK=0
 if command -v xcrun >/dev/null 2>&1 && xcrun --sdk "$APPLE_SDK" --show-sdk-path >/dev/null 2>&1; then
     SDK_PATH="$(xcrun --sdk "$APPLE_SDK" --show-sdk-path)"
     SWIFT_SDK_ARGS=(--sdk "$SDK_PATH")
     echo "    Apple SDK: $SDK_PATH"
 elif command -v swift >/dev/null 2>&1 && swift sdk list 2>/dev/null | grep -qi darwin; then
-    SWIFT_SDK_ARGS=(--swift-sdk darwin)
-    echo "    Apple SDK: xtool Darwin Swift SDK"
+    LINUX_SDK=1
+    SDK_TRIPLE=arm64-apple-ios
+    [ "$SIM" -eq 0 ] || SDK_TRIPLE=arm64-apple-ios-simulator
+    SWIFTPM_DIR="${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/swiftpm}"
+    DARWIN_BUNDLE="${DADO_DARWIN_SDK:-${SWIFTPM_DIR:-$HOME/.swiftpm}/swift-sdks/darwin.artifactbundle}"
+    # xtool registers platform-specific triples, not a single generic device SDK.
+    SDK_PATH="$(python3 - "$DARWIN_BUNDLE" "$SDK_TRIPLE" <<'PY'
+import json, pathlib, sys
+bundle = pathlib.Path(sys.argv[1]).resolve()
+metadata = json.loads((bundle / 'swift-sdk.json').read_text())
+print((bundle / metadata['targetTriples'][sys.argv[2]]['sdkRootPath']).resolve())
+PY
+)"
+    [ -d "$SDK_PATH" ] || { echo "!! Missing Darwin SDK: $SDK_PATH" >&2; exit 1; }
+    SWIFT_SDK_ARGS=(--swift-sdk darwin --build-system native
+        --scratch-path "${DADO_SWIFT_BUILD_DIR:-$HOME/.cache/dadoplayer/swift-build}")
+    export SDKROOT="$SDK_PATH"
+    # Native C/Objective-C dependencies must target Apple, never Linux headers.
+    export CC_aarch64_apple_ios="$(command -v clang)"
+    export CFLAGS_aarch64_apple_ios="--target=$SWIFT_TRIPLE -isysroot $SDK_PATH"
+    export AR_aarch64_apple_ios="$(command -v llvm-ar)"
+    if [ "$SIM" -eq 1 ]; then
+        export CC_aarch64_apple_ios_sim="$CC_aarch64_apple_ios"
+        export CFLAGS_aarch64_apple_ios_sim="$CFLAGS_aarch64_apple_ios"
+        export AR_aarch64_apple_ios_sim="$AR_aarch64_apple_ios"
+    fi
+    echo "    Apple SDK (xtool): $SDK_PATH"
 else
     cat >&2 <<'EOF'
 !! No Apple iOS SDK found — cannot produce an .app or .ipa here.
@@ -169,6 +195,10 @@ else
             echo "!! $sym is defined in the Rust library — it belongs to Swift" >&2
             exit 1
         fi
+        if ! grep -qE "[[:space:]]U[[:space:]]+_${sym}$" <<<"$SYMBOLS"; then
+            echo "!! missing Swift import in the Rust library: $sym" >&2
+            exit 1
+        fi
     done
 
     echo "    ABI symbols OK (3 defined, 3 undefined as expected)"
@@ -191,7 +221,12 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     # versions, and this script cannot be exercised on a machine without an
     # Apple SDK, so it tries the canonical spelling first and falls back once —
     # loudly, so a silent double build does not go unnoticed.
-    if [ "$SIM" -eq 1 ]; then
+    if [ "$LINUX_SDK" -eq 1 ]; then
+        # SDKROOT would also affect SwiftPM's Linux-hosted manifest compiler.
+        # The Darwin artifact supplies the sysroot to the device compiler only.
+        unset SDKROOT
+        TRIPLES=("$SDK_TRIPLE")
+    elif [ "$SIM" -eq 1 ]; then
         TRIPLES=("$SWIFT_TRIPLE" "arm64-apple-ios-simulator")
     else
         TRIPLES=("$SWIFT_TRIPLE" "arm64-apple-ios")
@@ -228,9 +263,25 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     cp "$BIN" "$APP/DadoPlayer"
     cp ios/Info.plist "$APP/Info.plist"
     cp ios/Resources/*.png ios/Resources/Playback.mp4 "$APP/"
-    xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" ios/Resources/LaunchScreen.storyboard --target-device iphone --target-device ipad --minimum-deployment-target 15.0
-    /usr/libexec/PlistBuddy -c "Add :DTPlatformName string $APPLE_SDK" "$APP/Info.plist"
-    /usr/libexec/PlistBuddy -c "Add :DTSDKName string ${APPLE_SDK}$(xcrun --sdk "$APPLE_SDK" --show-sdk-version)" "$APP/Info.plist"
+    if [ "$LINUX_SDK" -eq 0 ]; then
+        xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" ios/Resources/LaunchScreen.storyboard --target-device iphone --target-device ipad --minimum-deployment-target 15.0
+        /usr/libexec/PlistBuddy -c "Add :DTPlatformName string $APPLE_SDK" "$APP/Info.plist"
+        /usr/libexec/PlistBuddy -c "Add :DTSDKName string ${APPLE_SDK}$(xcrun --sdk "$APPLE_SDK" --show-sdk-version)" "$APP/Info.plist"
+    else
+        # iOS 14+ supports an Info.plist launch screen without compiled nibs.
+        # Remove the storyboard reference: ibtool is a macOS-only executable.
+        python3 - "$APP/Info.plist" "$SDK_PATH/SDKSettings.json" "$APPLE_SDK" <<'PY'
+import json, pathlib, plistlib, sys
+path = pathlib.Path(sys.argv[1])
+info = plistlib.loads(path.read_bytes())
+info.pop('UILaunchStoryboardName', None)
+info['UILaunchScreen'] = {}
+info['DTPlatformName'] = sys.argv[3]
+settings = json.loads(pathlib.Path(sys.argv[2]).read_text())
+info['DTSDKName'] = sys.argv[3] + settings['Version']
+path.write_bytes(plistlib.dumps(info))
+PY
+    fi
 
     # The Rust core is a static library, so it is already inside the executable.
     # Any SwiftPM resource bundles would have to be copied here too; the host
@@ -257,7 +308,10 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
 
     ( cd "$STAGE" && zip -qry packaged.ipa Payload && unzip -tq packaged.ipa )
     mkdir -p "$ROOT/Releases"
-    mv "$STAGE/packaged.ipa" "$ROOT/Releases/$IPA"
+    # Copy across WSL/NTFS without attempting to preserve Linux ownership.
+    # Rename on the destination filesystem only after the complete copy.
+    cp "$STAGE/packaged.ipa" "$ROOT/Releases/.$IPA.tmp"
+    mv "$ROOT/Releases/.$IPA.tmp" "$ROOT/Releases/$IPA"
     cp "$ROOT/Releases/$IPA" "$ROOT/$IPA"
     rm -rf "$STAGE"
 

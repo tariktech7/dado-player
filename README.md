@@ -1,6 +1,6 @@
 # Dado Player
 
-Aktuell: Windows portable **0.5.5**, Android **0.2.8 / Build 12**, Samsung Tizen **0.1.6**.
+Aktuell: Windows portable **0.5.5**, Android **0.2.8 / Build 12**, iOS **0.2.5 / Build 7**, Samsung Tizen **0.1.6**.
 Filme und Serien verwenden Kategorien, ein virtualisiertes Poster-Raster und einen festen Detailbereich; schmale
 Mobilgeräte ordnen die Details darunter an. Serien zeigen Staffelbuttons und kurze Folgennummern.
 Der Play-Button setzt die zuletzt gesehene Folge fort und geht bei höchstens 60 Sekunden Rest
@@ -9,9 +9,10 @@ und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Fa
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der gemeinsame iOS-Quellstand ist **0.2.5 / Build 7**. Die bislang veröffentlichte IPA bleibt
-**0.2.1 / Build 4** und enthält diesen Patch nicht. Ein neuer Geräte-Build benötigt einen
-verfügbaren macOS-Runner; ein Host-Typcheck ersetzt diesen Build nicht.
+Der gemeinsame iOS-Stand **0.2.5 / Build 7** wurde jetzt lokal unter Windows/WSL mit
+xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
+mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
+Der lokale Buildweg steht in [ios/README.md](ios/README.md).
 LG-Vorbereitung und TV-Verträge: [SmartTV/README.md](SmartTV/README.md).
 
 [Downloads für Windows, Android und iOS auf GitHub Releases](https://github.com/tariktech7/dado-player/releases/latest)

@@ -45,6 +45,9 @@ Dado-Player-startup.log
 /ios/Vendor/*.a
 /ios/.build/
 *.ipa
+# Local Apple SDK downloads/extraction; never redistribute through Git.
+/ios/SDKs/
+*.xip
 
 # Third-party reference material (IPTVnator source drop). Kept on disk as a
 # design reference but not redistributed through this repo. It is also a nested
