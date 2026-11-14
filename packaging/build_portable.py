@@ -5,7 +5,7 @@ Steps:
   1. Generate assets/icon.ico from assets/icon.png (multi-size).
   2. Build launcher with embedded logo.
   3. (Optional) Build launcher's icon resource (.res) with rc.exe.
-  4. Compress the 11 dist/ files (app + 10 DLLs), append package + footer.
+  4. Validate and compress the application-local runtime, append package + footer.
 
 The launcher and main app are expected to already contain their Windows icon
 resources via packaging/inject_icon.py.
@@ -40,10 +40,37 @@ FILES = [
     "msvcp140.dll",
     "msvcp140_1.dll",
     "msvcp140_2.dll",
-    "msvcp_win.dll",
     "concrt140.dll",
-    "d3dcompiler_47.dll",
 ]
+
+# These are OS components, not interchangeable app-local VC redistributables.
+# A Windows 11 copy of D3DCompiler imports C++ exports absent from Windows 10.
+SYSTEM_ONLY = {"msvcp_win.dll", "d3dcompiler_47.dll", "ucrtbase.dll", "kernel32.dll", "ntdll.dll"}
+
+
+def sign_file(path):
+    thumbprint = os.environ.get("DADO_SIGN_CERT_THUMBPRINT", "").strip()
+    if not thumbprint:
+        return
+    subprocess.run([
+        "powershell.exe", "-NoProfile", "-File", str(Path(ROOT) / "windows/sign-file.ps1"),
+        "-File", str(path), "-Thumbprint", thumbprint,
+    ], check=True)
+
+
+def validate_runtime():
+    bad = SYSTEM_ONLY.intersection(name.lower() for name in FILES)
+    if bad:
+        raise RuntimeError(f"OS DLLs must not be packaged: {sorted(bad)}")
+    for name in FILES:
+        path = Path(DIST) / name
+        data = path.read_bytes()
+        if data[:2] != b"MZ" or len(data) < 64:
+            raise RuntimeError(f"Not a PE executable: {name}")
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        if data[pe:pe + 4] != b"PE\0\0" or struct.unpack_from("<H", data, pe + 4)[0] != 0x8664:
+            raise RuntimeError(f"Runtime must be Windows x64: {name}")
+    print(f"    Runtime policy OK: {len(FILES)} x64 files; OS DLLs resolved by Windows")
 
 
 def export_logo():
@@ -124,6 +151,7 @@ def apply_icon_resource(exe_path: str, res_path: str) -> str:
 
 
 def build_package():
+    validate_runtime()
     print("[3/4] compressing runtime ...")
     entries = []
     for name in FILES:
@@ -186,6 +214,9 @@ def main():
         dist_exe, Path(os.path.join(ROOT, "assets", "icon.ico"))
     ):
         sys.exit("Application icon injection failed; refusing to package an unverified artifact")
+    # Resource edits must precede Authenticode. Sign the extracted application
+    # as well as the final launcher; its signature must cover the entire blob.
+    sign_file(dist_exe)
     blob, footer, entries, content_id = build_package()
 
     launcher_data = open(launcher, "rb").read()
@@ -198,6 +229,9 @@ def main():
     out_path = os.path.join(OUT_DIR, "Dado-Player.exe")
     with open(out_path, "wb") as f:
         f.write(out)
+    sign_file(out_path)
+    if not os.environ.get("DADO_SIGN_CERT_THUMBPRINT", "").strip():
+        print("    Unsigned: no public code-signing identity configured (SmartScreen warnings remain possible)")
 
     raw = sum(len(d) for _, d, _ in entries)
     print()

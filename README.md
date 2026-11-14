@@ -22,6 +22,14 @@ Die Windows-Version steht in `windows/VERSION`. Zum Paketieren `./windows/packag
 
 Die portable App fragt auf Wunsch unter **Einstellungen → Auf GitHub-Updates prüfen** die Tags ab. Sie benötigt Git für Windows und ein Konto mit Lesezugriff auf das Repo. Nach Auswahl einer neueren Version lädt sie den bezeichneten Commit und prüft das Paket. Beim Beenden ersetzt der Launcher seine EXE am ursprünglichen Ort, behält die letzte Datei als `.previous` und startet die neue Version. Ein späteres Release benötigt einen neuen Tag.
 
+### Windows 10/11 und Herausgebersignatur
+
+Ab portable 0.5.2 werden keine aus dem Build-Windows kopierten `d3dcompiler_47.dll` und `msvcp_win.dll` mehr gepackt. Windows 10/11 laden ihre eigenen Systemkomponenten. Die app-lokalen VC-Runtime-Dateien bleiben enthalten. Historische lokale Kopien sind unter dist/legacy-system-dlls archiviert und nicht Teil des Pakets. `python -m unittest discover -s packaging -p test_runtime_policy.py` prüft die Paketregel. Der Launcher prüft vor Wiederverwendung des Laufzeitcaches auch die CRC, nicht nur die Dateigröße.
+
+Für eine öffentliche Herausgebersignatur ist ein gültiges, von einer öffentlichen CA ausgestelltes Code-Signing-Zertifikat mit privatem Schlüssel im Benutzer-Zertifikatsspeicher erforderlich. Dann `./windows/package.ps1 -SigningThumbprint <Thumbprint>` ausführen (alternativ DADO_SIGN_CERT_THUMBPRINT setzen). Der Build signiert die enthaltene App nach den Icon-Ressourcenänderungen und die fertige portable EXE nach Anhängen des Pakets; SignTool prüft SHA-256, Zertifikatsvertrauen und RFC-3161-Zeitstempel. Launcher und Updater berücksichtigen die Authenticode-Zertifikatstabelle hinter dem Paket.
+
+Ohne konfigurierte Identität bleiben die Pakete unsigniert. Ein selbstsigniertes Zertifikat beseitigt „Unbekannter Herausgeber“ auf fremden Rechnern nicht. Eine gültige Signatur gibt den geprüften Herausgeber an, garantiert aber keine sofortige SmartScreen-Reputation. Offizielle Grundlagen: [Microsoft Code Signing](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options), [SmartScreen-Reputation](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation). Die Paketierung verändert keine SmartScreen-/Defender-Einstellungen.
+
 ### Mobile Updates aus GitHub Releases
 
 Unter Einstellungen → App-Updates kann der Player ein Paket prüfen und laden. Für das private Repository einen kurzlebigen Fine-grained Token mit Contents: Read für dado-player eingeben oder die Release-Seite im angemeldeten Browser öffnen. Android öffnet den Systeminstaller. Auf iOS die IPA in Dateien sichern und in AltStore Classic über My Apps → + mit derselben Apple-ID installieren.

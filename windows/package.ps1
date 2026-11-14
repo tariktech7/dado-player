@@ -1,7 +1,8 @@
-param([string]$Python = 'python')
+param([string]$Python = 'python', [string]$SigningThumbprint = '')
 $ErrorActionPreference = 'Stop'
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
+    if ($SigningThumbprint) { $env:DADO_SIGN_CERT_THUMBPRINT = $SigningThumbprint }
     cargo build --locked --release --bin Dado-Player
     if ($LASTEXITCODE) { throw 'Windows-Build fehlgeschlagen.' }
     cargo fetch --locked --manifest-path packaging/launcher/Cargo.toml

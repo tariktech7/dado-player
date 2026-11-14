@@ -8,7 +8,7 @@ checks:
   * the run folder contains exactly one file (the EXE)
   * the app boots (first-frame marker / visible window)
   * video actually renders (IPTV_TEST_STREAM=1 -> animated test pattern)
-  * all 11 runtime files (app + 10 DLLs) are extracted with correct sizes
+  * all 9 application-local files are extracted with correct sizes
   * closing the window exits the whole process tree with code 0
 
 No credentials or debug logs are involved.
@@ -37,9 +37,7 @@ EXPECT = {
     "msvcp140.dll": os.path.getsize(os.path.join(DIST, "msvcp140.dll")),
     "msvcp140_1.dll": os.path.getsize(os.path.join(DIST, "msvcp140_1.dll")),
     "msvcp140_2.dll": os.path.getsize(os.path.join(DIST, "msvcp140_2.dll")),
-    "msvcp_win.dll": os.path.getsize(os.path.join(DIST, "msvcp_win.dll")),
     "concrt140.dll": os.path.getsize(os.path.join(DIST, "concrt140.dll")),
-    "d3dcompiler_47.dll": os.path.getsize(os.path.join(DIST, "d3dcompiler_47.dll")),
 }
 
 user32 = ctypes.windll.user32
@@ -212,6 +210,9 @@ def main():
             print(f"  size mismatch {n}: expected {exp}, got {got}")
         fail("Groesse der extrahierten Dateien stimmt nicht")
     print(f"extraction OK: {len(EXPECT)} files in {rt}")
+    for name in ("msvcp_win.dll", "d3dcompiler_47.dll"):
+        if os.path.exists(os.path.join(rt, name)):
+            fail(f"Windows system DLL must not be extracted: {name}")
 
     # Close and check clean exit.
     print("sending WM_CLOSE ...")

@@ -2,7 +2,7 @@
 
 //! Self-extracting single-file launcher for Dado Player.
 //!
-//! The shipped `Dado-Player.exe` (the real eframe/egui app) plus its four
+//! The shipped `Dado-Player.exe` (the real eframe/egui app) plus its application-local
 //! runtime DLLs are compressed and appended to THIS binary as a package. On
 //! first launch the launcher extracts them into a private runtime directory
 //! (`%LOCALAPPDATA%\DadoPlayer\runtime\rt-<id>`, or `DADO_RUNTIME_DIR`), then
@@ -33,6 +33,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use miniz_oxide::inflate::decompress_to_vec_zlib;
+
+#[path = "../../package_footer.rs"]
+mod package_footer;
 
 // ---------------------------------------------------------------------------
 // Win32 raw FFI (system DLLs only)
@@ -470,7 +473,16 @@ unsafe fn composite_splash(hwnd: HWND) {
     let mut pen: *mut std::ffi::c_void = std::ptr::null_mut();
     if GdipCreatePen1(ACCENT_ARGB, 4.0, UNIT_PIXEL, &mut pen) == 0 {
         let r = 18.0f32;
-        GdipDrawArc(d.g, pen, SPIN_CX - r, SPIN_CY - r, 2.0 * r, 2.0 * r, angle, 300.0);
+        GdipDrawArc(
+            d.g,
+            pen,
+            SPIN_CX - r,
+            SPIN_CY - r,
+            2.0 * r,
+            2.0 * r,
+            angle,
+            300.0,
+        );
         GdipDeletePen(pen);
     }
 
@@ -769,14 +781,15 @@ fn runtime_dir(content_id: &str) -> PathBuf {
 
 fn needs_extraction(entries: &[Entry], content_id: &str) -> bool {
     let dir = runtime_dir(content_id);
-    entries.iter().any(|e| {
-        let dest = dir.join(&e.name);
-        !dest.exists()
-            || match std::fs::metadata(&dest) {
-                Ok(m) => m.len() != e.raw_size,
-                Err(_) => true,
-            }
-    })
+    entries.iter().any(|e| !cached_file_valid(&dir, e))
+}
+
+fn cached_file_valid(dir: &Path, entry: &Entry) -> bool {
+    let path = dir.join(&entry.name);
+    if std::fs::metadata(&path).map(|m| m.len()).ok() != Some(entry.raw_size) {
+        return false;
+    }
+    std::fs::read(path).is_ok_and(|bytes| crc32(&bytes) == entry.raw_crc)
 }
 
 fn atomic_replace(tmp: &Path, dest: &Path) -> Result<(), String> {
@@ -787,13 +800,16 @@ fn atomic_replace(tmp: &Path, dest: &Path) -> Result<(), String> {
             std::fs::copy(tmp, dest).map_err(|copy_err| {
                 format!(
                     "Ersetzen von {} fehlgeschlagen (Umbenennen: {}; Kopieren: {})",
-                    dest.display(), rename_err, copy_err
+                    dest.display(),
+                    rename_err,
+                    copy_err
                 )
             })?;
             std::fs::remove_file(tmp).map_err(|cleanup_err| {
                 format!(
                     "Temporäre Datei {} konnte nach dem Kopieren nicht gelöscht werden: {}",
-                    tmp.display(), cleanup_err
+                    tmp.display(),
+                    cleanup_err
                 )
             })
         }
@@ -802,14 +818,7 @@ fn atomic_replace(tmp: &Path, dest: &Path) -> Result<(), String> {
 
 fn ensure_extracted(entries: &[Entry], content_id: &str) -> Result<PathBuf, String> {
     let dir = runtime_dir(content_id);
-    let need_extract = entries.iter().any(|e| {
-        let dest = dir.join(&e.name);
-        !dest.exists()
-            || match std::fs::metadata(&dest) {
-                Ok(m) => m.len() != e.raw_size,
-                Err(_) => true,
-            }
-    });
+    let need_extract = entries.iter().any(|e| !cached_file_valid(&dir, e));
 
     if need_extract {
         std::fs::create_dir_all(&dir)
@@ -825,32 +834,19 @@ fn ensure_extracted(entries: &[Entry], content_id: &str) -> Result<PathBuf, Stri
                 }
                 let _ = std::fs::remove_file(&dest);
             }
-            let raw = decompress_to_vec_zlib(&e.comp).map_err(|err| {
-                format!("Dekompression von {} fehlgeschlagen: {:?}", e.name, err)
-            })?;
+            let raw = decompress_to_vec_zlib(&e.comp)
+                .map_err(|err| format!("Dekompression von {} fehlgeschlagen: {:?}", e.name, err))?;
             if crc32(&raw) != e.raw_crc {
                 return Err(format!("CRC-Prüfung für {} fehlgeschlagen", e.name));
             }
             let pid = std::process::id();
             let tmp = dir.join(format!("{}.tmp-{}", e.name, pid));
-            let mut fh = std::fs::File::create(&tmp).map_err(|e| {
-                format!(
-                    "Schreiben von {} fehlgeschlagen: {}",
-                    tmp.display(), e
-                )
-            })?;
-            fh.write_all(&raw).map_err(|e| {
-                format!(
-                    "Schreiben von {} fehlgeschlagen: {}",
-                    tmp.display(), e
-                )
-            })?;
-            fh.flush().map_err(|e| {
-                format!(
-                    "Speichern von {} fehlgeschlagen: {}",
-                    tmp.display(), e
-                )
-            })?;
+            let mut fh = std::fs::File::create(&tmp)
+                .map_err(|e| format!("Schreiben von {} fehlgeschlagen: {}", tmp.display(), e))?;
+            fh.write_all(&raw)
+                .map_err(|e| format!("Schreiben von {} fehlgeschlagen: {}", tmp.display(), e))?;
+            fh.flush()
+                .map_err(|e| format!("Speichern von {} fehlgeschlagen: {}", tmp.display(), e))?;
             drop(fh);
             atomic_replace(&tmp, &dest)?;
         }
@@ -869,7 +865,12 @@ fn show_error(msg: &str) {
             .chain(std::iter::once(0))
             .collect();
         let text: Vec<u16> = msg.encode_utf16().chain(std::iter::once(0)).collect();
-        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_ICONERROR | MB_OK);
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_ICONERROR | MB_OK,
+        );
     }
 }
 
@@ -877,12 +878,15 @@ fn show_error(msg: &str) {
 // App launch
 // ---------------------------------------------------------------------------
 fn spawn_app(payload: &Path) -> Result<(), String> {
-    let stage = tempfile::Builder::new().prefix("dado-update-").tempdir()
+    let stage = tempfile::Builder::new()
+        .prefix("dado-update-")
+        .tempdir()
         .map_err(|e| format!("Temporärer Ordner: {e}"))?;
     let status = std::process::Command::new(payload)
         .env("DADO_UPDATE_DIR", stage.path())
         .current_dir(payload.parent().unwrap())
-        .status().map_err(|e| format!("Player starten: {e}"))?;
+        .status()
+        .map_err(|e| format!("Player starten: {e}"))?;
     let update = stage.path().join("verified.exe");
     if status.success() && update.is_file() {
         install_update(&update).map_err(|e| format!("Portables Update: {e}"))?;
@@ -924,7 +928,8 @@ fn run() -> Result<(), String> {
         return Err("Launcher ist beschädigt (zu klein)".into());
     }
 
-    let footer = &data[data.len() - 64..];
+    let footer_at = package_footer::footer_offset(&data)?;
+    let footer = &data[footer_at..footer_at + 64];
     if &footer[0..8] != b"DADOPK01" {
         return Err("Kein eingebettetes Paket gefunden (falscher Launcher).".into());
     }
@@ -936,14 +941,13 @@ fn run() -> Result<(), String> {
     if crc_calc != crc_stored {
         return Err("Paket-Prüfsumme ungültig (beschädigter Download?).".into());
     }
-    let blob_offset = usize::try_from(blob_offset)
-        .map_err(|_| "Paket-Grenzen ungültig".to_string())?;
-    let blob_len = usize::try_from(blob_len)
-        .map_err(|_| "Paket-Grenzen ungültig".to_string())?;
+    let blob_offset =
+        usize::try_from(blob_offset).map_err(|_| "Paket-Grenzen ungültig".to_string())?;
+    let blob_len = usize::try_from(blob_len).map_err(|_| "Paket-Grenzen ungültig".to_string())?;
     let end = blob_offset
         .checked_add(blob_len)
         .ok_or_else(|| "Paket-Grenzen ungültig".to_string())?;
-    if end.checked_add(64).map_or(true, |end| end > data.len()) || blob_offset > data.len() {
+    if end != footer_at || blob_offset > footer_at {
         return Err("Paket-Grenzen ungültig".into());
     }
 
@@ -1005,6 +1009,21 @@ fn main() {
 
 #[cfg(test)]
 mod update_tests {
+    #[test]
+    fn detects_same_size_corruption_in_cached_runtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let entry = super::Entry {
+            name: "runtime.dll".into(),
+            raw_size: 4,
+            raw_crc: super::crc32(b"good"),
+            comp: Vec::new(),
+        };
+        let path = dir.path().join(&entry.name);
+        std::fs::write(&path, b"good").unwrap();
+        assert!(super::cached_file_valid(dir.path(), &entry));
+        std::fs::write(&path, b"evil").unwrap();
+        assert!(!super::cached_file_valid(dir.path(), &entry));
+    }
     use super::*;
     use std::process::Command;
 
@@ -1014,7 +1033,10 @@ mod update_tests {
     fn update_child() {
         if let Some(candidate) = std::env::var_os("DADO_TEST_CANDIDATE") {
             let result = install_update(Path::new(&candidate));
-            assert_eq!(result.is_ok(), std::env::var_os("DADO_EXPECT_SUCCESS").is_some());
+            assert_eq!(
+                result.is_ok(),
+                std::env::var_os("DADO_EXPECT_SUCCESS").is_some()
+            );
         }
     }
 
@@ -1029,23 +1051,41 @@ mod update_tests {
         std::fs::write(&candidate, b"invalid executable for rollback test").unwrap();
         let child = |success: bool| {
             let mut command = Command::new(&exe);
-            command.args(["--exact","update_tests::update_child"])
-                .env("DADO_TEST_CANDIDATE", &candidate).env("DADO_TEST_MARKER", &marker);
-            if success { command.env("DADO_EXPECT_SUCCESS","1"); }
+            command
+                .args(["--exact", "update_tests::update_child"])
+                .env("DADO_TEST_CANDIDATE", &candidate)
+                .env("DADO_TEST_MARKER", &marker);
+            if success {
+                command.env("DADO_EXPECT_SUCCESS", "1");
+            }
             assert!(command.status().unwrap().success());
         };
         child(false);
-        assert_eq!(std::fs::read(&exe).unwrap(),original);
+        assert_eq!(std::fs::read(&exe).unwrap(), original);
         let source = dir.path().join("replacement.rs");
         std::fs::write(&source, r#"fn main(){std::fs::write(std::env::var_os("DADO_TEST_MARKER").unwrap(),b"started").unwrap();}"#).unwrap();
-        assert!(Command::new("rustc").arg(&source).arg("-o").arg(&candidate).status().unwrap().success());
+        assert!(Command::new("rustc")
+            .arg(&source)
+            .arg("-o")
+            .arg(&candidate)
+            .status()
+            .unwrap()
+            .success());
         child(true);
         for _ in 0..100 {
-            if marker.is_file() { break; }
+            if marker.is_file() {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(marker.is_file());
-        assert_eq!(std::fs::read(exe.with_extension("exe.previous")).unwrap(), original);
-        assert_eq!(std::fs::read(exe).unwrap(), std::fs::read(candidate).unwrap());
+        assert_eq!(
+            std::fs::read(exe.with_extension("exe.previous")).unwrap(),
+            original
+        );
+        assert_eq!(
+            std::fs::read(exe).unwrap(),
+            std::fs::read(candidate).unwrap()
+        );
     }
 }

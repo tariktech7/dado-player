@@ -123,18 +123,9 @@ fn download(repo: &str, dir: &Path, release: &Release) -> anyhow::Result<State> 
         status.success() && partial.metadata()?.len() == size,
         "Download unvollständig."
     );
-    use std::io::{Read, Seek, SeekFrom};
-    let mut file = std::fs::File::open(&partial)?;
-    let mut magic = [0; 8];
-    file.read_exact(&mut magic[..2])?;
-    anyhow::ensure!(&magic[..2] == b"MZ", "Ungültige Windows-EXE.");
-    file.seek(SeekFrom::End(-64))?;
-    file.read_exact(&mut magic)?;
-    anyhow::ensure!(
-        &magic == b"DADOPK01",
-        "Das Release enthält kein Dado-Portable-Paket."
-    );
-    drop(file);
+    let package = std::fs::read(&partial)?;
+    anyhow::ensure!(package.get(..2) == Some(b"MZ"), "Ungültige Windows-EXE.");
+    package_footer::footer_offset(&package).map_err(anyhow::Error::msg)?;
     std::fs::rename(partial, dir.join("verified.exe"))?;
     Ok(State::Ready)
 }
@@ -253,3 +244,5 @@ mod tests {
         Ok(())
     }
 }
+#[path = "../../../packaging/package_footer.rs"]
+mod package_footer;
