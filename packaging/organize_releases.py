@@ -43,11 +43,18 @@ def main():
             version = f"{metadata['CFBundleShortVersionString']}-Build-{metadata['CFBundleVersion']}"
             archive(ipa, "iOS", version)
     windows = (ROOT / "windows/VERSION").read_text().strip()
+    versioned_windows = f"Dado-Player-Windows-{windows}.exe"
+    windows_file = versioned_windows if (RELEASES / versioned_windows).exists() else "Dado-Player.exe"
+    legacy_windows = windows_file != "Dado-Player.exe" and (RELEASES / "Dado-Player.exe").exists()
+    for file in RELEASES.glob("Dado-Player-Windows-*.exe"):
+        match = re.fullmatch(r"Dado-Player-Windows-(\d+\.\d+\.\d+)\.exe", file.name)
+        if match and match[1] != windows:
+            archive(file, "Windows", match[1])
     gradle = (ROOT / "android/app/build.gradle").read_text()
     android = re.search(r'versionName "([^"]+)"', gradle)[1]
     current = []
     for platform, version, name in [
-        ("Windows portable", windows, "Dado-Player.exe"),
+        ("Windows portable", windows, windows_file),
         ("Android", android, "Dado-Player-arm64-debug.apk"),
         ("Samsung TV", tv, f"Dado-Player-Tizen-{tv}.wgt"),
         ("Tizen Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen-{tv}-unsigned.wgt"),
@@ -59,6 +66,8 @@ def main():
     (RELEASES / "AKTUELL.json").write_text(json.dumps(dict(packages=current, ios=ios), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     lines = ["# Aktuelle Dado-Player-Downloads", "", "| Plattform | Version | Datei |", "| --- | --- | --- |"]
     lines += [f"| {p['platform']} | {p['version']} | [{p['file']}]({p['file']}) |" for p in current]
+    if legacy_windows:
+        lines += ["", "Hinweis: Dado-Player.exe ist noch die bisherige geöffnete/gesperrte Datei. Für die neue Windows-Version die oben verlinkte Datei mit Versionsnummer verwenden."]
     lines += ["", "Windows: portable EXE direkt starten. Android: signierte APK installieren; der historische Dateiname enthält weiterhin ‚debug‘.",
               "Samsung: signierte WGT für den eingerichteten Entwickler-TV. Installation über den PC; nicht per USB-Dateiauswahl.",
               "Die unsignierte WGT ist nur für Entwickler und benötigt ein Samsung-Zertifikat für das jeweilige Gerät.",

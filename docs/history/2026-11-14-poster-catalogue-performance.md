@@ -45,3 +45,29 @@ App-Start erfolgreich (PID 19350). SHA-256 des signierten Pakets:
 80ee971f9aa1fcfb162122b0af9e2dca5ef54879eeb1e521c3c2cef66a2c2711.
 Die visuelle Layout-/Fokusabnahme auf dem physischen TV steht noch aus; Installation und
 Start allein belegen noch keine Reaktionszeit oder vollständige Bedienbarkeit auf Hardware.
+
+
+## Abschließende Paket- und UI-Prüfung
+
+Windows: Release-Build erstellt, neun DLL-/Laufzeitdateien geprüft. Die endgültige portable
+EXE wurde aus einem Ordner mit nur dieser Datei gestartet, spielte das Testvideo laut MPV-Log
+ab und beendete ihren eigenen Prozessbaum sauber mit Exit 0. Die bisherige Releases/Dado-Player.exe
+läuft beim Eigentümer und ist gesperrt; deshalb heißt der neue lokale Download ausdrücklich
+Dado-Player-Windows-0.5.5.exe. README/AKTUELL.json verweisen auf diese Datei. GitHub-Asset und
+Windows-Updater behalten den Downloadnamen Dado-Player.exe. Die laufende alte App wurde nicht beendet.
+
+Android: endgültige APK gebaut, stabile Projektsignatur v2/v3, 4-KiB-Alignment geprüft. Im eigenen
+Emulator bei Full HD TV und 1080×2400 Telefon geprüft: Poster, eingeklappte Navigation, horizontale
+Staffeln und automatisch sichtbare Folge 6 in Staffel 5. D-pad navigiert über mehrere nachgeladene
+Posterreihen und öffnet den fokussierten Titel (Beispiel Serie 13). Nur synthetische Anbieterdaten.
+
+Aktueller iOS-Workflow 43611485864 (Quellstand e8071f7) wurde vor Jobstart wegen Kontozahlung/
+Ausgabenlimit abgelehnt. Host-Typcheck bestanden, weiterhin keine neue IPA. Windows ist weiterhin
+nicht öffentlich codesigniert; SmartScreen-Warnungen können auftreten.
+
+| Paket | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Dado-Player-Windows-0.5.5.exe | 54990868 | 6ac846c101489113621bdc5b5200fd5938da591560902436d69ce7e988c48ec5 |
+| Dado-Player-arm64-debug.apk | 45019687 | 7bcd42553860ddd75b189e3f63d00ee39116066e383f901ce0073542de3ef3a1 |
+| Dado-Player-Tizen-0.1.6.wgt | 913486 | 80ee971f9aa1fcfb162122b0af9e2dca5ef54879eeb1e521c3c2cef66a2c2711 |
+| Dado-Player-Tizen-0.1.6-unsigned.wgt | 926422 | afedf81dd5003c941d3d208c4040cee496a76f92971551e5eba39d43e65827a2 |
