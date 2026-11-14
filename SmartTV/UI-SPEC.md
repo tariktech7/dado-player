@@ -42,6 +42,13 @@ Suche: 28 Punkte Höhe, danach 4 Punkte Abstand.
 
 ## Fernbedienung und Abnahme
 
+Tizen-Umsetzung: Auswahlfelder bleiben beim Fokussieren geschlossen; erst OK öffnet
+eine Dado-Liste, Zurück verwirft sie. Native HTML-select-Elemente dürfen die räumliche
+Navigation nicht übernehmen. Die Bildschirmtastatur verkleinert die sichtbare Höhe,
+nicht das TV-Raster: Skalierung aus der Breite ableiten, aktive Formularbereiche auf
+die verbleibende Höhe begrenzen und das Eingabefeld dorthin scrollen. Dies auch beim
+späteren LG-Client prüfen.
+
 - Pfeile bewegen den sichtbaren Fokus räumlich; Listen scrollen den Fokus mit.
 - OK auf einem Sender öffnet die Vorschau. Erneutes OK auf demselben Sender oder
   OK auf der Vorschau öffnet den vollständigen Player.

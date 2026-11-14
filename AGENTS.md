@@ -2,6 +2,12 @@
 
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 
+Samsung Tizen ist ein separater Web-TV-Client unter SmartTV/client. Gemeinsame Produktabläufe
+gemäß SmartTV/UI-SPEC.md beibehalten; native Samsung-APIs in platform.ts/player.ts kapseln.
+Bei Web-TV-Änderungen npm run check, npm run test:ui und npm run package ausführen.
+Browser-API-Simulation, gültige Gerätesignierung und echte TV-Wiedergabe getrennt dokumentieren.
+Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als funktionierendes Ziel ausgeben.
+
 - Gemeinsame Funktionen in src/ entwickeln. Betriebssystem-Aufrufe in src/platform/windows, android oder ios kapseln. Native Hosts, Signierung und Paketierung gehören zum jeweiligen Ziel. Die gemeinsamen Benutzerabläufe über die Plattform-Fassade anbinden.
 - Ein Build-Einstieg pro Ziel gemäß README.md. Bestehende Aufrufe unter probe/ sind Weiterleitungen für ältere Werkzeuge. Bei Änderungen an Pfaden, SDKs, Artefakten oder Voraussetzungen im selben Änderungssatz README, CI und aufrufende Skripte abgleichen.
 - Gemeinsame Rust-Änderungen mit cargo fmt --all -- --check und cargo test --locked --all-targets auf Windows prüfen. Für Android den Gradle-/NDK-Build, für iOS den Geräte-Build mit Apple-SDK prüfen. cargo check --features ios-check --lib deckt nur einen Teil des iOS-Codes ab.

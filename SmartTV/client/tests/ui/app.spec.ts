@@ -1,0 +1,481 @@
+import { test, expect, Page } from "@playwright/test";
+import { fresh } from "../../src/store";
+const profile = {
+  id: "qa",
+  name: "TV Demo",
+  kind: "Xtream" as const,
+  host: "https://provider.invalid",
+  username: "demo",
+  password: "demo",
+  m3uUrl: "",
+  epgUrl: "",
+};
+async function fixture(page: Page, seed = true, native = false) {
+  await page.route("https://provider.invalid/**", async (route) => {
+    const url = new URL(route.request().url()),
+      action = url.searchParams.get("action"),
+      now = Math.floor(Date.now() / 1000);
+    let data: unknown = [];
+    if (url.pathname !== "/player_api.php") {
+      return route.fulfill({ status: 404, body: "" });
+    }
+    if (!action) data = { user_info: { auth: 1 } };
+    else if (action.endsWith("_categories"))
+      data = Array.from({ length: 12 }, (_, i) => ({
+        category_id: String(i + 1),
+        category_name:
+          ["Sport", "Nachrichten", "Dokumentation", "Unterhaltung"][i % 4] +
+          " " +
+          (i + 1),
+      }));
+    else if (action === "get_live_streams")
+      data = Array.from({ length: 4800 }, (_, i) => ({
+        stream_id: i + 1,
+        name: `Dado Kanal ${String(i + 1).padStart(4, "0")}`,
+        category_id: String((i % 12) + 1),
+        stream_icon: `https://logos.invalid/${i % 2 ? "tall" : "wide"}.svg`,
+      }));
+    else if (action === "get_vod_streams")
+      data = [
+        {
+          stream_id: 1,
+          name: "Demo Film",
+          category_id: "1",
+          container_extension: "mp4",
+        },
+      ];
+    else if (action === "get_series")
+      data = [{ series_id: 2, name: "Demo Serie", category_id: "1" }];
+    else if (action === "get_short_epg")
+      data = {
+        epg_listings: [
+          {
+            title: "Sport am Abend",
+            description: "Analysen, Interviews und die Höhepunkte des Tages.",
+            start_timestamp: now - 600,
+            stop_timestamp: now + 1200,
+          },
+          {
+            title: "Die Nachrichten",
+            description: "Danach im Programm.",
+            start_timestamp: now + 1200,
+            stop_timestamp: now + 2400,
+          },
+        ],
+      };
+    else if (action === "get_vod_info")
+      data = { info: { plot: "Ein Film für die Testbibliothek." } };
+    else if (action === "get_series_info")
+      data = {
+        episodes: {
+          "1": [
+            {
+              id: 10,
+              title: "Der Anfang",
+              season: 1,
+              episode_num: 1,
+              container_extension: "mp4",
+            },
+            {
+              id: 11,
+              title: "Die Fortsetzung",
+              season: 1,
+              episode_num: 2,
+              container_extension: "mp4",
+            },
+          ],
+        },
+      };
+    await route.fulfill({
+      json: data,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  });
+  await page.route("https://logos.invalid/**", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="${route.request().url().includes("wide") ? 320 : 80}" height="${route.request().url().includes("wide") ? 80 : 160}"><rect width="100%" height="100%" rx="12" fill="#71dfd1"/><circle cx="50%" cy="50%" r="22" fill="white"/></svg>`,
+    }),
+  );
+  if (seed) {
+    const s = fresh();
+    s.profiles = [profile];
+    s.activeProfile = profile.id;
+    await page.addInitScript((state) => {
+      if (!localStorage.getItem("dado.tv.v1"))
+        localStorage.setItem("dado.tv.v1", JSON.stringify(state));
+    }, s);
+  }
+  if (native) {
+    await page.route("**/$WEBAPIS/webapis/webapis.js", (route) =>
+      route.fulfill({ contentType: "text/javascript", body: "" }),
+    );
+    await page.addInitScript(() => {
+      let state = "NONE",
+        listener: any,
+        time = 0;
+      const log: any[] = [];
+      (window as any).__avLog = log;
+      (window as any).tizen = {
+        tvinputdevice: { registerKey() {} },
+        application: {
+          getCurrentApplication: () => ({ exit: () => log.push(["exit"]) }),
+        },
+      };
+      (window as any).webapis = {
+        appcommon: {
+          setScreenSaver: (...a: any[]) => log.push(["screensaver", a[0]]),
+        },
+        avplay: {
+          getState: () => state,
+          open: () => {
+            state = "IDLE";
+            log.push(["open"]);
+          },
+          setListener: (l: any) => (listener = l),
+          setBufferingParam() {},
+          setStreamingProperty() {},
+          prepareAsync: (ok: any) =>
+            setTimeout(() => {
+              state = "READY";
+              ok();
+            }, 20),
+          setDisplayRect: (...r: any[]) => log.push(["rect", ...r]),
+          setDisplayMethod: (m: any) => log.push(["aspect", m]),
+          play: () => {
+            state = "PLAYING";
+            log.push(["play"]);
+          },
+          pause: () => {
+            state = "PAUSED";
+            log.push(["pause"]);
+          },
+          seekTo: (n: number, ok: any) => {
+            time = n;
+            log.push(["seek", n]);
+            ok?.();
+          },
+          stop: () => (state = "IDLE"),
+          close: () => {
+            state = "NONE";
+            log.push(["close"]);
+          },
+          getCurrentTime: () => time,
+          getDuration: () => 120000,
+          getTotalTrackInfo: () => [
+            {
+              type: "AUDIO",
+              index: 0,
+              extra_info: '{"language":"deu","codec":"AAC"}',
+            },
+            { type: "TEXT", index: 1, extra_info: '{"language":"eng"}' },
+          ],
+          setSelectTrack: (...a: any[]) => log.push(["track", ...a]),
+          setSilentSubtitle: () => {},
+          suspend: () => log.push(["suspend"]),
+          restoreAsync: (_u: any, _n: any, _b: any, ok: any) => {
+            state = "PLAYING";
+            ok();
+          },
+        },
+      };
+    });
+  }
+}
+test("login is inline, saved profile resumes without a profile prompt", async ({
+  page,
+}) => {
+  await fixture(page, false);
+  await page.goto("/");
+  await page.getByLabel("Profilname", { exact: true }).click();
+  await page.getByLabel("Profilname", { exact: true }).fill("TV Demo");
+  await page.getByLabel("Server-Adresse").click();
+  await page.getByLabel("Server-Adresse").fill(profile.host);
+  await page.getByLabel("Benutzername").click();
+  await page.getByLabel("Benutzername").fill("demo");
+  await page.getByLabel("Passwort", { exact: true }).click();
+  await page.getByLabel("Passwort", { exact: true }).fill("demo");
+  await page.getByRole("button", { name: "Verbinden & speichern" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Guten Abend, TV Demo." }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Guten Abend, TV Demo." }),
+  ).toBeVisible();
+  await expect(page.getByText("Schön, dass du da bist.")).toHaveCount(0);
+});
+test("Full HD and 4K keep aligned headings, ten rows, side-by-side EPG and contain logos", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await expect(page.locator(".channel")).toHaveCount(24);
+  await page.locator(".channel").first().click();
+  await expect(page.locator(".preview-panel")).toBeVisible();
+  await expect(page.locator(".epg-detail")).toContainText("Sport am Abend");
+  for (const size of [
+    { width: 1920, height: 1080 },
+    { width: 3840, height: 2160 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.waitForTimeout(100);
+    const geometry = await page.evaluate(() => {
+      const rect = (s: string) =>
+          document.querySelector(s)!.getBoundingClientRect(),
+        brand = rect(".brand"),
+        cat = rect(".categories>h1"),
+        title = rect(".channels>h1"),
+        list = rect(".channel-list");
+      const visible = [...document.querySelectorAll(".channel")].filter(
+        (el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= list.top && r.bottom <= list.bottom;
+        },
+      ).length;
+      const [a, b] = [...document.querySelectorAll(".epg-pair small")]
+        .slice(0, 2)
+        .map((el) => el.getBoundingClientRect());
+      return {
+        brand: brand.y + brand.height / 2,
+        cat: cat.y + cat.height / 2,
+        title: title.y + title.height / 2,
+        visible,
+        gap: b.left - a.right,
+        dy: a.y - b.y,
+        fit: getComputedStyle(document.querySelector(".logo img")!).objectFit,
+        dom: document.querySelectorAll(".channel").length,
+      };
+    });
+    expect(Math.abs(geometry.brand - geometry.cat)).toBeLessThan(2);
+    expect(Math.abs(geometry.cat - geometry.title)).toBeLessThan(2);
+    expect(geometry.visible).toBeGreaterThanOrEqual(10);
+    expect(geometry.gap).toBeGreaterThanOrEqual(47);
+    expect(geometry.dy).toBe(0);
+    expect(geometry.fit).toBe("contain");
+    expect(geometry.dom).toBeLessThan(40);
+    await page.screenshot({
+      path: `test-results/tizen-live-${size.width}.png`,
+    });
+  }
+});
+test("Samsung player preserves stream across preview/fullscreen, exposes tracks and handles Back in order", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await page.locator(".channel").first().click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).__avLog.filter((a: any) => a[0] === "play").length,
+      ),
+    )
+    .toBe(1);
+  await page.locator(".channel").first().click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.getByRole("button", { name: "Ton & Untertitel" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "deu · AAC" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".fullscreen")).toHaveCount(0);
+  await expect(page.locator(".preview-panel")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as any).__avLog.filter((a: any) => a[0] === "open").length,
+    ),
+  ).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".preview-panel")).toHaveCount(0);
+});
+test("favorites remain separate from history; series and settings work with remote input", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await page.locator(".channel").first().click();
+  await page.getByRole("button", { name: "Sender als Favorit" }).click();
+  await page.getByRole("button", { name: "⌂ Startseite", exact: true }).click();
+  await expect(page.locator(".favorite-programs button")).toHaveCount(1);
+  await expect(page.locator(".favorite-programs")).toContainText(
+    "Dado Kanal 0001",
+  );
+  await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
+  await page.getByRole("button", { name: "Demo Serie" }).click();
+  await expect(page.locator(".episode-list button")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "⚙ Einstellungen", exact: true })
+    .click();
+  await page.getByRole("combobox", { name: "Live-Streamformat" }).click();
+  await page.getByRole("option", { name: "MPEG-TS (.ts)" }).click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "⚙ Einstellungen", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "Live-Streamformat" }),
+  ).toContainText("MPEG-TS (.ts)");
+  await page.getByRole("button", { name: "⌂ Startseite", exact: true }).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    page.getByRole("button", { name: "▣ Live TV", exact: true }),
+  ).toBeFocused();
+});
+
+test("virtualized remote navigation scrolls beyond the first window of channels", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await page.waitForTimeout(100);
+  await page.locator(".channel").first().focus();
+  for (let i = 0; i < 30; i++) await page.keyboard.press("ArrowDown");
+  await expect(page.locator('.channel[data-channel="31"]')).toBeFocused();
+  expect(await page.locator(".channel").count()).toBeLessThan(40);
+});
+
+test("TV choices only open with OK and never trap plain up/down navigation", async ({
+  page,
+}) => {
+  await fixture(page, false);
+  await page.goto("/");
+  const method = page.getByRole("combobox", {
+    name: "Anmeldemethode",
+    exact: true,
+  });
+  await method.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByLabel("Server-Adresse")).toBeFocused();
+  await expect(method).toHaveAttribute("aria-expanded", "false");
+  await expect(method).toContainText("Xtream Codes");
+  await method.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("listbox", { name: "Anmeldemethode" }),
+  ).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(method).toContainText("M3U-Wiedergabeliste");
+  await expect(page.getByLabel("M3U-Adresse", { exact: true })).toBeVisible();
+});
+
+test("keyboard height reduction keeps full-size UI and scrolls the focused field into view", async ({
+  page,
+}) => {
+  await fixture(page, false);
+  await page.goto("/");
+  const input = page.getByLabel("Passwort", { exact: true });
+  await input.focus();
+  const before = await input.boundingBox();
+  await page.setViewportSize({ width: 1920, height: 620 });
+  await expect(page.locator("#app")).toHaveClass(/keyboard-open/);
+  await expect
+    .poll(async () => {
+      const r = await input.boundingBox();
+      return r!.y + r!.height;
+    })
+    .toBeLessThanOrEqual(620);
+  const after = await input.boundingBox();
+  expect(after!.width).toBeCloseTo(before!.width, 0);
+  expect(after!.height).toBeCloseTo(before!.height, 0);
+  expect(
+    await page
+      .locator("#app")
+      .evaluate((el) => el.getBoundingClientRect().width),
+  ).toBe(1920);
+  await page.screenshot({ path: "test-results/tizen-keyboard-layout.png" });
+});
+
+test("bundled test video decodes in HTML preview and controls hide then return with OK", async ({
+  page,
+}) => {
+  await fixture(page, true, false);
+  await page.goto("/");
+  const h264 = await page.evaluate(
+    () =>
+      !!document
+        .createElement("video")
+        .canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"'),
+  );
+  test.skip(
+    !h264,
+    "This Chromium distribution has no H.264/AAC decoder; run with DADO_BROWSER_CHANNEL=msedge or validate on the Samsung TV.",
+  );
+  await page
+    .getByRole("button", { name: "⚙ Einstellungen", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Integriertes Testvideo abspielen" })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator("#video-host video")
+        .evaluate((el: HTMLVideoElement) => el.currentTime),
+    )
+    .toBeGreaterThan(0);
+  const decoded = await page
+    .locator("#video-host video")
+    .evaluate((el: HTMLVideoElement) => ({
+      width: el.videoWidth,
+      height: el.videoHeight,
+    }));
+  expect(decoded.width).toBeGreaterThan(0);
+  expect(decoded.height).toBeGreaterThan(0);
+  await page.screenshot({ path: "test-results/tizen-html-playback.png" });
+  await expect(page.locator(".fullscreen")).toHaveClass(/controls-hidden/, {
+    timeout: 10000,
+  });
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".fullscreen")).not.toHaveClass(/controls-hidden/);
+});
+
+test("inputs stay read-only while navigating and activate only with OK", async ({
+  page,
+}) => {
+  await fixture(page, false);
+  await page.goto("/");
+  const field = page.getByLabel("Server-Adresse");
+  await field.focus();
+  await expect(field).toHaveJSProperty("readOnly", true);
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByLabel("Benutzername")).toBeFocused();
+  await field.focus();
+  await page.keyboard.press("Enter");
+  await expect(field).toHaveJSProperty("readOnly", false);
+  await field.fill("https://provider.invalid");
+  await page.keyboard.press("Enter");
+  await expect(field).toHaveJSProperty("readOnly", true);
+});
+
+test("returning to the first form field restores the designed top spacing without moving the canvas", async ({
+  page,
+}) => {
+  await fixture(page, false);
+  await page.goto("/");
+  await page.getByLabel("Passwort", { exact: true }).click();
+  await page.setViewportSize({ width: 1920, height: 620 });
+  await page.getByLabel("Profilname", { exact: true }).focus();
+  await expect
+    .poll(() => page.locator(".welcome-panel").evaluate((el) => el.scrollTop))
+    .toBe(0);
+  await expect
+    .poll(() => page.locator("#app").evaluate((el) => el.scrollTop))
+    .toBe(0);
+  await expect
+    .poll(() =>
+      page
+        .locator(".welcome-panel")
+        .evaluate((el) => el.getBoundingClientRect().top),
+    )
+    .toBeGreaterThanOrEqual(39);
+});

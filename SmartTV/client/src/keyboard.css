@@ -1,0 +1,77 @@
+/* The virtual keyboard changes visible height, never the 10-foot type scale. */
+.keyboard-open .welcome {
+  align-items: start;
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+.keyboard-open .welcome-panel {
+  max-height: calc(var(--visible-height) - 80px);
+}
+.keyboard-open .shell main {
+  height: calc(var(--visible-height) - 108px);
+}
+.keyboard-open .scrim {
+  height: var(--visible-height);
+  bottom: auto;
+  padding: 40px;
+}
+.keyboard-open .modal {
+  max-height: calc(var(--visible-height) - 80px);
+}
+.select-control {
+  display: inline-block;
+  min-width: 200px;
+}
+.tv-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  font-size: 24px;
+  min-width: 0;
+}
+.tv-select > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.field > .select-control {
+  flex: 0 1 55%;
+  min-width: 0;
+  max-width: 440px;
+}
+.profile-form .field > .select-control {
+  display: block;
+  width: 100%;
+  max-width: none;
+}
+.profile-form .tv-select {
+  font-size: 28px;
+}
+.selection-dialog {
+  width: 800px;
+  max-height: 900px;
+}
+.selection-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 600px;
+  overflow: auto;
+  padding: 6px;
+  margin: 20px 0;
+}
+.selection-options > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  width: 100%;
+}
+.selection-dialog > p {
+  font-size: 24px;
+}
+.select-popup {
+  z-index: 70;
+}

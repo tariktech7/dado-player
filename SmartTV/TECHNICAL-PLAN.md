@@ -1,7 +1,9 @@
 # LG webOS und Samsung Tizen: technische Vorbereitung
 
-Stand: 14. November 2026. Portierungsplan, kein Nachweis eines existierenden Dado-IPK/WGT.
-Die aktuellen Rust-/egui-Apps bleiben erhalten.
+Historischer Vorbereitungsstand vom 14. November 2026. Inzwischen ist Samsung unter
+[client/README.md](client/README.md) implementiert und baubar; dort stehen die aktuellen
+Dado-Build-/Installationsbefehle. Die folgenden Referenzbefehle bleiben als Grundlage erhalten.
+LG ist noch nicht implementiert. Die bestehenden Rust-/egui-Apps bleiben erhalten.
 
 ## Referenz und Quellen
 

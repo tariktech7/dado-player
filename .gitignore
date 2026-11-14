@@ -58,4 +58,11 @@ Dado-Player-startup.log
 /packaging/launcher/target/
 
 /Releases/
+/SmartTV/client/node_modules/
+/SmartTV/client/dist/
+/SmartTV/client/test-results/
+/SmartTV/client/playwright-report/
+*.wgt
+**/companion.local.json
+**/tizen.local.json
 __pycache__/
