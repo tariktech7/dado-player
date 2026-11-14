@@ -1,7 +1,7 @@
 # Dado Player
 
 Aktuell: Windows portable **0.5.5**, Android **0.2.9 / Build 13**, iOS **0.2.6 / Build 8**, Samsung Tizen **0.1.6**.
-Lizenz-Beta in Vorbereitung: Windows **0.5.6** und Samsung **0.1.7** mit 7 Tagen Testzeit,
+[Separate Lizenz-Beta](https://github.com/tariktech7/dado-player/releases/tag/dado-license-beta-2026-11-15): Windows **0.5.6** und Samsung **0.1.7** mit 7 Tagen Testzeit,
 eigenem Sperrbildschirm, MAC/Geräte-ID und manuellem Freischaltabruf. Dauerlizenzen werden
 offline geprüft und lösen keine automatischen Lizenz-Serverabrufe aus. Android/iOS bleiben
 ohne diese Kaufsperre. Betrieb und Einrichtung: [Lizenzverwaltung](licensing/README.md).

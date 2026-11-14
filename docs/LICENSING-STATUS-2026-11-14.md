@@ -1,5 +1,7 @@
 # Lizenzierung: Zwischenstand 14.11.2026
 
+Abschluss in der Nacht zum 15.11.2026: Quellstand `aa75212b5e23b9658ef4e129422f68b37b3694f1` ist nach `origin/main` gepusht. [Lizenz-Beta auf GitHub Releases](https://github.com/tariktech7/dado-player/releases/tag/dado-license-beta-2026-11-15) als getrenntes Prerelease veröffentlicht. Alle drei hochgeladenen Paketgrößen und SHA-256-Digests stimmen mit den lokalen Paketen überein. Kein automatisches Update des bisherigen stabilen Releases. Lokaler Release-Index aktualisiert, ältere Windows-/Samsung-Pakete ohne Löschen ins Archiv verschoben. Der Benutzer hat das vollständige Herunterfahren nach Arbeitsabschluss ausdrücklich beauftragt.
+
 ## Geprüft
 
 - Backend: 5 Tests bestanden; SQL-Adapter verwendet echte SQLite-Datenbank und eigene kurzlebige Testschlüssel.

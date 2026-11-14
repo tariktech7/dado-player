@@ -4,6 +4,8 @@ Stand: 14.11.2026. Der nachfolgende Entwurf wurde freigegeben. Aktueller Betrieb
 
 Abweichungen vom ursprünglichen Vorschlag: Windows ist auf ausdrücklichen Wunsch eingeschlossen. Der Gerätecode verwendet sechs Gruppen aus jeweils vier Hex-Zeichen nach `D7-`, ohne zusätzliche Prüfziffer. CSV-Import/Export und eine portable Schlüsselsicherung sind noch offen. Die folgenden Abschnitte bewahren den ursprünglichen Plan und sind keine pauschale Fertigmeldung.
 
+Nachtrag 15.11.2026: Eigene Start-/Ablaufsperrbildschirme für Windows und Samsung ergänzt und geprüft. Lizenz-Beta als getrenntes [GitHub-Prerelease](https://github.com/tariktech7/dado-player/releases/tag/dado-license-beta-2026-11-15) veröffentlicht; Quellstand `aa75212`. Hardwareabnahme bleibt offen. Details und Hashes im [Prüfbericht](../LICENSING-STATUS-2026-11-14.md).
+
 ## Entscheidungsvorschlag
 
 Sieben Tage gerätegebundene Testzeit ab dem ersten erfolgreich bestätigten Online-Start. Danach ist die Wiedergabe gesperrt, die Aktivierungs-/Supportoberfläche und vorhandene Daten bleiben erreichbar. Nach manuell bestätigter Zahlung wird eine unbefristete, signierte Lizenz abgerufen und lokal gespeichert. Ab dann keine Serverabfragen zur Lizenz, keine Lease, kein Ablaufdatum und kein Hintergrund-Polling. Eine lokale Signatur- und Geräteprüfung beim Start schützt vor einem einfachen veränderten Freischalt-Flag und kopierten Lizenzdateien; ihr Ergebnis bleibt im Speicher und liegt außerhalb des Render-/Wiedergabepfads.
