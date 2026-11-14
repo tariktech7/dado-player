@@ -43,6 +43,11 @@ EXPECT = {
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
 kernel32 = ctypes.windll.kernel32
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+EXPECTED_RUNTIME = None
 
 WM_CLOSE = 0x0010
 SW_RESTORE = 9
@@ -62,6 +67,18 @@ def find_window(title):
             return True
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        handle = kernel32.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return True
+        try:
+            capacity = wintypes.DWORD(32768)
+            image = ctypes.create_unicode_buffer(capacity.value)
+            if not kernel32.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(capacity)):
+                return True
+            if not EXPECTED_RUNTIME or os.path.normcase(os.path.dirname(image.value)) != os.path.normcase(EXPECTED_RUNTIME):
+                return True
+        finally:
+            kernel32.CloseHandle(handle)
         length = user32.GetWindowTextLengthW(hwnd)
         if length == 0:
             return True
@@ -114,6 +131,7 @@ def is_black(path, threshold=18):
 
 
 def main():
+    global EXPECTED_RUNTIME
     if not os.path.exists(EXE):
         fail(f"exe fehlt: {EXE}")
     # Copy into a fresh folder that contains ONLY the exe (the whole point).
@@ -126,6 +144,7 @@ def main():
         fail("Ordner enthält mehr als nur die EXE")
 
     rt = tempfile.mkdtemp(prefix="dado-rt-")
+    EXPECTED_RUNTIME = os.path.abspath(rt)
     log = os.path.join(exe)
     env = dict(os.environ)
     env["DADO_RUNTIME_DIR"] = rt
