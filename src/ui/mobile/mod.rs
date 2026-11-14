@@ -388,7 +388,7 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
         .frame(Frame::none().fill(page_color))
         .show(ctx, |ui| {
             crate::theme::ambient(ui, ui.max_rect());
-            match app.view {
+            ui.push_id(("section", app.view as u64), |ui| match app.view {
                 View::Home => crate::ui::home::show(app, ui),
                 View::Live => live::show(app, ui, l),
                 View::Movies => movies::show(app, ui, l),
@@ -399,7 +399,7 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
                 View::Settings => settings::show(app, ui, l),
                 View::Player => {}
                 View::Login => {}
-            }
+            });
         });
 
     if app.mobile_more {
@@ -429,17 +429,7 @@ fn bar_content(app: &App) -> (String, bool, Option<(Icon, &'static str)>) {
             false,
             search_action,
         ),
-        View::Series => {
-            if app.selected_series.is_some() {
-                // No title on the detail page: the hero carries the name. The
-                // bar's `fit()` truncates, so a copy up here would both
-                // duplicate the name 40 dp above itself and be the truncated
-                // one — the hero is the identity, the bar is chrome.
-                (String::new(), true, None)
-            } else {
-                ("Serien".to_string(), false, search_action)
-            }
-        }
+        View::Series => ("Serien".to_string(), false, search_action),
         View::Home => ("Startseite".to_string(), false, search_action),
         View::Search => ("Suche".to_string(), true, None),
         View::Favorites => ("Favoriten".to_string(), false, None),

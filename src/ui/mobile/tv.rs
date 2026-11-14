@@ -30,7 +30,7 @@ use crate::types::{Channel, LiveFormat, Series, Theme, TvMode, VodMovie};
 
 /// Left-hand navigation. The third field is the description shown in the hero
 /// while the header itself holds focus.
-pub const HEADERS: [(Icon, &str, &str); 7] = [
+pub const HEADERS: [(Icon, &str, &str); 8] = [
     (Icon::Tv, "Live TV", "Sender, Logos und Jetzt / Danach"),
     (Icon::Film, "Filme", "Die Filmbibliothek des Anbieters"),
     (Icon::Series, "Serien", "Serien, Staffeln und Folgen"),
@@ -50,6 +50,11 @@ pub const HEADERS: [(Icon, &str, &str); 7] = [
         "Einstellungen",
         "Darstellung, TV-Modus und Profil",
     ),
+    (
+        Icon::Home,
+        "Startseite",
+        "Fortsetzen und das Programm deiner Favoriten",
+    ),
 ];
 pub const HEADER_COUNT: usize = HEADERS.len();
 
@@ -57,7 +62,7 @@ pub const HEADER_COUNT: usize = HEADERS.len();
 /// A real TV is landscape and uses `HEADERS`, but forcing TV mode on a phone
 /// must not turn "Fortsetzen" into "Fort…".
 const SHORT_HEADERS: [&str; HEADER_COUNT] = [
-    "Live", "Filme", "Serien", "Weiter", "Favs", "Suche", "Setup",
+    "Live", "Filme", "Serien", "Weiter", "Favs", "Suche", "Setup", "Start",
 ];
 
 // ---- 10-foot scale (§23.4 P1) ----
@@ -159,7 +164,7 @@ struct Rail {
 }
 
 /// Entry point from `ui::mobile::show()`.
-pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
+pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
     let g = geom(ctx);
     let bg = ctx.style().visuals.panel_fill;
 
@@ -168,13 +173,15 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
         .show(ctx, |ui| {
             ui.painter().rect_filled(ctx.screen_rect(), 0.0, bg);
             if app.tv_nav == 0 {
-                crate::ui::live::paint_tv_columns(ui, g.content, g.headers, app.preview.is_some());
+                crate::ui::live::paint_tv_columns(ui, g.content, g.headers, true);
             }
             paint_brand(ui, g.brand, app);
 
             let mut metas: Vec<Meta> = Vec::new();
             let mut hui = ui.child_ui(g.headers, egui::Layout::top_down(Align::LEFT));
+            focus::set_zone(0);
             draw_headers(app, &mut hui, &mut metas);
+            focus::set_zone(1);
 
             if app.tv_nav == 0 {
                 app.view = crate::app::View::Live;
@@ -185,6 +192,31 @@ pub fn show(app: &mut App, ctx: &Context, _l: &Layout) {
             if app.view == crate::app::View::Live {
                 app.close_preview();
                 app.view = crate::app::View::Home;
+            }
+            if app.tv_nav == 1 || app.tv_nav == 2 {
+                let series = app.tv_nav == 2;
+                app.view = if series {
+                    crate::app::View::Series
+                } else {
+                    crate::app::View::Movies
+                };
+                crate::ui::library::show(app, &mut cui, series);
+                return;
+            }
+            if app.tv_nav == 3 {
+                app.view = crate::app::View::Continue;
+                super::continue_watching::show(app, &mut cui, l);
+                return;
+            }
+            if app.tv_nav == 4 {
+                app.view = crate::app::View::Favorites;
+                super::favorites::show(app, &mut cui, l);
+                return;
+            }
+            if app.tv_nav == 7 {
+                app.view = crate::app::View::Home;
+                crate::ui::home::show(app, &mut cui);
+                return;
             }
             let hero_rect = draw_content(app, &mut cui, &g, &mut metas);
 
@@ -311,7 +343,7 @@ fn draw_content(app: &mut App, ui: &mut Ui, g: &Geom, metas: &mut Vec<Meta>) -> 
 
     let mut actions: Vec<Act> = Vec::new();
     egui::ScrollArea::vertical()
-        .id_source("tv-rails")
+        .id_source(("tv-rails", app.tv_nav))
         .max_height(rails_h)
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -736,7 +768,7 @@ fn series_rails(app: &mut App) -> Vec<Rail> {
             .map(|e| Card {
                 key: format!("scov:{}", sid),
                 url: String::new(),
-                title: format!("S{} F{} · {}", e.season, e.episode, e.title),
+                title: format!("Staffel {} · Folge {}", e.season, e.episode),
                 sub: String::new(),
                 meta: "Folge · mit OK starten".to_string(),
                 progress: None,
@@ -1074,9 +1106,7 @@ fn apply_action(app: &mut App, act: Act) {
             }
         }
         Act::Series(id) => {
-            app.request_series(id);
-            app.tv_series = Some(id);
-            // The episodes rail is now the first rail after the headers.
+            app.open_series(id);
             focus::request_index(HEADER_COUNT);
         }
         Act::Letter(ch) => app.tv_search.push(ch.to_ascii_lowercase()),

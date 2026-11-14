@@ -18,6 +18,7 @@
 //!   *previous* frame, because `begin()` runs before any control exists.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use egui::{Align, Color32, Rect, Response, Rounding, Stroke, Ui};
 
@@ -30,6 +31,12 @@ thread_local! {
 
 #[derive(Default)]
 struct State {
+    current_zone: Option<u8>,
+    zones: Vec<Option<u8>>,
+    frame_zones: Vec<Option<u8>>,
+    ids: Vec<egui::Id>,
+    frame_ids: Vec<egui::Id>,
+    zone_memory: HashMap<(u64, u8), egui::Id>,
     /// True after the first remote key; hides the ring for touch users.
     active: bool,
     /// Index of the focused control in registration order.
@@ -86,6 +93,9 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
         let mut s = cell.borrow_mut();
         s.spatial = spatial;
         s.frame_rects.clear();
+        s.frame_ids.clear();
+        s.frame_zones.clear();
+        s.current_zone = None;
         if pointer_used {
             s.active = false;
             s.pending_ok = false;
@@ -135,7 +145,7 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
                         _ => Dir::Right,
                     };
                     if spatial {
-                        if let Some(next) = find_next(&rects, s.idx, dir) {
+                        if let Some(next) = zoned_next(&s, &rects, s.idx, dir) {
                             s.idx = next;
                             s.moved = true;
                         }
@@ -169,6 +179,54 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
         s.seen = 0;
         s.focus_rect = None;
     });
+}
+
+/// Set a semantic column for subsequent controls. Column memory uses stable widget IDs.
+pub fn set_zone(zone: u8) {
+    STATE.with(|cell| cell.borrow_mut().current_zone = Some(zone));
+}
+fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize> {
+    let Some(zone) = s.zones.get(from).copied().flatten() else {
+        return find_next(rects, from, dir);
+    };
+    let cur = *rects.get(from)?;
+    let horizontal = matches!(dir, Dir::Left | Dir::Right);
+    let same: Vec<_> = rects
+        .iter()
+        .enumerate()
+        .filter(|(i, r)| {
+            s.zones.get(*i) == Some(&Some(zone))
+                && (!horizontal || overlap_y(cur, **r) > cur.height().min(r.height()) * 0.5)
+        })
+        .collect();
+    if let Some(local) = same.iter().position(|(i, _)| *i == from) {
+        let rs: Vec<_> = same.iter().map(|(_, r)| **r).collect();
+        if let Some(next) = find_next(&rs, local, dir) {
+            return Some(same[next].0);
+        }
+    }
+    if !horizontal {
+        return None;
+    }
+    let mut columns: Vec<_> = s.zones.iter().flatten().copied().collect();
+    columns.sort_unstable();
+    columns.dedup();
+    let index = columns.iter().position(|z| *z == zone)?;
+    let next = match dir {
+        Dir::Left => index.checked_sub(1)?,
+        _ => index + 1,
+    };
+    let target = *columns.get(next)?;
+    if let Some(id) = s.zone_memory.get(&(s.screen, target)) {
+        if let Some(i) =
+            s.ids.iter().enumerate().find_map(|(i, v)| {
+                (*v == *id && s.zones.get(i) == Some(&Some(target))).then_some(i)
+            })
+        {
+            return Some(i);
+        }
+    }
+    s.zones.iter().position(|z| *z == Some(target))
 }
 
 /// Find the best neighbour in `dir` from the currently focused rect.
@@ -254,9 +312,21 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
         let i = s.seen;
         s.seen += 1;
         s.frame_rects.push(resp.rect);
+        s.frame_ids.push(resp.id);
+        let zone = s.current_zone;
+        s.frame_zones.push(zone);
         let focused = s.active && i == s.idx;
 
         let raw = resp.clicked();
+        if (focused || raw) && s.spatial {
+            if let Some(zone) = zone {
+                let screen = s.screen;
+                s.zone_memory.insert((screen, zone), resp.id);
+            }
+            if raw {
+                s.idx = i;
+            }
+        }
         if focused {
             // A clearly visible ring plus a translucent accent wash. The wash
             // uses accent_soft's RGB but a low alpha so content stays readable
@@ -324,6 +394,9 @@ pub fn end() {
         s.seen = 0;
         s.moved = false;
         s.rects = std::mem::take(&mut s.frame_rects);
+        s.ids = std::mem::take(&mut s.frame_ids);
+        s.zones = std::mem::take(&mut s.frame_zones);
+        s.current_zone = None;
         // Keep an unconsumed Ok press for ONE more frame if no control was
         // focused at all (e.g. the list shrank under the cursor). `idx` has just
         // been clamped to a real control, so the press activates something next
@@ -385,4 +458,49 @@ pub fn request_index(i: usize) {
 /// Rect of the focused control this frame, if any.
 pub fn focus_rect() -> Option<Rect> {
     STATE.with(|cell| cell.borrow().focus_rect)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn rect(x: f32, y: f32) -> Rect {
+        Rect::from_min_size(egui::pos2(x, y), egui::vec2(80.0, 30.0))
+    }
+    #[test]
+    fn left_returns_to_remembered_category_instead_of_nearest_height() {
+        let rects = vec![
+            rect(0.0, 0.0),
+            rect(100.0, 40.0),
+            rect(100.0, 300.0),
+            rect(300.0, 300.0),
+        ];
+        let ids: Vec<_> = (0..4).map(egui::Id::new).collect();
+        let mut s = State {
+            screen: 9,
+            zones: vec![Some(0), Some(1), Some(1), Some(2)],
+            ids: ids.clone(),
+            ..Default::default()
+        };
+        s.zone_memory.insert((9, 1), ids[1]);
+        s.zone_memory.insert((9, 2), ids[3]);
+        assert_eq!(zoned_next(&s, &rects, 3, Dir::Left), Some(1));
+        assert_eq!(zoned_next(&s, &rects, 1, Dir::Right), Some(3));
+        assert_eq!(zoned_next(&s, &rects, 1, Dir::Down), Some(2));
+    }
+    #[test]
+    fn home_moves_from_play_to_favorites_and_rails_keep_their_horizontal_neighbor() {
+        let rects = vec![
+            rect(0.0, 0.0),
+            rect(100.0, 100.0),
+            rect(100.0, 200.0),
+            rect(200.0, 200.0),
+            rect(500.0, 0.0),
+        ];
+        let s = State {
+            zones: vec![Some(0), Some(1), Some(1), Some(1), Some(2)],
+            ..Default::default()
+        };
+        assert_eq!(zoned_next(&s, &rects, 1, Dir::Right), Some(4));
+        assert_eq!(zoned_next(&s, &rects, 2, Dir::Right), Some(3));
+    }
 }

@@ -978,3 +978,235 @@ hr {
 .controls-hidden .subtitles {
   bottom: 80px;
 }
+
+.shell main.catalog-main {
+  padding: 0;
+  overflow: hidden;
+}
+.catalog-browser {
+  display: grid;
+  grid-template-columns: 252px minmax(260px, 1fr) 528px;
+  height: 100%;
+  min-height: 0;
+}
+.catalog-browser .categories {
+  padding: 0 16px;
+  height: 100%;
+  min-height: 0;
+}
+.catalog-titles {
+  background: rgba(0, 0, 0, 0.12);
+  padding: 0 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.catalog-titles h1,
+.catalog-browser .categories h1 {
+  font-size: 24px;
+  height: 54px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+.catalog-titles input {
+  margin: 8px 0 16px;
+}
+.catalog-title-list,
+.catalog-detail-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 6px;
+}
+.catalog-title {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  height: 72px;
+  margin-bottom: 6px;
+  gap: 16px;
+  border-radius: 12px;
+}
+.catalog-title img {
+  width: 34px;
+  height: 52px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.catalog-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 19px;
+}
+.catalog-details {
+  padding: 0 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.catalog-details > h2 {
+  font-size: 24px;
+  height: 54px;
+  flex-shrink: 0;
+}
+.catalog-heading {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin: 16px 0;
+}
+.catalog-heading img {
+  width: 90px;
+  height: 130px;
+  object-fit: contain;
+}
+.catalog-detail-scroll > button,
+.series-play {
+  width: 100%;
+  margin: 6px 0;
+}
+.season-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 12px;
+}
+.season-buttons button {
+  min-height: 46px;
+  padding: 8px 16px;
+}
+.series-episodes .episode-list button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 52px;
+  font-size: 18px;
+}
+.empty-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-preview > span {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.home-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 28px;
+  align-items: start;
+}
+.home-primary {
+  min-width: 0;
+}
+.home-primary .page-title {
+  margin-bottom: 24px;
+}
+.home-primary .page-title h1 {
+  font-size: 38px;
+}
+.home-hero {
+  display: flex;
+  min-height: 280px;
+  overflow: hidden;
+  border-radius: 24px;
+  margin: 0 0 30px;
+  position: relative;
+}
+.home-hero-copy {
+  padding: 30px;
+  flex: 1;
+  min-width: 0;
+  z-index: 1;
+}
+.home-hero-copy h2 {
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 14px 0;
+  max-height: 105px;
+  overflow: hidden;
+}
+.home-hero-copy p {
+  color: var(--muted);
+  font-size: 20px;
+  margin: 12px 0 24px;
+}
+.home-hero-copy progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 18px;
+}
+.home-hero-art {
+  width: 37%;
+  flex-shrink: 0;
+  position: relative;
+  background: radial-gradient(ellipse at center, #6de4d529, transparent 75%);
+}
+.home-hero-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.home-hero-art img.hero-fallback {
+  object-fit: contain;
+  padding: 48px;
+  opacity: 0.7;
+}
+.home-favorites {
+  padding: 24px 16px;
+  border-radius: 24px;
+  margin-top: 14px;
+}
+.home-favorites h2 {
+  font-size: 26px;
+  line-height: 1.25;
+  margin: 16px 8px 24px;
+}
+.home-favorites .favorite-programs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.home-favorites .favorite-programs button {
+  padding: 14px 10px;
+  gap: 12px;
+  border-radius: 14px;
+}
+.home-favorites .logo {
+  width: 48px;
+  height: 48px;
+}
+.home-favorites .favorite-programs strong {
+  font-size: 18px;
+}
+.home-favorites .favorite-programs button > span:nth-child(2) > span {
+  font-size: 16px;
+  color: var(--muted);
+}
+.home-primary .home-section h2 {
+  font-size: 26px;
+  margin-bottom: 16px;
+}
+.card-rail > span {
+  flex: 0 0 auto;
+}
+.kind-tabs {
+  display: flex;
+  gap: 12px;
+  padding: 6px;
+  margin: 12px 0 24px;
+}
+.kind-tabs button {
+  min-width: 130px;
+}

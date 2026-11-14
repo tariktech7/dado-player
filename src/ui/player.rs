@@ -28,7 +28,7 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Rounding, Sense, Stroke, U
 const TOP_H: f32 = 56.0;
 const BOT_H: f32 = 120.0;
 /// Seconds of inactivity before the chrome fades out.
-const HIDE_AFTER: f64 = 3.0;
+const HIDE_AFTER: f64 = 2.0;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ctx = ui.ctx().clone();

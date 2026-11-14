@@ -1,13 +1,18 @@
 # Dado Player
 
-Aktuell: Android **0.2.6 / Build 10**, Windows portable **0.5.3**. TV-Kopfzeilen liegen
-auf einer Höhe, Navigation und Sender haben dezent dunklere Spalten. Kompakte
-zweizeilige Senderkarten zeigen Jetzt/Danach nebeneinander; bei 960×540 Punkten
-passen mindestens zehn vollständige Zeilen mit Vorschau. Senderlogos werden in
-Listen, Suche, Verlauf, Favoriten und auf der Startseite proportional eingepasst.
-LG-/Samsung-Vorbereitung: [SmartTV/README.md](SmartTV/README.md).
-Die veröffentlichte iOS-IPA bleibt ausdrücklich **0.2.1 / Build 4**; Änderungen am
-gemeinsamen Quellcode sind noch nicht in einer neuen IPA verfügbar.
+Aktuell: Windows portable **0.5.4**, Android **0.2.7 / Build 11**, Samsung Tizen **0.1.5**.
+Filme und Serien verwenden Kategorien, Titelliste und einen festen Detailbereich; schmale
+Mobilgeräte ordnen die Details darunter an. Serien zeigen Staffelbuttons und kurze Folgennummern.
+Der Play-Button setzt die zuletzt gesehene Folge fort und geht bei höchstens 60 Sekunden Rest
+zur nächsten Folge über. Favoriten und Fortsetzen haben getrennte Rubriken für Live-TV, Serien
+und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Favoritenprogramm.
+Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
+Player-Steuerung blendet sich nach zwei Sekunden aus.
+
+Der gemeinsame iOS-Quellstand ist **0.2.4 / Build 6**. Die bislang veröffentlichte IPA bleibt
+**0.2.1 / Build 4** und enthält diesen Patch nicht. Ein neuer Geräte-Build benötigt einen
+verfügbaren macOS-Runner; ein Host-Typcheck ersetzt diesen Build nicht.
+LG-Vorbereitung und TV-Verträge: [SmartTV/README.md](SmartTV/README.md).
 
 [Downloads für Windows, Android und iOS auf GitHub Releases](https://github.com/tariktech7/dado-player/releases/latest)
 
@@ -18,7 +23,7 @@ Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Daten
 | Windows | src/main.rs → src/platform/windows, libmpv | `./windows/build.ps1` in PowerShell | target/release/Dado-Player.exe |
 | Android | android/ (Gradle), src/platform/android, JNI und libmpv | `bash android/build.sh` unter Windows mit Git Bash | Dado-Player-arm64-debug.apk |
 | iOS | ios/Sources (UIKit, AVPlayer), src/platform/ios (Rust und C-ABI) | `bash ios/build.sh --ipa` mit iOS-SDK | Dado-Player-unsigned.ipa |
-| Samsung Tizen 6.5+ | SmartTV/client (Preact/TypeScript, AVPlay) | `./SmartTV/client/build.ps1` | Dado-Player-Tizen-0.1.3-unsigned.wgt; TV-Zertifikat für Installation erforderlich |
+| Samsung Tizen 6.5+ | SmartTV/client (Preact/TypeScript, AVPlay) | `./SmartTV/client/build.ps1` | Dado-Player-Tizen-0.1.5-unsigned.wgt; TV-Zertifikat für Installation erforderlich |
 
 Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wird mit `packaging/build_portable.py` aus dem Inhalt von dist gebaut. Der Cargo-Build aktualisiert dist nicht. Android benötigt JDK, Android SDK, NDK, cargo-ndk und für den lokalen signierten Build den vorhandenen Projektschlüssel. Details zum Swift-Host stehen in [ios/README.md](ios/README.md).
 
@@ -26,7 +31,7 @@ Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wir
 
 ## Portable Windows-Updates
 
-Die drei Ausgabeformate liegen lokal in `Releases/`. Der Android-Build prüft die Signatur der APK, der iOS-Build erzeugt die IPA für die anschließende Gerätesignierung.
+Aktuelle Pakete liegen direkt in `Releases/`; `README.md` und `AKTUELL.json` dort nennen Plattform, Version und SHA-256. Frühere Pakete stehen nach Plattform/Version unter `Releases/Archiv/`. `python packaging/organize_releases.py` ordnet alte Tizen-Versionen und veraltete IPAs ein, ohne Pakete zu löschen. Der Android-Build prüft die Signatur der APK, der iOS-Build erzeugt die IPA für die anschließende Gerätesignierung.
 
 Die Windows-Version steht in `windows/VERSION`. Zum Paketieren `./windows/package.ps1` mit einer Python-Installation mit Pillow ausführen (optional `-Python <Pfad>`). Die portable EXE steht danach in `Releases/Dado-Player.exe`. Für ein neues Update zuerst die Version erhöhen, testen, den zugehörigen Quellstand committen und das Paket bauen. Anschließend `./windows/publish-portable.ps1` ausführen. Der Befehl veröffentlicht die EXE im privaten Repo als Git-Tag `portable-vX.Y.Z`.
 

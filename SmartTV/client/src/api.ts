@@ -185,7 +185,7 @@ export class Provider {
       .map((e: any) => ({
         id: String(e.id),
         kind: "episode" as const,
-        name: String(e.title || `Folge ${e.episode_num}`),
+        name: `Staffel ${Number(e.season) || 1} · Folge ${Number(e.episode_num) || 1}`,
         season: Number(e.season) || 1,
         episode: Number(e.episode_num) || 1,
         seriesId: item.id,

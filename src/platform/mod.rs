@@ -98,10 +98,12 @@ pub fn open_external(
     _url: &str,
     _title: &str,
     _backend: crate::types::PlayerBackend,
+    _key: &str,
+    _position: u64,
 ) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
-        android::jni_bridge::open_external(_url, _title, _backend)
+        android::jni_bridge::open_external(_url, _title, _backend, _key, _position)
     }
     #[cfg(not(target_os = "android"))]
     {

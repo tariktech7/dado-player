@@ -10,7 +10,7 @@ const POSTER_H: f32 = 166.0;
 
 /// Full-width content dashboard inspired by the supplied reference capture.
 pub fn show(app: &mut App, ui: &mut Ui) {
-    if mobile_active(ui.ctx()) && !app.tv {
+    if mobile_active(ui.ctx()) && !app.tv && ui.available_width() < 940.0 {
         let pad = if ui.available_width() < 360.0 {
             12.0
         } else {
@@ -21,10 +21,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             .show(ui, |ui| show_content(app, ui, true));
         return;
     }
-    let desktop = cfg!(target_os = "windows");
-    if desktop && ui.available_width() >= 940.0 {
+    if ui.available_width() >= if app.tv { 620.0 } else { 940.0 } {
         let gap = 20.0;
-        let right = (ui.available_width() * 0.28).clamp(280.0, 340.0);
+        let right = (ui.available_width() * 0.28).clamp(if app.tv { 180.0 } else { 280.0 }, 340.0);
         let left = ui.available_width() - right - gap;
         let height = ui.available_height();
         ui.horizontal_top(|ui| {
@@ -50,6 +49,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 }
 
 fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
+    crate::ui::mobile::focus::set_zone(1);
+    let series: Vec<_> = app
+        .history
+        .iter()
+        .filter_map(|h| {
+            h.key
+                .strip_prefix("ep:")
+                .and_then(|v| v.split(':').next())
+                .and_then(|v| v.parse::<u32>().ok())
+        })
+        .collect();
+    for id in series {
+        app.request_series(id);
+    }
     egui::ScrollArea::vertical()
         .id_source("home-page-scroll")
         .auto_shrink([false, false])
@@ -59,6 +72,10 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
             // Home is the landing view on desktop AND mobile (mobile/mod.rs
             // routes View::Home here), so one banner covers both platforms.
             ui::catalog_banner(app, ui);
+            let name=app.active_profile.as_ref().map(|p|p.name.as_str()).unwrap_or("");
+            ui.label(RichText::new(format!("Guten Tag, {name}.")).size(if app.tv{22.0}else{26.0}).strong());
+            ui.label(RichText::new("Dein Programm. Dein Überblick.").small().color(theme::muted(ui)));
+            ui.add_space(10.0);
             let featured = featured_item(app);
             if let Some(item) = featured {
                 hero(app, ui, &item);
@@ -92,6 +109,7 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
                 live_rail(app, ui, "Live jetzt auf deinen Favoriten", &live, Some(View::Favorites));
             }
 
+            crate::ui::mobile::focus::set_zone(1);
             let favorites = favorite_vod_items(app);
             if !favorites.is_empty() {
                 poster_rail(app, ui, "Favoriten: Filme & Serien", &favorites, false, Some(View::Favorites));
@@ -219,15 +237,18 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
     } else {
         "Abspielen"
     };
-    if info
-        .put(
-            button,
-            egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
-                .fill(theme::ACCENT_FILL)
-                .rounding(20.0),
-        )
-        .clicked()
-    {
+    let play_response = info.put(
+        button,
+        egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
+            .fill(theme::ACCENT_FILL)
+            .rounding(20.0),
+    );
+    let play_hit = if app.tv {
+        crate::ui::mobile::focus::clicked(&info, &play_response)
+    } else {
+        play_response.clicked()
+    };
+    if play_hit {
         app.play(item.clone());
     }
 }
@@ -255,8 +276,9 @@ fn empty_hero(app: &mut App, ui: &mut Ui) {
             .color(theme::muted(&child)),
     );
     child.add_space(14.0);
-    if child.button("Live-TV öffnen").clicked() {
-        app.view = View::Live;
+    let response = child.button("Live-TV öffnen");
+    if hit(app, &child, &response) {
+        app.navigate(View::Live);
     }
 }
 
@@ -442,7 +464,7 @@ fn poster_rail(
                     ui.vertical(|ui| {
                         ui.set_width(POSTER_W);
                         let resp = home_poster(app, ui, key, cover, name);
-                        if resp.clicked() {
+                        if hit(app, ui, &resp) {
                             if let Some(id) = key
                                 .strip_prefix("series:")
                                 .and_then(|s| s.parse::<u32>().ok())
@@ -616,7 +638,7 @@ fn live_rail(
                     let mut child = ui.child_ui(text_rect, Layout::top_down(Align::Min));
                     ui::one_line(&mut child, name, 12.0, true);
                     child.label(RichText::new("Live-TV").size(10.0).color(theme::muted(ui)));
-                    if resp.clicked() {
+                    if hit(app, ui, &resp) {
                         play = Some(PlayItem {
                             title: name.clone(),
                             url: url.clone(),
@@ -633,7 +655,7 @@ fn live_rail(
             app.play(item);
         } else {
             app.start_preview(item);
-            app.view = View::Live;
+            app.navigate(View::Live);
         }
         ui.ctx().request_repaint();
     }
@@ -666,6 +688,7 @@ fn channel_logo(app: &mut App, ui: &Ui, key: &str, url: &str, rect: egui::Rect, 
 }
 
 fn favorite_epg(app: &mut App, ui: &mut Ui) {
+    crate::ui::mobile::focus::set_zone(2);
     ui.add_space(8.0);
     ui.label(
         RichText::new("Das läuft auf deinen Favoriten")
@@ -763,7 +786,7 @@ fn favorite_epg(app: &mut App, ui: &mut Ui) {
             };
             child.label(RichText::new(status).size(12.0).color(theme::muted(ui)));
         }
-        if resp.clicked() {
+        if hit(app, ui, &resp) {
             play = Some(PlayItem {
                 title: channel.name,
                 url: channel.stream_url,
@@ -801,11 +824,19 @@ fn section_title(app: &mut App, ui: &mut Ui, title: &str, count: usize, target: 
                 if btn.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
-                if btn.clicked() {
-                    app.view = view;
+                if hit(app, ui, &btn) {
+                    app.navigate(view);
                 }
             });
         }
     });
     ui.add_space(3.0);
+}
+
+fn hit(app: &App, ui: &Ui, response: &egui::Response) -> bool {
+    if app.tv {
+        crate::ui::mobile::focus::clicked(ui, response)
+    } else {
+        response.clicked()
+    }
 }

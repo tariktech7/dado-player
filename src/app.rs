@@ -213,6 +213,11 @@ pub struct App {
     pub series_cat: String,
     pub search_q: String,
     pub live_q: String,
+    pub catalog_queries: [String; 2],
+    pub selected_movie: Option<u32>,
+    pub favorite_section: usize,
+    pub live_selected: Option<u32>,
+    pub previous_live: Option<PlayItem>,
     pub selected_series: Option<u32>,
     pub series_season: u32,
     pub live_page: usize,
@@ -223,6 +228,7 @@ pub struct App {
 
     pub favorites: HashSet<String>,
     pub progress: HashMap<String, u64>,
+    pub durations: HashMap<String, u64>,
     /// Recently watched items (newest first) for the Continue view.
     pub history: Vec<HistEntry>,
     pub continue_tab: ContinueTab,
@@ -267,6 +273,7 @@ pub struct App {
     last_video_cutouts: Option<Vec<(i32, i32, i32, i32)>>,
     /// Timestamp of the last mouse/key activity (player controls auto-hide).
     pub ui_activity: f64,
+    last_progress_save: f64,
     /// True while the player chrome was visible on the previous frame. Used to
     /// tell "this input reveals the controls" apart from "this input presses a
     /// control" — otherwise the first OK after the menu faded out would land on
@@ -389,6 +396,11 @@ impl App {
             series_cat: "all".to_string(),
             search_q: String::new(),
             live_q: String::new(),
+            catalog_queries: [String::new(), String::new()],
+            selected_movie: None,
+            favorite_section: 0,
+            live_selected: None,
+            previous_live: None,
             selected_series: None,
             series_season: 0,
             live_page: 0,
@@ -397,6 +409,7 @@ impl App {
             series_page: 0,
             favorites: store::load_favorites(),
             progress: store::load_progress(),
+            durations: store::load_durations(),
             history: store::load_history(),
             continue_tab: ContinueTab::Movies,
             settings: store::load_settings(),
@@ -424,6 +437,7 @@ impl App {
             last_video_rect: None,
             last_video_cutouts: None,
             ui_activity: 0.0,
+            last_progress_save: 0.0,
             player_chrome: true,
             player_reveal: false,
             last_cursor: (0, 0),
@@ -445,6 +459,7 @@ impl App {
             chan_jump_at: 0.0,
             settings_q: String::new(),
         };
+        app.favorites = app.favorites.iter().map(|key| favorite_key(key)).collect();
         // Layout check without a provider account (never persisted).
         let env_demo = std::env::var("IPTV_DEMO").is_ok();
         let env_view = std::env::var("IPTV_DEMO_VIEW").ok();
@@ -705,6 +720,16 @@ impl App {
             // from the UI thread and an idle screen never schedules a frame, so
             // without this the request would wait for an unrelated touch.
             jni_bridge::bind_context(ctx);
+            if let Some((key, position, duration)) = jni_bridge::take_playback_result() {
+                if self.history.iter().any(|h| h.key == key) && !key.starts_with("live:") {
+                    self.set_progress(&key, position);
+                    if duration > 0 {
+                        self.durations.insert(key, duration);
+                    }
+                    let _ = store::save_progress(&self.progress);
+                    let _ = store::save_durations(&self.durations);
+                }
+            }
 
             // The paint callback creates mpv's render context at the *end* of
             // a frame and wakes this loop; loadfile is only legal afterwards.
@@ -767,6 +792,9 @@ impl App {
             let key = pl.current_key.clone();
             pl.position = pos;
             pl.duration = dur;
+            if !key.is_empty() && dur > 0.0 {
+                self.durations.insert(key.clone(), dur as u64);
+            }
             pl.paused = paused;
             if !key.is_empty() && pos > 1.0 {
                 self.progress.insert(key, pos as u64);
@@ -806,6 +834,12 @@ impl App {
         }
 
         // Keyboard shortcuts (list, preview and full player).
+        let now = ctx.input(|i| i.time);
+        if self.player.is_some() && now - self.last_progress_save > 15.0 {
+            let _ = store::save_progress(&self.progress);
+            let _ = store::save_durations(&self.durations);
+            self.last_progress_save = now;
+        }
         self.handle_keys(ctx);
 
         if !self.images.pending.is_empty() {
@@ -828,6 +862,25 @@ impl App {
         // Drain unconditionally so the native key queue never backs up on the
         // desktop UI, where there is nothing to focus.
         let mut keys = crate::platform::drain_remote_keys();
+        if self.view == View::Player
+            && self
+                .current_play
+                .as_ref()
+                .is_some_and(|p| p.kind == PlayKind::Live)
+            && !ctx.wants_keyboard_input()
+            && !self.audio_menu_open
+            && !self.sub_menu_open
+        {
+            use crate::platform::RemoteKey;
+            for key in &keys {
+                match key {
+                    RemoteKey::Up => self.step_channel(1),
+                    RemoteKey::Down => self.step_channel(-1),
+                    _ => {}
+                }
+            }
+            keys.retain(|k| !matches!(k, RemoteKey::Up | RemoteKey::Down));
+        }
         if self.tv && keys.is_empty() {
             use crate::platform::RemoteKey;
             for (key, remote) in [
@@ -1039,26 +1092,19 @@ impl App {
             .min_width(186.0)
             .show(ctx, |ui| ui::sidebar::show(self, ui));
 
-        if self.view == View::Series && self.selected_series.is_some() {
-            egui::SidePanel::right("series_detail")
-                .resizable(true)
-                .default_width(430.0)
-                .min_width(320.0)
-                .max_width(720.0)
-                .show(ctx, |ui| ui::series::detail_panel(self, ui));
-        }
-
-        egui::CentralPanel::default().show(ctx, |ui| match self.view {
-            View::Home => ui::home::show(self, ui),
-            View::Live => ui::live::show(self, ui),
-            View::Movies => ui::vod::show(self, ui),
-            View::Series => ui::series::show(self, ui),
-            View::Search => ui::search::show(self, ui),
-            View::Favorites => ui::favorites::show(self, ui),
-            View::Continue => ui::continue_watching::show(self, ui),
-            View::Settings => ui::settings::show(self, ui),
-            View::Player => ui::player::show(self, ui),
-            View::Login => {}
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.push_id(("section", self.view as u64), |ui| match self.view {
+                View::Home => ui::home::show(self, ui),
+                View::Live => ui::live::show(self, ui),
+                View::Movies => ui::vod::show(self, ui),
+                View::Series => ui::series::show(self, ui),
+                View::Search => ui::search::show(self, ui),
+                View::Favorites => ui::favorites::show(self, ui),
+                View::Continue => ui::continue_watching::show(self, ui),
+                View::Settings => ui::settings::show(self, ui),
+                View::Player => ui::player::show(self, ui),
+                View::Login => {}
+            });
         });
 
         ui::palette::show(self, ctx);
@@ -1207,6 +1253,10 @@ impl App {
         self.series_cat = "all".to_string();
         self.search_q.clear();
         self.live_q.clear();
+        self.catalog_queries = [String::new(), String::new()];
+        self.selected_movie = None;
+        self.live_selected = None;
+        self.previous_live = None;
         self.selected_series = None;
         self.series_season = 0;
         self.live_page = 0;
@@ -1286,6 +1336,22 @@ impl App {
     /// The left headers column is a real forward/back menu: every section we
     /// leave goes on the stack, so BACK retraces the path instead of dumping
     /// the user on "Live TV" no matter where they were.
+    pub fn navigate(&mut self, view: View) {
+        if self.tv {
+            let nav = match view {
+                View::Live => 0,
+                View::Movies => 1,
+                View::Series => 2,
+                View::Continue => 3,
+                View::Favorites => 4,
+                View::Search => 5,
+                View::Settings => 6,
+                _ => 7,
+            };
+            self.tv_goto(nav);
+        }
+        self.view = view;
+    }
     pub fn tv_goto(&mut self, nav: usize) {
         if nav == self.tv_nav {
             return;
@@ -1295,7 +1361,7 @@ impl App {
             self.tv_stack.remove(0);
         }
         self.tv_nav = nav;
-        self.tv_series = None;
+        // Each section keeps its own category, selection and scroll identity.
         // The headers register first, so header `nav` is control index `nav`.
         crate::ui::mobile::focus::request_index(nav);
     }
@@ -1453,6 +1519,11 @@ impl App {
             let m = self.library.movies.iter().find(|m| m.id == id)?;
             return Some((m.name.clone(), "Film".to_string()));
         }
+        if let Some(rest) = key.strip_prefix("series:") {
+            let id = rest.parse::<u32>().ok()?;
+            let series = self.library.series.iter().find(|s| s.id == id)?;
+            return Some((series.name.clone(), "Serie".into()));
+        }
         if let Some(rest) = key.strip_prefix("ep:") {
             let mut it = rest.split(':');
             let sid = it.next()?.parse::<u32>().ok()?;
@@ -1544,6 +1615,7 @@ impl App {
     }
 
     pub fn play(&mut self, item: PlayItem) {
+        self.remember_live(&item);
         self.preview = None;
         // A note from the previous item ("MX Player fehlt") must not survive
         // into the next one.
@@ -1582,7 +1654,13 @@ impl App {
             let backend = self.settings.player_backend;
             // Try external player first, but not for integrated capabilities
             if backend.is_external() && backend != crate::types::PlayerBackend::MxPlayerIntegrated {
-                match crate::platform::open_external(&item.url, &item.title, backend) {
+                match crate::platform::open_external(
+                    &item.url,
+                    &item.title,
+                    backend,
+                    &item.progress_key,
+                    self.get_progress(&item.progress_key),
+                ) {
                     Ok(()) => {
                         self.player_error = None;
                         self.player_note = None;
@@ -1779,6 +1857,7 @@ impl App {
     }
 
     pub fn start_preview(&mut self, item: PlayItem) {
+        self.remember_live(&item);
         if item.kind == PlayKind::Live {
             let key = item.progress_key.clone();
             if let Some(p) = &mut self.active_profile {
@@ -1801,14 +1880,29 @@ impl App {
             let backend = self.settings.player_backend;
             // For MX Player integrated capability, use it directly without app installation
             if !self.tv && backend == crate::types::PlayerBackend::MxPlayerIntegrated {
-                if crate::platform::open_external(&item.url, &item.title, backend).is_ok() {
+                if crate::platform::open_external(
+                    &item.url,
+                    &item.title,
+                    backend,
+                    &item.progress_key,
+                    self.get_progress(&item.progress_key),
+                )
+                .is_ok()
+                {
                     self.preview = None;
                     self.record_history(&item);
                     return;
                 }
             } else if !self.tv
                 && backend.is_external()
-                && crate::platform::open_external(&item.url, &item.title, backend).is_ok()
+                && crate::platform::open_external(
+                    &item.url,
+                    &item.title,
+                    backend,
+                    &item.progress_key,
+                    self.get_progress(&item.progress_key),
+                )
+                .is_ok()
             {
                 self.preview = None;
                 self.record_history(&item);
@@ -1956,6 +2050,75 @@ impl App {
         }
     }
 
+    fn remember_live(&mut self, item: &PlayItem) {
+        if item.kind != PlayKind::Live {
+            return;
+        }
+        let old = self
+            .current_play
+            .as_ref()
+            .filter(|p| p.kind == PlayKind::Live)
+            .or(self.preview.as_ref())
+            .cloned();
+        if let Some(old) = old {
+            if old.progress_key != item.progress_key {
+                self.previous_live = Some(old);
+            }
+        }
+        self.live_selected = item
+            .progress_key
+            .strip_prefix("live:")
+            .and_then(|v| v.parse().ok());
+    }
+    pub fn recall_channel(&mut self) {
+        if let Some(item) = self.previous_live.clone() {
+            if self.view == View::Player {
+                self.play(item);
+            } else {
+                self.start_preview(item);
+            }
+        }
+    }
+    pub fn series_resume_target(&self, sid: u32) -> Option<(Episode, u64)> {
+        let mut episodes = self.series_episodes_for(sid)?.clone();
+        episodes.sort_by_key(|e| (e.season, e.episode, e.id));
+        let prefix = format!("ep:{sid}:");
+        let last = self.history.iter().find(|h| h.key.starts_with(&prefix));
+        let index = last
+            .and_then(|h| {
+                episodes
+                    .iter()
+                    .position(|e| h.key == format!("ep:{sid}:{}", e.id))
+            })
+            .unwrap_or(0);
+        let episode = episodes.get(index)?.clone();
+        let key = format!("ep:{sid}:{}", episode.id);
+        let pos = self.get_progress(&key);
+        let duration = self.durations.get(&key).copied().unwrap_or(0);
+        if pos > 0 && duration > 0 && duration.saturating_sub(pos) <= 60 {
+            return Some((
+                episodes
+                    .get(index + 1)
+                    .or_else(|| episodes.first())?
+                    .clone(),
+                0,
+            ));
+        }
+        Some((episode, pos))
+    }
+    pub fn play_series_resume(&mut self, sid: u32) {
+        if let Some((e, pos)) = self.series_resume_target(sid) {
+            let key = format!("ep:{sid}:{}", e.id);
+            self.set_progress(&key, pos);
+            self.play(PlayItem {
+                title: format!("Staffel {} · Folge {}", e.season, e.episode),
+                url: e.stream_url,
+                kind: PlayKind::Episode,
+                progress_key: key,
+            });
+        }
+    }
+
     fn handle_keys(&mut self, ctx: &Context) {
         // Never steal keys while a text field has focus.
         if ctx.wants_keyboard_input() {
@@ -1992,15 +2155,26 @@ impl App {
                 .as_ref()
                 .map(|p| p.kind == PlayKind::Live)
                 .unwrap_or(false);
+        if in_player && is_live && !self.audio_menu_open && !self.sub_menu_open {
+            if up {
+                self.step_channel(1);
+            }
+            if down {
+                self.step_channel(-1);
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Num0)) {
+                self.recall_channel();
+            }
+        }
 
         // ---- volume: ↑/↓ in the player, +/- everywhere ----
         let mut vol = self.volume;
         let mut vol_changed = false;
-        if (in_player && up) || plus {
+        if (in_player && !is_live && up) || plus {
             vol = (vol + 5).min(100);
             vol_changed = true;
         }
-        if (in_player && down) || minus {
+        if (in_player && !is_live && down) || minus {
             vol = (vol - 5).max(0);
             vol_changed = true;
         }
@@ -2322,6 +2496,7 @@ impl App {
             self.progress.insert(key, pos as u64);
         }
         let _ = store::save_progress(&self.progress);
+        let _ = store::save_durations(&self.durations);
         self.reset_track_state();
         self.current_play = None;
         self.view = self.previous_view;
@@ -2364,10 +2539,12 @@ impl App {
     // ---- favorites / progress ----
 
     pub fn is_favorite(&self, key: &str) -> bool {
-        self.favorites.contains(key)
+        self.favorites.contains(&favorite_key(key))
     }
 
     pub fn toggle_favorite(&mut self, key: &str) {
+        let normalized = favorite_key(key);
+        let key = normalized.as_str();
         if self.favorites.contains(key) {
             self.favorites.remove(key);
         } else {
@@ -2568,6 +2745,9 @@ impl App {
     pub fn open_series(&mut self, series_id: u32) {
         self.selected_series = Some(series_id);
         self.request_series(series_id);
+        if self.tv {
+            self.tv_goto(2);
+        }
         self.view = View::Series;
     }
 
@@ -2725,6 +2905,17 @@ async fn fetch_image(url: &str, timeout_s: u64) -> anyhow::Result<(Vec<u8>, u32,
     }
     let rgba = img.to_rgba8();
     Ok((rgba.into_raw(), w, h))
+}
+
+fn favorite_key(key: &str) -> String {
+    if let Some(sid) = key
+        .strip_prefix("ep:")
+        .and_then(|rest| rest.split(':').next())
+    {
+        format!("series:{sid}")
+    } else {
+        key.to_owned()
+    }
 }
 
 /// Provider URLs carry credentials in the query string. Never show them in the
@@ -3237,5 +3428,48 @@ mod tests {
         assert!(!app.library.channels.is_empty());
         assert!(!app.library.movies.is_empty());
         assert!(!app.library.series.is_empty());
+    }
+    #[test]
+    fn series_resume_advances_at_sixty_seconds_across_seasons() {
+        let mut app = App::test_app();
+        app.history.clear();
+        app.progress.clear();
+        app.durations.clear();
+        let episode = |id, season, number| Episode {
+            id,
+            series_id: 77,
+            season,
+            episode: number,
+            title: "avx.provider.raw.filename".into(),
+            container_extension: "mp4".into(),
+            stream_url: "https://example.invalid/video.mp4".into(),
+        };
+        app.series_episodes.insert(
+            77,
+            vec![episode(3, 2, 1), episode(1, 1, 1), episode(2, 1, 2)],
+        );
+        assert_eq!(app.series_resume_target(77).unwrap().0.id, 1);
+        app.history.push(crate::types::HistEntry {
+            key: "ep:77:2".into(),
+            ts: 0,
+            title: "old".into(),
+            sub: String::new(),
+        });
+        app.progress.insert("ep:77:2".into(), 1739);
+        app.durations.insert("ep:77:2".into(), 1800);
+        assert_eq!(
+            app.series_resume_target(77).map(|(e, p)| (e.id, p)),
+            Some((2, 1739))
+        );
+        app.progress.insert("ep:77:2".into(), 1740);
+        assert_eq!(
+            app.series_resume_target(77).map(|(e, p)| (e.id, p)),
+            Some((3, 0))
+        );
+        app.durations.clear();
+        assert_eq!(
+            app.series_resume_target(77).map(|(e, p)| (e.id, p)),
+            Some((2, 1740))
+        );
     }
 }

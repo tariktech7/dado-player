@@ -1,6 +1,7 @@
 pub mod continue_watching;
 pub mod favorites;
 pub mod home;
+pub mod library;
 pub mod live;
 pub mod login;
 pub mod mobile;

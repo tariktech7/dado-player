@@ -12,7 +12,7 @@ use super::Layout;
 use crate::app::App;
 use crate::types::{PlayKind, StreamInfo, Track};
 
-const HIDE_AFTER: f64 = 4.0;
+const HIDE_AFTER: f64 = 2.0;
 /// How long the "tap to show controls" hint stays visible after the hide.
 const HINT_AFTER: f64 = 2.5;
 

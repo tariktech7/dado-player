@@ -221,6 +221,13 @@ pub fn save_progress(p: &HashMap<String, u64>) -> Result<()> {
     write_json(&dir, p)
 }
 
+pub fn load_durations() -> HashMap<String, u64> {
+    read_json(&app_dir().join("durations.json")).unwrap_or_default()
+}
+pub fn save_durations(values: &HashMap<String, u64>) -> Result<()> {
+    write_json(&app_dir().join("durations.json"), values)
+}
+
 pub fn load_history() -> Vec<crate::types::HistEntry> {
     let mut dir = app_dir();
     dir.push("history.json");

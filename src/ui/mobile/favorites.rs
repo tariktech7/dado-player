@@ -9,6 +9,7 @@ use super::Layout;
 use crate::app::App;
 
 pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
+    crate::ui::favorites::category_tabs(app, ui);
     if app.favorites.is_empty() {
         components::empty_state(
             ui,
@@ -20,7 +21,17 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         return;
     }
 
-    let mut keys: Vec<String> = app.favorites.iter().cloned().collect();
+    let prefix = match app.favorite_section {
+        1 => "series:",
+        2 => "vod:",
+        _ => "live:",
+    };
+    let mut keys: Vec<String> = app
+        .favorites
+        .iter()
+        .filter(|key| key.starts_with(prefix))
+        .cloned()
+        .collect();
     // Sort by display title, not by the internal key: "live:44" / "ep:12:3"
     // sorts alphabetically into an order that looks random to the user.
     keys.sort_by_cached_key(|k| {
@@ -30,12 +41,16 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
     });
 
     let mut play = None;
+    let mut open_series = None;
     let mut remove: Option<String> = None;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.add_space(8.0);
+            if keys.is_empty() {
+                ui.label("Hier sind noch keine Favoriten gespeichert.");
+            }
             for key in &keys {
                 let Some((title, sub)) = app.describe_key(key) else {
                     continue;
@@ -61,7 +76,14 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 if star_hit {
                     remove = Some(key.clone());
                 } else if row_hit {
-                    play = app.resolve_play(key);
+                    if let Some(id) = key
+                        .strip_prefix("series:")
+                        .and_then(|s| s.parse::<u32>().ok())
+                    {
+                        open_series = Some(id);
+                    } else {
+                        play = app.resolve_play(key);
+                    }
                 }
             }
             // Bottom safe-area: clear the bottom nav bar (NAV_H) plus a gap so the
@@ -71,6 +93,9 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
 
     if let Some(k) = remove {
         app.toggle_favorite(&k);
+    }
+    if let Some(id) = open_series {
+        app.open_series(id);
     }
     if let Some(item) = play {
         app.play(item);
@@ -90,6 +115,13 @@ fn image_for(app: &App, key: &str) -> (String, String) {
         if let Ok(id) = rest.parse::<u32>() {
             if let Some(m) = app.library.movies.iter().find(|m| m.id == id) {
                 return (format!("cover:{}", id), m.cover.clone());
+            }
+        }
+    }
+    if let Some(rest) = key.strip_prefix("series:") {
+        if let Ok(id) = rest.parse::<u32>() {
+            if let Some(s) = app.library.series.iter().find(|s| s.id == id) {
+                return (format!("scov:{id}"), s.cover.clone());
             }
         }
     }

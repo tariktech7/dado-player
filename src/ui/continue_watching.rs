@@ -10,18 +10,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             RichText::new("Fortsetzen").size(22.0).strong(),
         ));
         ui.add_space(14.0);
-        let cur = match app.continue_tab {
-            ContinueTab::Live => 0,
-            ContinueTab::Movies => 1,
-            ContinueTab::Series => 2,
-        };
-        if let Some(i) = ui::segmented(ui, "continue_tab", &["Live-TV", "Filme", "Serien"], cur) {
-            app.continue_tab = match i {
-                0 => ContinueTab::Live,
-                1 => ContinueTab::Movies,
-                _ => ContinueTab::Series,
-            };
-        }
+        category_tabs(app, ui);
     });
     ui.add_space(6.0);
 
@@ -374,4 +363,24 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
         app.request_series(sid);
         app.view = crate::app::View::Series;
     }
+}
+
+pub fn category_tabs(app: &mut App, ui: &mut Ui) {
+    ui.horizontal_wrapped(|ui| {
+        for (tab, label) in [
+            (ContinueTab::Live, "Live-TV"),
+            (ContinueTab::Series, "Serien"),
+            (ContinueTab::Movies, "Filme"),
+        ] {
+            let r = ui.selectable_label(app.continue_tab == tab, label);
+            let hit = if app.tv {
+                crate::ui::mobile::focus::clicked(ui, &r)
+            } else {
+                r.clicked()
+            };
+            if hit {
+                app.continue_tab = tab;
+            }
+        }
+    });
 }

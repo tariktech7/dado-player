@@ -45,7 +45,14 @@ async function fixture(page: Page, seed = true, native = false) {
         },
       ];
     else if (action === "get_series")
-      data = [{ series_id: 2, name: "Demo Serie", category_id: "1" }];
+      data = [
+        {
+          series_id: 2,
+          name: "Demo Serie",
+          category_id: "1",
+          cover: "https://logos.invalid/wide.svg",
+        },
+      ];
     else if (action === "get_short_epg")
       data = {
         epg_listings: [
@@ -81,6 +88,15 @@ async function fixture(page: Page, seed = true, native = false) {
               title: "Die Fortsetzung",
               season: 1,
               episode_num: 2,
+              container_extension: "mp4",
+            },
+          ],
+          "2": [
+            {
+              id: 12,
+              title: "avx.skyfall.raw",
+              season: 2,
+              episode_num: 1,
               container_extension: "mp4",
             },
           ],
@@ -197,11 +213,11 @@ test("login is inline, saved profile resumes without a profile prompt", async ({
   await page.getByLabel("Passwort", { exact: true }).fill("demo");
   await page.getByRole("button", { name: "Verbinden & speichern" }).click();
   await expect(
-    page.getByRole("heading", { name: "Guten Abend, TV Demo." }),
+    page.getByRole("heading", { name: "Guten Tag, TV Demo." }),
   ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Guten Abend, TV Demo." }),
+    page.getByRole("heading", { name: "Guten Tag, TV Demo." }),
   ).toBeVisible();
   await expect(page.getByText("Schön, dass du da bist.")).toHaveCount(0);
 });
@@ -292,7 +308,9 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     ),
   ).toBe(1);
   await page.keyboard.press("Escape");
-  await expect(page.locator(".preview-panel")).toHaveCount(0);
+  await expect(page.locator(".preview-panel")).toContainText(
+    "Sender auswählen",
+  );
 });
 test("favorites remain separate from history; series and settings work with remote input", async ({
   page,
@@ -478,4 +496,187 @@ test("returning to the first form field restores the designed top spacing withou
         .evaluate((el) => el.getBoundingClientRect().top),
     )
     .toBeGreaterThanOrEqual(39);
+});
+
+test("catalogues keep seasons, favorites and independent section positions; live preview stays reserved", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await expect(page.locator(".preview-panel")).toContainText(
+    "Sender auswählen",
+  );
+  await page.locator(".channel-list").evaluate((e) => {
+    e.scrollTop = 1200;
+    e.dispatchEvent(new Event("scroll"));
+  });
+  await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
+  await expect(
+    page.locator(".catalog-browser .category-list button").first(),
+  ).toHaveText("Favoriten");
+  await page.getByRole("button", { name: "Demo Serie", exact: true }).click();
+  await expect(page.locator(".episode-list button")).toHaveCount(2);
+  await expect(page.locator(".episode-list")).not.toContainText("Der Anfang");
+  await page.getByRole("button", { name: "Staffel 2", exact: true }).click();
+  await expect(page.locator(".episode-list button")).toHaveCount(1);
+  await expect(page.locator(".episode-list button")).toHaveText("Folge 1▷");
+  await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
+  await expect(
+    page.locator(".catalog-browser .category-list button").first(),
+  ).toHaveText("Favoriten");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await expect
+    .poll(() => page.locator(".channel-list").evaluate((e) => e.scrollTop))
+    .toBe(1200);
+});
+
+test("live remote up/down zaps and zero toggles the last two channels", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await page.locator(".channel").first().click();
+  await page.locator(".channel").first().click();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await page.keyboard.press("0");
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  await page.keyboard.press("0");
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await expect(page.locator(".fullscreen")).toHaveClass(/controls-hidden/, {
+    timeout: 3500,
+  });
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+});
+
+test("all home rails scroll horizontally with remote focus and both menus split by kind", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  for (let i = 1; i <= 8; i++) {
+    await page.locator(`.channel[data-channel="${i}"]`).click();
+  }
+  await page.getByRole("button", { name: "⌂ Startseite", exact: true }).click();
+  const rail = page
+    .locator(".home-section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Zuletzt gesehene Sender",
+        exact: true,
+      }),
+    })
+    .locator(".card-rail");
+  await rail.locator("button").first().focus();
+  for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowRight");
+  await expect(rail.locator("button").nth(7)).toBeFocused();
+  expect(await rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
+  const last = await rail.locator("button").nth(7).boundingBox(),
+    box = await rail.boundingBox();
+  expect(last!.x + last!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+  for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBe(0);
+  await expect(page.locator(".home-hero")).toBeVisible();
+  await expect(page.locator(".home-favorites")).toContainText(
+    "Das läuft auf deinen Favoriten",
+  );
+  await page.screenshot({ path: "test-results/tizen-home-014.png" });
+  await page.getByRole("button", { name: "☆ Favoriten", exact: true }).click();
+  await expect(page.getByRole("tab")).toHaveText([
+    "Live-TV",
+    "Serien",
+    "Filme",
+  ]);
+  await page.getByRole("tab", { name: "Serien", exact: true }).click();
+  await page.getByRole("button", { name: "↻ Fortsetzen", exact: true }).click();
+  await expect(page.getByRole("tab")).toHaveText([
+    "Live-TV",
+    "Serien",
+    "Filme",
+  ]);
+  await page.getByRole("tab", { name: "Filme", exact: true }).click();
+  await expect(page.locator(".history-list>div")).toHaveCount(0);
+  await page.getByRole("button", { name: "☆ Favoriten", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Serien", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.screenshot({ path: "test-results/tizen-favorites-014.png" });
+});
+
+test("column return restores semantic category/channel focus and home favorites is reachable", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  const category = page
+    .locator(".category-list button")
+    .filter({ hasText: /^Sport 1$/ });
+  await category.click();
+  const channel = page.locator('.channel[data-channel="13"]');
+  await channel.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(category).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(channel).toBeFocused();
+  await channel.click();
+  await page.getByRole("button", { name: "Sender als Favorit" }).click();
+  await page.getByRole("button", { name: "⌂ Startseite", exact: true }).click();
+  const play = page.locator(".home-hero button");
+  await play.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".home-favorites button").first()).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(play).toBeFocused();
+});
+
+test("home episode artwork resolves fresh series cover when the saved episode has none", async ({
+  page,
+}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await expect(page.locator(".home-hero")).toBeVisible();
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("dado.tv.v1")!);
+    s.history.qa = [
+      {
+        item: {
+          id: "10",
+          kind: "episode",
+          seriesId: "2",
+          season: 1,
+          episode: 1,
+          name: "Staffel 1 · Folge 1",
+          category: "1",
+          logo: "",
+          url: "https://provider.invalid/series/demo/demo/10.mp4",
+        },
+        position: 200,
+        duration: 1800,
+        at: Date.now(),
+      },
+    ];
+    localStorage.setItem("dado.tv.v1", JSON.stringify(s));
+  });
+  await page.reload();
+  await expect(page.locator(".home-hero-art img")).toHaveAttribute(
+    "src",
+    "https://logos.invalid/wide.svg",
+  );
+  const rail = page
+    .locator(".home-section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Weiter ansehen · Serien",
+        exact: true,
+      }),
+    });
+  await expect(rail.locator("img")).toHaveAttribute(
+    "src",
+    "https://logos.invalid/wide.svg",
+  );
 });

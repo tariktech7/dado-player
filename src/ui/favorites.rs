@@ -19,6 +19,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(6.0);
 
+    category_tabs(app, ui);
     let favs = app.favorites.clone();
 
     // Collect favorites by type
@@ -63,17 +64,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            if !chans.is_empty() {
+            if app.favorite_section == 0 && !chans.is_empty() {
                 section_title(ui, "Live-TV Kanäle", chans.len());
                 render_channels(app, ui, &chans);
                 ui.add_space(10.0);
             }
-            if !movies.is_empty() {
+            if app.favorite_section == 2 && !movies.is_empty() {
                 section_title(ui, "Filme", movies.len());
                 render_movies(app, ui, &movies);
                 ui.add_space(10.0);
             }
-            if !series.is_empty() {
+            if app.favorite_section == 1 && !series.is_empty() {
                 section_title(ui, "Serien", series.len());
                 render_series(app, ui, &series);
             }
@@ -260,4 +261,21 @@ fn render_series(app: &mut App, ui: &mut Ui, series: &[Series]) {
     if let Some(id) = open {
         app.open_series(id);
     }
+}
+
+pub fn category_tabs(app: &mut App, ui: &mut Ui) {
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in ["Live-TV", "Serien", "Filme"].iter().enumerate() {
+            let r = ui.selectable_label(app.favorite_section == i, *label);
+            let clicked = if app.tv {
+                crate::ui::mobile::focus::clicked(ui, &r)
+            } else {
+                r.clicked()
+            };
+            if clicked {
+                app.favorite_section = i;
+            }
+        }
+    });
+    ui.add_space(10.0);
 }

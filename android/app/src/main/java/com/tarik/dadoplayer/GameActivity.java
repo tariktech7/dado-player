@@ -263,7 +263,7 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
      *
      * @return 0 started, 1 no matching app installed, 2 other failure
      */
-    public static int openExternalPlayer(String url, String title, int backend) {
+    public static int openExternalPlayer(String url, String title, int backend, long position) {
         final GameActivity self = sSelf;
         if (self == null || self.isFinishing() || self.isDestroyed()
                 || url == null || url.length() == 0) {
@@ -280,8 +280,8 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
                 case BACKEND_MX:
                     // Free build first, Pro second. Some devices ship only one,
                     // and the two are not interchangeable package names.
-                    if (startWithPackage(self, uri, label, MX_FREE)
-                            || startWithPackage(self, uri, label, MX_PRO)) {
+                    if (startWithPackage(self, uri, label, MX_FREE, position)
+                            || startWithPackage(self, uri, label, MX_PRO, position)) {
                         return EXTERNAL_OK;
                     }
                     // Explicitly chosen and not installed. Report NO_APP so Rust
@@ -291,7 +291,7 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
                     // opened a black screen instead of the stream.
                     return EXTERNAL_NO_APP;
                 case BACKEND_VLC:
-                    if (startWithPackage(self, uri, label, VLC)) {
+                    if (startWithPackage(self, uri, label, VLC, position)) {
                         return EXTERNAL_OK;
                     }
                     return EXTERNAL_NO_APP;
@@ -333,18 +333,40 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
      * startActivity throw; that is not an error, just a reason to try the next.
      */
     private static boolean startWithPackage(
-            GameActivity self, Uri uri, String label, String pkg) {
+            GameActivity self, Uri uri, String label, String pkg, long position) {
         for (String mime : MIME_CANDIDATES) {
             Intent i = buildViewIntent(uri, mime, label);
             i.setPackage(pkg);
+            i.putExtra("return_result", true);
+            if (pkg.equals(VLC)) { i.putExtra("position", position); }
+            else {
+                i.putExtra("position", (int)Math.min(Integer.MAX_VALUE, position));
+                i.putExtra("secure_uri", true);
+                i.setClassName(pkg, pkg.equals(MX_FREE) ? "com.mxtech.videoplayer.ad.ActivityScreen" : "com.mxtech.videoplayer.ActivityScreen");
+            }
             try {
-                self.startActivity(i);
+                self.startActivityForResult(i, REQUEST_PLAYBACK);
                 return true;
             } catch (ActivityNotFoundException e) {
                 // Try the next MIME type, then the next package.
             }
         }
         return false;
+    }
+
+    private static final int REQUEST_PLAYBACK = 7207;
+    private static native void nativePlaybackResult(long position, long duration, boolean completed);
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_PLAYBACK || data == null || resultCode == RESULT_CANCELED) return;
+        Bundle extras = data.getExtras();
+        if (extras == null) return;
+        Object position = extras.containsKey("extra_position") ? extras.get("extra_position") : extras.get("position");
+        Object duration = extras.containsKey("extra_duration") ? extras.get("extra_duration") : extras.get("duration");
+        boolean completed = "playback_completion".equals(data.getStringExtra("end_by"));
+        if (!(position instanceof Number) && !completed) return;
+        nativePlaybackResult(position instanceof Number ? ((Number)position).longValue() : 0,
+                duration instanceof Number ? ((Number)duration).longValue() : 0, completed);
     }
 
     /** Let Android pick among every visible handler; NO_APP when there is none. */

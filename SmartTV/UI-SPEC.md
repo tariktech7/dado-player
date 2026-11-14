@@ -1,6 +1,6 @@
 # Gemeinsamer TV-UI-Vertrag
 
-Gilt für Android-TV-Modus und zukünftige LG-/Samsung-Clients. Basis: Android 0.2.6.
+Gilt für Android-TV-Modus, Samsung Tizen und zukünftiges LG webOS. Basis: Android 0.2.7 / Tizen 0.1.5.
 
 ## Fläche und Spalten
 
@@ -62,3 +62,37 @@ Sender, fehlerhaftes EPG, Fokus nach Zurück und Scrollen bis zum letzten Elemen
 55-/77-Zoll-Ansicht mit realistischem Sitzabstand und Wiedergabe, Suspend, Screensaver,
 Audio-/Untertitelwahl und Wiederaufnahme separat auf Hardware abnehmen.
 Android-Emulator-Aufnahmen ersetzen keine LG-/Samsung-Geräteprüfung.
+
+
+## Gemeinsamer Ablauf ab 14.11.2026
+
+- Filme und Serien: Navigation → Kategorien → Titel → Details. Favoriten steht zuerst in der
+  Kategorienliste. Der rechte Bereich bleibt auch ohne Auswahl reserviert.
+- Live-Vorschau ist immer sichtbar, mit einer leeren Hinweiskarte vor der ersten Auswahl.
+- Bereiche behalten eigene Kategorie, Suchtext, Auswahl und Scrollposition. Ein Wechsel setzt
+  keinen anderen Bereich auf dessen aktuelle Scrollposition. Neue Profile starten getrennt.
+- Serien: Staffelbuttons, nur Folgen der ausgewählten Staffel, ausschließlich „Folge N“ als
+  Folgenlabel. Ein Play-Button startet die zuletzt gesehene Folge; ab höchstens 60 Sekunden
+  Rest beginnt die nächste Folge. Ohne bekannte Dauer wird nicht vorschnell weitergeschaltet.
+- Favoriten und Fortsetzen: Live-TV, Serien und Filme als unabhängig wählbare Rubriken.
+- Startseite: persönliche Begrüßung, Fortsetzen mit Artwork, eigene Favoriten-EPG-Spalte rechts
+  auf breiten Displays; auf Telefonen untereinander. Verlauf und Favoriten sind getrennte Daten.
+- Horizontaler Fernbedienungsfokus bleibt innerhalb einer Reihe und scrollt den zugehörigen
+  Container in beide Richtungen. Der erste Eintrag stellt die ursprüngliche Randposition wieder her.
+- Live-Vollbild: Hoch/Runter wechseln Sender; 0 schaltet zwischen den letzten beiden Sendern um.
+  Navigation in Listen bleibt davon unberührt. Eigene Player-Overlays verschwinden nach zwei
+  Sekunden ohne Interaktion; offene Einstellungsmenüs und pausierte Wiedergabe bleiben bedienbar.
+- Externe Android-Player verwalten ihre eigenen Overlays/Fernbedienung. MX Player/VLC bekommen
+  die Startposition und liefern bei unterstützter Activity-Result-API Position und Dauer zurück.
+  Systemauswahl/andere Player garantieren diesen Rückkanal nicht.
+
+Diese Abläufe gelten auch als Implementierungsvertrag für spätere LG-webOS- und ältere
+Samsung-Versionen; deren Plattform-Player und Installationswege bleiben separat.
+
+
+Fokusvertrag: Jede Spalte merkt sich den letzten fokussierten Eintrag über dessen stabile
+Identität. Links aus einer Senderliste kehrt zur zuletzt fokussierten Kategorie zurück; Rechts
+kehrt zum Sender zurück. Die Höhe des aktuellen Elements bestimmt diese Rückkehr nicht.
+Das gilt für Navigation, Kategorien, Titel und Details sowie die zwei Startseitenspalten.
+Auf horizontalen Reihen bewegt Links/Rechts zunächst innerhalb der Reihe; am Ende ist die
+benachbarte Spalte erreichbar. Hoch/Runter bleibt in der aktuellen Spalte.

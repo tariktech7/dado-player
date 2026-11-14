@@ -21,10 +21,14 @@ import { Provider, hostUrl, httpUrl } from "./api";
 import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
+import { CatalogBrowser, EpisodePicker } from "./library";
+import { Home } from "./home";
 import packageInfo from "../package.json";
 const APP_VERSION = packageInfo.version;
 import {
   exitApp,
+  rememberFocus,
+  resetFocusMemory,
   focusables,
   moveFocus,
   registerKeys,
@@ -116,12 +120,30 @@ function App() {
   const [session, setSession] = useState<Profile | null>(null),
     [form, setForm] = useState<Profile>(emptyProfile),
     [editing, setEditing] = useState(false);
+  const [favoriteKind, setFavoriteKind] = useState("live");
+  const [historyKind, setHistoryKind] = useState("live");
   const [category, setCategory] = useState("all"),
     [query, setQuery] = useState(""),
     [preview, setPreview] = useState<Item | null>(null),
     [full, setFull] = useState(false),
     [detail, setDetail] = useState<Item | null>(null),
     [episodes, setEpisodes] = useState<Item[]>([]);
+  const memories = useRef<
+    Partial<
+      Record<
+        View,
+        {
+          category: string;
+          query: string;
+          detail: Item | null;
+          episodes: Item[];
+          scroll: number[];
+        }
+      >
+    >
+  >({});
+  const previousLive = useRef<Item | null>(null);
+  const [selectedTitle, setSelectedTitle] = useState<Item | null>(null);
   const [epg, setEpg] = useState<Record<string, Epg[]>>({}),
     [resume, setResume] = useState<{ item: Item; position: number } | null>(
       null,
@@ -174,15 +196,33 @@ function App() {
   };
   const pid = session?.id || "",
     favorites = saved.favorites[pid] || EMPTY_ITEMS,
-    history = saved.history[pid] || EMPTY_HISTORY;
+    history = useMemo(
+      () =>
+        (saved.history[pid] || EMPTY_HISTORY).map((h) => {
+          const source =
+            h.item.kind === "episode"
+              ? catalog.series.find((s) => s.id === h.item.seriesId)
+              : catalog[h.item.kind === "vod" ? "vod" : "live"].find(
+                  (i) => i.id === h.item.id,
+                );
+          return source
+            ? { ...h, item: { ...h.item, logo: source.logo || h.item.logo } }
+            : h;
+        }),
+      [saved.history, pid, catalog],
+    );
+  const favoriteTarget = (i: Item) =>
+    i.kind === "episode"
+      ? catalog.series.find((s) => s.id === i.seriesId) || i
+      : i;
   const isFavorite = (i: Item) =>
-    favorites.some((f) => itemKey(f) === itemKey(i));
+    favorites.some((f) => itemKey(f) === itemKey(favoriteTarget(i)));
   const toggleFavorite = (i: Item) =>
     changed({
       ...savedRef.current,
       favorites: {
         ...savedRef.current.favorites,
-        [pid]: favorite(savedRef.current, pid, i),
+        [pid]: favorite(savedRef.current, pid, favoriteTarget(i)),
       },
     });
   const record = () => {
@@ -224,6 +264,10 @@ function App() {
     setMessage("");
     stop();
     setCatalog(emptyCatalog());
+    memories.current = {};
+    resetFocusMemory();
+    previousLive.current = null;
+    setSelectedTitle(null);
     setEpg({});
     epgPending.current.clear();
     setDetail(null);
@@ -317,6 +361,12 @@ function App() {
       return;
     }
     record();
+    if (
+      item.kind === "live" &&
+      previewRef.current?.kind === "live" &&
+      previewRef.current.id !== item.id
+    )
+      previousLive.current = previewRef.current;
     setPreview(item);
     previewRef.current = item;
     setFull(fullscreen);
@@ -362,11 +412,27 @@ function App() {
     }
   }
   const go = (next: View) => {
+    if (next === view) return;
+    const scroll = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".shell main, .shell .category-list, .shell .channel-list, .shell .catalog-title-list, .shell .catalog-detail-scroll",
+      ),
+    ].map((e) => e.scrollTop);
+    memories.current[view] = {
+      category,
+      query,
+      detail: selectedTitle || detail,
+      episodes,
+      scroll,
+    };
     stop();
+    const memory = memories.current[next];
     setView(next);
-    setCategory("all");
-    setQuery("");
-    setDetail(null);
+    setCategory(memory?.category || "all");
+    setQuery(memory?.query || "");
+    setSelectedTitle(memory?.detail || null);
+    setDetail(memory?.detail || null);
+    setEpisodes(memory?.episodes || []);
   };
   const logout = () => {
     generation.current++;
@@ -391,7 +457,7 @@ function App() {
       setExit(false);
       return;
     }
-    if (detailRef.current) {
+    if (detailRef.current && view !== "vod" && view !== "series") {
       setDetail(null);
       return;
     }
@@ -418,6 +484,35 @@ function App() {
     if (code === 10009 || e.key === "Escape" || e.key === "BrowserBack") {
       e.preventDefault();
       back();
+      return;
+    }
+    if (
+      fullRef.current &&
+      previewRef.current?.kind === "live" &&
+      !tracksRef.current &&
+      !document.querySelector(".modal") &&
+      (e.key === "ArrowUp" ||
+        e.key === "ArrowDown" ||
+        e.key === "0" ||
+        code === 48 ||
+        code === 96)
+    ) {
+      e.preventDefault();
+      showControls();
+      if (e.key === "0" || code === 48 || code === 96) {
+        if (previousLive.current) void start(previousLive.current, true);
+      } else {
+        const list = view === "live" ? filteredLive : catalog.live;
+        const index = list.findIndex((i) => i.id === previewRef.current?.id);
+        if (list.length)
+          void start(
+            list[
+              (index + (e.key === "ArrowUp" ? 1 : -1) + list.length) %
+                list.length
+            ],
+            true,
+          );
+      }
       return;
     }
     if (fullRef.current) {
@@ -490,7 +585,11 @@ function App() {
     document.addEventListener("keydown", key);
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
-    document.addEventListener("focusin", resize);
+    const focus = (e: FocusEvent) => {
+      rememberFocus(e.target as HTMLElement);
+      resize();
+    };
+    document.addEventListener("focusin", focus);
     document.addEventListener("visibilitychange", visibility);
     const timer = setInterval(() => {
       if (p.status.state === "playing") record();
@@ -507,14 +606,22 @@ function App() {
       document.removeEventListener("keydown", key);
       window.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("resize", resize);
-      document.removeEventListener("focusin", resize);
+      document.removeEventListener("focusin", focus);
       document.removeEventListener("visibilitychange", visibility);
       p.dispose();
     };
   }, []);
   useEffect(() => {
-    const main = document.querySelector<HTMLElement>(".shell main");
-    if (main) main.scrollTop = 0;
+    const nodes = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".shell main, .shell .category-list, .shell .channel-list, .shell .catalog-title-list, .shell .catalog-detail-scroll",
+      ),
+    ];
+    const positions = memories.current[view]?.scroll || [];
+    nodes.forEach((e, i) => {
+      e.scrollTop = positions[i] || 0;
+      e.dispatchEvent(new Event("scroll"));
+    });
     const root = document.getElementById("app");
     if (root) root.scrollTop = 0;
   }, [view, session?.id]);
@@ -567,10 +674,10 @@ function App() {
         !tracksRef.current &&
         !document.querySelector(".modal") &&
         playerRef.current?.status.state === "playing" &&
-        Date.now() - lastInteraction.current > 6000
+        Date.now() - lastInteraction.current > 2000
       )
         setControlsVisible(false);
-    }, 500);
+    }, 100);
     return () => clearInterval(timer);
   }, [full]);
   const [now, next] = preview ? currentNext(epg[preview.id] || []) : [];
@@ -586,6 +693,7 @@ function App() {
       onFocus={() => void getEpg(item)}
       onClick={() => void start(item)}
       data-channel={item.id}
+      data-focus-key={itemKey(item)}
     >
       <Logo item={item} />
       <span class="channel-copy">
@@ -597,11 +705,20 @@ function App() {
       </span>
     </button>
   );
-  const card = (item: Item) => (
+  const card = (item: Item, continuing = false) => (
     <button
       class={`media-card ${item.kind === "live" ? "live-card" : ""}`}
       onClick={() =>
-        item.kind === "live" ? void start(item, true) : void openDetail(item)
+        continuing
+          ? void start(
+              item,
+              true,
+              history.find((h) => itemKey(h.item) === itemKey(item))
+                ?.position || 0,
+            )
+          : item.kind === "live"
+            ? void start(item, true)
+            : void openDetail(item)
       }
     >
       <Logo item={item} large />
@@ -617,7 +734,9 @@ function App() {
         <h2>{title}</h2>
         <div class="card-rail">
           {items.slice(0, 30).map((item) => (
-            <span key={itemKey(item)}>{card(item)}</span>
+            <span key={itemKey(item)}>
+              {card(item, title.startsWith("Weiter ansehen"))}
+            </span>
           ))}
         </div>
       </section>
@@ -1135,9 +1254,10 @@ function App() {
       ) : (
         <>
           <div
-            class={`shell ${view === "live" ? "live-shell" : ""} ${preview ? "with-preview" : ""}`}
+            data-focus-scope={view}
+            class={`shell ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
           >
-            <aside class="navigation">
+            <aside class="navigation" data-focus-zone="navigation">
               <div class="brand">
                 <img src="d7.svg" />
                 <strong>Dado Player</strong>
@@ -1145,6 +1265,7 @@ function App() {
               <nav>
                 {nav.map(([id, icon, label]) => (
                   <button
+                    data-focus-key={id}
                     class={view === id ? "selected" : ""}
                     onClick={() => go(id)}
                   >
@@ -1160,7 +1281,7 @@ function App() {
             </aside>
             {view === "live" ? (
               <>
-                <section class="categories">
+                <section class="categories" data-focus-zone="categories">
                   <h1>Kategorien</h1>
                   <div class="category-list">
                     <button
@@ -1194,7 +1315,10 @@ function App() {
                     ))}
                   </div>
                 </section>
-                <section class={`channels ${saved.settings.density}`}>
+                <section
+                  class={`channels ${saved.settings.density}`}
+                  data-focus-zone="titles"
+                >
                   <h1>
                     {category === "all"
                       ? "Alle Sender"
@@ -1218,8 +1342,23 @@ function App() {
                     density={saved.settings.density}
                   />
                 </section>
+                {!preview && (
+                  <aside class="preview-panel" data-focus-zone="details">
+                    <header>
+                      <h2>Vorschau</h2>
+                    </header>
+                    <div class="preview-surface empty-preview">
+                      <span>▷</span>
+                    </div>
+                    <h2>Sender auswählen</h2>
+                    <p>
+                      Hier erscheinen Vorschau, Programm und
+                      Senderinformationen.
+                    </p>
+                  </aside>
+                )}
                 {preview && (
-                  <aside class="preview-panel">
+                  <aside class="preview-panel" data-focus-zone="details">
                     <header>
                       <h2>Vorschau</h2>
                       <button
@@ -1277,98 +1416,130 @@ function App() {
                 )}
               </>
             ) : (
-              <main>
+              <main
+                data-focus-zone={
+                  ["home", "vod", "series"].includes(view)
+                    ? undefined
+                    : "content"
+                }
+                class={
+                  view === "vod" || view === "series" ? "catalog-main" : ""
+                }
+              >
                 {view === "home" ? (
-                  <>
-                    <header class="page-title">
-                      <span class="eyebrow">DEIN PROGRAMM</span>
-                      <h1>Guten Abend, {session?.name}.</h1>
-                      <p>Alles an einem Ort. Einfach weiterschauen.</p>
-                    </header>
-                    {section(
-                      "Zuletzt gesehene Sender",
-                      history
-                        .filter((h) => h.item.kind === "live")
-                        .map((h) => h.item),
-                    )}
-                    <section class="home-section">
-                      <h2>Das läuft auf deinen Favoriten</h2>
-                      {!favoriteRows.length ? (
-                        <p class="muted">
-                          Markiere Sender mit dem Stern in der Vorschau.
-                        </p>
-                      ) : (
-                        <div class="favorite-programs">
-                          {favoriteRows.slice(0, 20).map((item) => (
-                            <button onClick={() => void start(item, true)}>
-                              <Logo item={item} />
-                              <span>
-                                <strong>{item.name}</strong>
-                                <span>
-                                  {info(item)[0]?.title ||
-                                    "Keine Programmdaten verfügbar"}
-                                </span>
-                              </span>
-                              <span>▷</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-                    {section(
-                      "Weiter ansehen",
-                      history
-                        .filter((h) => h.item.kind !== "live")
-                        .map((h) => h.item),
-                    )}
-                    {section("Live-TV entdecken", catalog.live.slice(0, 12))}
-                    {section("Filme", catalog.vod.slice(0, 12))}
-                  </>
+                  <Home
+                    name={session?.name || ""}
+                    catalog={catalog}
+                    history={history}
+                    favorites={favoriteRows}
+                    program={(i) =>
+                      info(i)[0]?.title || "Keine Programmdaten verfügbar"
+                    }
+                    play={(i, pos) => void start(i, true, pos)}
+                    section={section}
+                    logo={(i) => <Logo item={i} />}
+                  />
                 ) : view === "settings" ? (
                   settingsView()
                 ) : view === "history" ? (
                   <>
                     <h1>Fortsetzen</h1>
+                    <div
+                      class="kind-tabs"
+                      role="tablist"
+                      aria-label="Fortsetzen aufteilen"
+                    >
+                      {[
+                        ["live", "Live-TV"],
+                        ["series", "Serien"],
+                        ["vod", "Filme"],
+                      ].map(([kind, label]) => (
+                        <button
+                          role="tab"
+                          aria-selected={historyKind === kind}
+                          class={historyKind === kind ? "selected" : ""}
+                          onClick={() => setHistoryKind(kind)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     <div class="history-list">
                       {!history.length && <p>Noch nichts angesehen.</p>}
-                      {history.map((h) => (
-                        <div>
-                          <button onClick={() => playTitle(h.item)}>
-                            <Logo item={h.item} />
-                            <span>
-                              <strong>{h.item.name}</strong>
-                              <small>
-                                {h.item.kind === "live"
-                                  ? "Live-TV"
-                                  : `Bei ${time(h.position)} · ${time(h.duration)}`}
-                              </small>
-                            </span>
-                            <span>▷</span>
-                          </button>
-                          <button
-                            aria-label={`${h.item.name} aus Verlauf entfernen`}
-                            onClick={() =>
-                              changed({
-                                ...savedRef.current,
-                                history: {
-                                  ...savedRef.current.history,
-                                  [pid]: history.filter(
-                                    (v) => itemKey(v.item) !== itemKey(h.item),
-                                  ),
-                                },
-                              })
-                            }
-                          >
-                            Entfernen
-                          </button>
-                        </div>
-                      ))}
+                      {history
+                        .filter((h) =>
+                          historyKind === "series"
+                            ? h.item.kind === "episode" ||
+                              h.item.kind === "series"
+                            : h.item.kind === historyKind,
+                        )
+                        .map((h) => (
+                          <div>
+                            <button onClick={() => playTitle(h.item)}>
+                              <Logo item={h.item} />
+                              <span>
+                                <strong>{h.item.name}</strong>
+                                <small>
+                                  {h.item.kind === "live"
+                                    ? "Live-TV"
+                                    : `Bei ${time(h.position)} · ${time(h.duration)}`}
+                                </small>
+                              </span>
+                              <span>▷</span>
+                            </button>
+                            <button
+                              aria-label={`${h.item.name} aus Verlauf entfernen`}
+                              onClick={() =>
+                                changed({
+                                  ...savedRef.current,
+                                  history: {
+                                    ...savedRef.current.history,
+                                    [pid]: history.filter(
+                                      (v) =>
+                                        itemKey(v.item) !== itemKey(h.item),
+                                    ),
+                                  },
+                                })
+                              }
+                            >
+                              Entfernen
+                            </button>
+                          </div>
+                        ))}
                     </div>
                   </>
                 ) : view === "favorites" ? (
                   <>
                     <h1>Favoriten</h1>
-                    <div class="media-grid">{favorites.map(card)}</div>
+                    <div
+                      class="kind-tabs"
+                      role="tablist"
+                      aria-label="Favoriten aufteilen"
+                    >
+                      {[
+                        ["live", "Live-TV"],
+                        ["series", "Serien"],
+                        ["vod", "Filme"],
+                      ].map(([kind, label]) => (
+                        <button
+                          role="tab"
+                          aria-selected={favoriteKind === kind}
+                          class={favoriteKind === kind ? "selected" : ""}
+                          onClick={() => setFavoriteKind(kind)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div class="media-grid">
+                      {favorites
+                        .filter((i) =>
+                          favoriteKind === "series"
+                            ? i.kind === "series" || i.kind === "episode"
+                            : i.kind === favoriteKind,
+                        )
+                        .map((i) => card(i))}
+                    </div>
                     {!favorites.length && (
                       <p>Deine gemerkten Sender und Titel erscheinen hier.</p>
                     )}
@@ -1391,39 +1562,39 @@ function App() {
                             i.name.toLowerCase().includes(query.toLowerCase()),
                           )
                           .slice(0, 120)
-                          .map(card)}
+                          .map((i) => card(i))}
                       </div>
                     ) : (
                       <p class="muted">Mindestens zwei Zeichen eingeben.</p>
                     )}
                   </>
                 ) : (
-                  <>
-                    <header class="library-header">
-                      <h1>{view === "vod" ? "Filme" : "Serien"}</h1>
-                      {choose(category, (v) => setCategory(v), [
-                        ["all", "Alle Kategorien"],
-                        ...catalog.categories[
-                          view === "vod" ? "vod" : "series"
-                        ].map((c) => [c.id, c.name] as [string, string]),
-                      ])}
-                      <TVInput
-                        type="search"
-                        placeholder="Titel suchen"
-                        aria-label="Titel suchen"
-                        value={query}
-                        onInput={(e) => setQuery(e.currentTarget.value)}
-                      />
-                    </header>
-                    <MediaGrid
-                      items={catalog[view === "vod" ? "vod" : "series"].filter(
-                        (i) =>
-                          (category === "all" || i.category === category) &&
-                          i.name.toLowerCase().includes(query.toLowerCase()),
-                      )}
-                      card={card}
-                    />
-                  </>
+                  <CatalogBrowser
+                    key={view}
+                    items={catalog[view === "vod" ? "vod" : "series"]}
+                    categories={
+                      catalog.categories[view === "vod" ? "vod" : "series"]
+                    }
+                    category={category}
+                    setCategory={(c) => {
+                      setCategory(c);
+                      setSelectedTitle(null);
+                      setDetail(null);
+                    }}
+                    query={query}
+                    setQuery={setQuery}
+                    selected={selectedTitle}
+                    select={(i) => {
+                      setSelectedTitle(i);
+                      void openDetail(i);
+                    }}
+                    favorites={favorites}
+                    detail={detail}
+                    episodes={episodes}
+                    history={history}
+                    toggle={toggleFavorite}
+                    play={(i, pos) => void start(i, true, pos)}
+                  />
                 )}
                 {catalog.issues.length > 0 && (
                   <div class="catalog-issues" role="status">
@@ -1535,6 +1706,8 @@ function App() {
             </div>
           )}
           {detail &&
+            view !== "vod" &&
+            view !== "series" &&
             modal(
               detail.name,
               <>
@@ -1558,18 +1731,11 @@ function App() {
                   </div>
                 </div>
                 {detail.kind === "series" && (
-                  <div class="episode-list">
-                    {!episodes.length && <p>Keine Folgen geladen.</p>}
-                    {episodes.map((e) => (
-                      <button onClick={() => playTitle(e)}>
-                        <span>
-                          Staffel {e.season} · Folge {e.episode}
-                        </span>
-                        <strong>{e.name}</strong>
-                        <span>▷</span>
-                      </button>
-                    ))}
-                  </div>
+                  <EpisodePicker
+                    episodes={episodes}
+                    history={history}
+                    play={(i, pos) => void start(i, true, pos)}
+                  />
                 )}
                 <button onClick={() => setDetail(null)}>Zurück</button>
               </>,
@@ -1753,27 +1919,6 @@ function VirtualChannels({
         </>
       )}
     </div>
-  );
-}
-function MediaGrid({
-  items,
-  card,
-}: {
-  items: Item[];
-  card: (i: Item) => ComponentChildren;
-}) {
-  const [limit, setLimit] = useState(90);
-  useEffect(() => setLimit(90), [items.length]);
-  return (
-    <>
-      <p class="muted">{items.length} Titel</p>
-      <div class="media-grid">{items.slice(0, limit).map(card)}</div>
-      {limit < items.length && (
-        <button onClick={() => setLimit((n) => n + 90)}>
-          Weitere Titel laden
-        </button>
-      )}
-    </>
   );
 }
 render(<App />, document.getElementById("app")!);

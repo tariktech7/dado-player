@@ -415,6 +415,8 @@ pub fn open_external(
     url: &str,
     title: &str,
     backend: crate::types::PlayerBackend,
+    key: &str,
+    position: u64,
 ) -> Result<(), String> {
     // MX Player integrated capability - use embedded player without app installation
     if backend == crate::types::PlayerBackend::MxPlayerIntegrated {
@@ -507,14 +509,16 @@ pub fn open_external(
     let url_obj: jni::objects::JObject = j_url.into();
     let title_obj: jni::objects::JObject = j_title.into();
 
+    *EXTERNAL_KEY.lock().unwrap_or_else(|e| e.into_inner()) = Some(key.to_owned());
     let status = env.call_static_method(
         class,
         "openExternalPlayer",
-        "(Ljava/lang/String;Ljava/lang/String;I)I",
+        "(Ljava/lang/String;Ljava/lang/String;IJ)I",
         &[
             jni::objects::JValue::Object(&url_obj),
             jni::objects::JValue::Object(&title_obj),
             jni::objects::JValue::Int(backend.android_code()),
+            jni::objects::JValue::Long(position.saturating_mul(1000).min(i64::MAX as u64) as i64),
         ],
     );
     let code = match status {
@@ -792,4 +796,37 @@ pub fn mobile_update(install: bool) -> anyhow::Result<()> {
         "Installer oder Browser konnte nicht geöffnet werden"
     );
     Ok(())
+}
+
+// External players return only numeric progress. Never forward provider URLs.
+static EXTERNAL_KEY: Mutex<Option<String>> = Mutex::new(None);
+static EXTERNAL_RESULT: Mutex<Option<(String, u64, u64)>> = Mutex::new(None);
+pub fn take_playback_result() -> Option<(String, u64, u64)> {
+    EXTERNAL_RESULT
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+}
+#[no_mangle]
+pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativePlaybackResult(
+    _env: JNIEnv,
+    _class: JClass,
+    position: jni::sys::jlong,
+    duration: jni::sys::jlong,
+    completed: jni::sys::jboolean,
+) {
+    if let Some(key) = EXTERNAL_KEY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        let mut pos = (position.max(0) as u64) / 1000;
+        let mut dur = (duration.max(0) as u64) / 1000;
+        if completed != 0 {
+            dur = dur.max(pos).max(1);
+            pos = dur;
+        }
+        *EXTERNAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, pos, dur));
+        wake_ui();
+    }
 }

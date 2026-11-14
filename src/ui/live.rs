@@ -13,7 +13,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let available = ui.available_rect_before_wrap();
     let gap = 12.0;
     let width = available.width().max(1.0);
-    let has_preview = app.preview.is_some();
+    let has_preview = true;
     let category_w = (width * if tv { 0.19 } else { 0.22 }).clamp(
         if tv { 118.0 } else { 130.0 },
         if tv { 250.0 } else { 220.0 },
@@ -92,7 +92,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
     number_jump(app, ui);
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_secs(30));
-    let (category_w, channel_w, gap) = tv_columns(content, app.preview.is_some());
+    let (category_w, channel_w, gap) = tv_columns(content, true);
     let channels_x = content.left() + category_w + gap;
     let title = match app.live_cat.as_str() {
         "all" => "Alle Sender",
@@ -135,6 +135,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
             .margin(vec2(6.0, search_margin_y))
             .hint_text("Sender suchen"),
     );
+    focus::set_zone(2);
     if focus::clicked(&search_ui, &query) {
         query.request_focus();
     }
@@ -147,6 +148,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         Layout::top_down(Align::Min),
     );
     category_ui.spacing_mut().item_spacing.y = 4.0;
+    focus::set_zone(1);
     categories(app, &mut category_ui, false);
     let mut channel_ui = ui.child_ui(
         Rect::from_min_max(
@@ -156,13 +158,15 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         Layout::top_down(Align::Min),
     );
     channel_ui.spacing_mut().item_spacing.y = 3.0;
+    focus::set_zone(2);
     channels(app, &mut channel_ui, false);
-    if app.preview.is_some() {
+    {
         let preview_rect = Rect::from_min_max(
             pos2(channels_x + channel_w + gap, content.top()),
             content.max,
         );
         let mut preview_ui = ui.child_ui(preview_rect, Layout::top_down(Align::Min));
+        focus::set_zone(3);
         preview_panel(app, &mut preview_ui);
     }
 }
@@ -435,7 +439,19 @@ fn epg_lines(entries: &[crate::types::EpgEntry], now: i64) -> (Option<String>, O
 }
 
 pub fn preview_panel(app: &mut App, ui: &mut Ui) {
-    let Some(item) = app.preview.clone() else {
+    let active = app.preview.is_some();
+    let remembered = app
+        .live_selected
+        .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
+        .map(play_item);
+    let Some(item) = app.preview.clone().or(remembered) else {
+        ui.heading("Vorschau");
+        let w = ui.available_width();
+        let (rect, _) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 10.0, ui.visuals().faint_bg_color);
+        ui.label("Sender auswählen");
+        ui.label("Hier erscheinen Vorschau, Programm und Senderinformationen.");
         return;
     };
     let tv = app.tv;
@@ -472,7 +488,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
     ui.painter().rect_filled(rect, 8.0, Color32::BLACK);
     let visible = rect.intersect(ui.clip_rect());
-    if visible.is_positive() {
+    if active && visible.is_positive() {
         app.position_preview(visible, ui.ctx().pixels_per_point());
         #[cfg(target_os = "android")]
         ui.painter()
@@ -490,7 +506,11 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             let r = ui.button("Im Player öffnen");
             if activated(ui, &r, tv) {
-                app.promote_preview(false);
+                if active {
+                    app.promote_preview(false);
+                } else {
+                    app.start_preview(item.clone());
+                }
             }
             let r = ui.button("Vorschau schließen");
             if activated(ui, &r, tv) {
@@ -499,7 +519,11 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         });
     }
     if promote {
-        app.promote_preview(false);
+        if active {
+            app.promote_preview(false);
+        } else {
+            app.start_preview(item.clone());
+        }
     }
     if let Some(error) = app.player_error.as_ref() {
         ui.colored_label(theme::DANGER, error);
