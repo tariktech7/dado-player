@@ -19,10 +19,19 @@ Eine Gruppenerstellung allein ist noch keine bestätigte Berechtigung für USB-P
 Die Oberfläche unterscheidet Public Groups und Partner Groups; für letztere nennt sie einen
 Samsung-Vertrag und die Zustimmung eines Content Managers. Die aufgerufene Partnerschaftsseite
 verlangt ausdrücklich die E-Mail-Adresse des eigenen Samsung Content Managers und einen Kommentar.
-Es wurde kein Partnerschaftsantrag und keine Supportnachricht abgesendet. Ohne einen entsprechenden
+Ein formaler Partnerschaftsantrag wurde nicht abgesendet. Ohne einen entsprechenden
 Samsung-Kontakt kann dieses Formular nicht wahrheitsgemäß abgeschlossen werden.
 Der tatsächliche Zugang zum USB-Werkzeug und die Kompatibilität mit dem Ziel-TV müssten auch
 nach einer solchen Freigabe erneut geprüft werden.
+
+Mit ausdrücklicher Nutzerfreigabe wurde am 15.11.2026 eine gemeinsame Supportanfrage eingereicht:
+**Ticket 2646069523**, Kategorie App Management → Group management, bestätigter Status **Submitted**.
+Sie nennt ausdrücklich die geplante Store-Veröffentlichung in Deutschland/Europa und fragt nach
+dem zuständigen Content Manager, den Partneranforderungen und dem USB-Testzugang. Sie beschränkt
+das Projekt nicht auf private Nutzung. Das Supportformular verlangte keine App-Verknüpfung und
+keinen Dateianhang; es wurde keine WGT als Store-Zertifizierung eingereicht.
+Ticket: https://seller.samsungapps.com/tv/qna/detail/2646069523
+Wortlaut: SAMSUNG-REQUEST.txt. Store-Vorbereitung: STORE-READINESS.md.
 
 ## Vorbereiteter Buildweg
 
