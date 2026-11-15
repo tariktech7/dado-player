@@ -47,6 +47,7 @@ export class Player {
   private host: HTMLElement;
   private subtitleTimer: ReturnType<typeof setTimeout> | null = null;
   private timer: ReturnType<typeof setInterval>;
+  private pendingSeekDelta = 0;
   private hiddenPlaying = false;
   private suspended = false;
   settings: Settings;
@@ -290,6 +291,8 @@ export class Player {
         this.refreshTracks();
       }
       screensaver(false);
+      this.tick();
+      if (this.pendingSeekDelta) { const delta=this.pendingSeekDelta; this.pendingSeekDelta=0; this.seek(delta); }
       this.emit();
     } catch (error) {
       if (gen === this.generation)
@@ -413,6 +416,7 @@ export class Player {
     }
   }
   seek(delta: number): void {
+    if(this.current && this.current.kind !== 'live' && this.status.state === 'loading') { this.pendingSeekDelta += delta; return; }
     if (
       !this.current ||
       this.current.kind === "live" ||
@@ -421,7 +425,7 @@ export class Player {
       return;
     const target = Math.max(
       0,
-      Math.min(this.status.time + delta, Math.max(0, this.status.duration - 1)),
+      Math.min(this.status.time + delta, (this.status.duration > 0 ? Math.max(0, this.status.duration - 1) : Infinity)),
     );
     try {
       if (this.av)
@@ -494,6 +498,7 @@ export class Player {
     }
   }
   stop(): void {
+    this.pendingSeekDelta = 0;
     if (this.subtitleTimer) clearTimeout(this.subtitleTimer);
     this.subtitleTimer = null;
     this.generation++;

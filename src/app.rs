@@ -303,6 +303,8 @@ pub struct App {
     /// control" — otherwise the first OK after the menu faded out would land on
     /// the Back button and stop playback.
     pub player_chrome: bool,
+    pub player_menu_navigation: bool,
+    pub catalog_focus_play: bool,
     /// Set for exactly one frame by `update()` when the input that just arrived
     /// only serves to bring the hidden chrome back. Consumed by the player.
     pub player_reveal: bool,
@@ -471,6 +473,8 @@ impl App {
             ui_activity: 0.0,
             last_progress_save: 0.0,
             player_chrome: true,
+            player_menu_navigation: false,
+            catalog_focus_play: false,
             player_reveal: false,
             last_cursor: (0, 0),
             player: None,
@@ -935,7 +939,9 @@ impl App {
             }
             keys.retain(|k| !matches!(k, RemoteKey::Up | RemoteKey::Down));
         }
-        if self.tv && keys.is_empty() {
+        if (self.tv || (self.view == View::Player && crate::ui::mobile::active(ctx)))
+            && keys.is_empty()
+        {
             use crate::platform::RemoteKey;
             for (key, remote) in [
                 (egui::Key::ArrowUp, RemoteKey::Up),
@@ -947,6 +953,34 @@ impl App {
                 if ctx.input(|i| i.key_pressed(key)) {
                     keys.push(remote);
                 }
+            }
+        }
+        if self.view == View::Player
+            && self
+                .current_play
+                .as_ref()
+                .is_some_and(|p| p.kind != PlayKind::Live)
+        {
+            use crate::platform::RemoteKey;
+            if !self.player_chrome {
+                self.player_menu_navigation = false;
+            }
+            for key in &keys {
+                if matches!(key, RemoteKey::Up | RemoteKey::Down) {
+                    self.player_menu_navigation = true;
+                } else if !self.player_menu_navigation
+                    && matches!(key, RemoteKey::Left | RemoteKey::Right)
+                {
+                    self.ui_activity = ctx.input(|i| i.time);
+                    self.player_reveal = false;
+                    if let Some(pl) = &self.player {
+                        pl.mpv
+                            .seek_relative(if *key == RemoteKey::Left { -10.0 } else { 10.0 });
+                    }
+                }
+            }
+            if !self.player_menu_navigation {
+                keys.retain(|k| !matches!(k, RemoteKey::Left | RemoteKey::Right));
             }
         }
         // Any interaction with the player brings the chrome back and restarts
@@ -1804,6 +1838,7 @@ impl App {
         // Negative = "controls freshly opened, start the auto-hide timer now".
         self.ui_activity = -1.0;
         self.player_chrome = true;
+        self.player_menu_navigation = false;
         self.player_reveal = false;
 
         if self.ensure_player() {
@@ -1879,6 +1914,7 @@ impl App {
                 self.last_video_cutouts = None;
                 self.ui_activity = -1.0;
                 self.player_chrome = true;
+                self.player_menu_navigation = false;
                 self.player_reveal = false;
                 if self.ensure_player() {
                     if let Some(pl) = &self.player {
@@ -1943,6 +1979,7 @@ impl App {
         // Negative = "controls freshly opened, start the auto-hide timer now".
         self.ui_activity = -1.0;
         self.player_chrome = true;
+        self.player_menu_navigation = false;
         self.player_reveal = false;
         let vol = self.volume;
         if let Some(pl) = &mut self.player {
@@ -2239,7 +2276,7 @@ impl App {
 
     fn handle_keys(&mut self, ctx: &Context) {
         // Never steal keys while a text field has focus.
-        if ctx.wants_keyboard_input() {
+        if ctx.wants_keyboard_input() && self.view != View::Player {
             return;
         }
         let (left, right, up, down, space, mute, full, esc, plus, minus, enter, audio, sub) = ctx
@@ -2285,14 +2322,23 @@ impl App {
             }
         }
 
-        // ---- volume: ↑/↓ in the player, +/- everywhere ----
+        if in_player && !is_live {
+            if !self.player_chrome {
+                self.player_menu_navigation = false;
+            }
+            if up || down {
+                self.player_menu_navigation = true;
+                self.ui_activity = ctx.input(|i| i.time);
+            }
+        }
+        // Volume remains available through +/- and the player controls.
         let mut vol = self.volume;
         let mut vol_changed = false;
-        if (in_player && !is_live && up) || plus {
+        if plus {
             vol = (vol + 5).min(100);
             vol_changed = true;
         }
-        if (in_player && !is_live && down) || minus {
+        if minus {
             vol = (vol - 5).max(0);
             vol_changed = true;
         }
@@ -2359,8 +2405,25 @@ impl App {
             let delta = if left { -1 } else { 1 };
             if is_live {
                 self.step_channel(delta);
-            } else if let Some(pl) = &self.player {
-                pl.mpv.seek_relative(delta as f64 * 10.0);
+            } else if !crate::ui::mobile::active(ctx)
+                && !self.player_menu_navigation
+                && !self.audio_menu_open
+                && !self.sub_menu_open
+            {
+                if let Some(pl) = &self.player {
+                    pl.mpv.seek_relative(delta as f64 * 10.0);
+                }
+                self.ui_activity = ctx.input(|i| i.time);
+                ctx.input_mut(|i| {
+                    i.consume_key(
+                        egui::Modifiers::NONE,
+                        if left {
+                            egui::Key::ArrowLeft
+                        } else {
+                            egui::Key::ArrowRight
+                        },
+                    );
+                });
             }
         }
     }
@@ -3934,6 +3997,51 @@ mod tests {
         assert!(preferred_track(&tracks, "tr").is_none());
     }
     #[test]
+    fn file_player_arrows_enter_menu_without_changing_volume_and_hide_resets_mode() {
+        let mut app = App::test_app();
+        app.view = View::Player;
+        app.current_play = Some(PlayItem {
+            title: "File".into(),
+            url: "https://example.invalid/movie.mkv".into(),
+            kind: PlayKind::Vod,
+            progress_key: "vod:7".into(),
+        });
+        let ctx = egui::Context::default();
+        for key in [egui::Key::ArrowDown, egui::Key::ArrowUp] {
+            let _ = ctx.run(
+                egui::RawInput {
+                    events: vec![egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                    ..Default::default()
+                },
+                |ctx| app.handle_keys(ctx),
+            );
+            assert!(app.player_menu_navigation);
+            assert_eq!(app.volume, 100);
+        }
+        app.player_chrome = false;
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::ArrowRight,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ctx| app.handle_keys(ctx),
+        );
+        assert!(!app.player_menu_navigation);
+    }
+
+    #[test]
     fn poster_catalogue_only_draws_visible_titles_and_opens_saved_season() {
         use egui::epaint::Shape;
         fn texts(s: &Shape, out: &mut Vec<String>) {
@@ -3985,6 +4093,15 @@ mod tests {
         assert!(
             posters > 0 && posters < 100,
             "{posters} titles drawn from 20000"
+        );
+        app.selected_movie = Some(0);
+        app.catalog_focus_play = true;
+        let _ = frame(&mut app, false);
+        assert!(!app.catalog_focus_play);
+        assert!(ctx.memory(|m| m.focused().is_some()));
+        assert!(
+            app.current_play.is_none(),
+            "Selecting a poster focuses play, it must not start playback"
         );
         app.library.series[0].id = 77;
         app.selected_series = Some(77);

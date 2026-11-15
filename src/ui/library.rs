@@ -29,6 +29,19 @@ fn button(ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
     let r = ui.button(label);
     hit(ui, &r, tv)
 }
+fn play_button(app: &mut App, ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
+    let response = ui.button(label);
+    if app.catalog_focus_play {
+        response.request_focus();
+        if tv {
+            focus::request_id(response.id);
+        }
+        app.catalog_focus_play = false;
+        ui.scroll_to_rect(response.rect, None);
+        ui.ctx().request_repaint();
+    }
+    hit(ui, &response, tv)
+}
 fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
     if series {
         let v = app.library.series.get(index)?;
@@ -445,6 +458,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         ui.label("Keine passenden Titel");
     }
     if let Some(id) = choose {
+        app.catalog_focus_play = !touch;
         app.nav_collapsed = true;
         if series {
             app.open_series(id);
@@ -550,15 +564,12 @@ fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         series_details(app, ui, entry.id, touch);
     } else {
         ui.label(&entry.meta);
-        if button(
-            ui,
-            if app.get_progress(&key) > 1 {
-                "▶ Fortsetzen"
-            } else {
-                "▶ Abspielen"
-            },
-            tv,
-        ) {
+        let caption = if app.get_progress(&key) > 1 {
+            "▶ Fortsetzen"
+        } else {
+            "▶ Abspielen"
+        };
+        if play_button(app, ui, caption, tv) {
             app.play(PlayItem {
                 title: entry.name,
                 url: entry.url,
@@ -605,7 +616,7 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32, touch: bool) {
             next.season,
             next.episode
         );
-        if button(ui, caption, tv) {
+        if play_button(app, ui, caption, tv) {
             app.play_series_resume(sid);
             return;
         }

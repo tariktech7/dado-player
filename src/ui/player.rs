@@ -66,6 +66,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let reveal_only = std::mem::take(&mut app.player_reveal);
     let show_ui = (keep_ui || idle < HIDE_AFTER) && !reveal_only;
     app.player_chrome = show_ui;
+    if !show_ui {
+        app.player_menu_navigation = false;
+    }
     if show_ui && !keep_ui {
         // Wake up exactly when the hide deadline expires, even if no further
         // input arrives (egui is otherwise completely idle while playing).
@@ -725,6 +728,13 @@ fn circle_button(
             .with(("circ", rect.center().x as i32, rect.center().y as i32)),
         Sense::click(),
     );
+    if resp.has_focus() {
+        ui.painter().rect_stroke(
+            rect.expand(3.0),
+            Rounding::same(16.0),
+            Stroke::new(2.0_f32, theme::accent_fill(ui)),
+        );
+    }
     let f = if resp.hovered() { hover } else { fill };
     ui.painter()
         .circle_filled(rect.center(), rect.width().min(rect.height()) * 0.5, f);
@@ -748,6 +758,13 @@ fn pill_button(ui: &mut Ui, rect: Rect, label: &str) -> egui::Response {
             .with(("pill", rect.center().x as i32, rect.center().y as i32)),
         Sense::click(),
     );
+    if resp.has_focus() {
+        ui.painter().rect_stroke(
+            rect.expand(3.0),
+            Rounding::same(16.0),
+            Stroke::new(2.0_f32, theme::accent_fill(ui)),
+        );
+    }
     let dark = ui.visuals().dark_mode;
     let base = if dark {
         Color32::from_white_alpha(16)

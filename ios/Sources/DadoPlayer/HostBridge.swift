@@ -87,10 +87,25 @@ final class VideoHost {
                 window.insertSubview(video, at: 0)
             }
             self.view = video
+            self.keepVideoBehindControls()
             let pending = self.pending
             self.pending.removeAll()
             pending.forEach { $0(video) }
             self.attachPending = false
+        }
+    }
+
+    /// VLC creates its rendering subviews asynchronously. Explicit layer order
+    /// keeps both AVPlayer and VLC underneath the transparent winit/Metal UI.
+    func keepVideoBehindControls() {
+        guard let video = view, let window = video.window,
+              let controls = window.rootViewController?.view, controls !== video else { return }
+        if video.layer.zPosition != 0 { video.layer.zPosition = 0 }
+        if controls.layer.zPosition != 1 { controls.layer.zPosition = 1 }
+        if video.superview === window, controls.superview === window,
+           let videoIndex = window.subviews.firstIndex(of: video),
+           let controlsIndex = window.subviews.firstIndex(of: controls), videoIndex > controlsIndex {
+            window.insertSubview(video, belowSubview: controls)
         }
     }
 
@@ -111,6 +126,7 @@ final class VideoHost {
     /// frames here too.
     func setFrame(x: Double, y: Double, w: Double, h: Double) {
         withView { view in
+            self.keepVideoBehindControls()
             // A degenerate rect would make AVPlayerLayer drop its content and
             // can produce a 1 px flicker on rotation. Ignore it.
             guard w > 0.5, h > 0.5 else { return }
@@ -123,6 +139,7 @@ final class VideoHost {
     func setVisible(_ visible: Bool) {
         withView { [weak self] view in
             guard let self=self else {return}
+            self.keepVideoBehindControls()
             if self.playbackController != nil {view.isHidden=true;return}
             if view.isHidden != !visible { view.isHidden = !visible }
         }

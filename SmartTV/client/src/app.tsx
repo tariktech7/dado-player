@@ -188,6 +188,7 @@ function App() {
     exitRef = useRef(exit),
     tracksRef = useRef(tracks),
     controlsRef = useRef(true),
+    playerMenuNavigation = useRef(false),
     lastInteraction = useRef(Date.now()),
     keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
   previewRef.current = preview;
@@ -380,6 +381,7 @@ function App() {
     }
     const p = playerRef.current;
     if (!p) return;
+    playerMenuNavigation.current = false;
     if (
       previewRef.current &&
       itemKey(previewRef.current) === itemKey(item) &&
@@ -584,6 +586,17 @@ function App() {
       }
       return;
     }
+    if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !document.querySelector(".modal")) {
+      if (!controlsRef.current) playerMenuNavigation.current = false;
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        playerMenuNavigation.current = true;
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !playerMenuNavigation.current) {
+        e.preventDefault();
+        safe(() => playerRef.current?.seek(e.key === "ArrowLeft" ? -10 : 10));
+        showControls();
+        return;
+      }
+    }
     if (fullRef.current) {
       const hidden = !controlsRef.current;
       showControls();
@@ -749,8 +762,10 @@ function App() {
         !document.querySelector(".modal") &&
         playerRef.current?.status.state === "playing" &&
         Date.now() - lastInteraction.current > policy.controlsHideMs
-      )
+      ) {
+        playerMenuNavigation.current = false;
         setControlsVisible(false);
+      }
     }, 100);
     return () => clearInterval(timer);
   }, [full]);
@@ -1995,6 +2010,8 @@ function VirtualChannels({
   epg: (i: Item) => Promise<void>;
   density: Settings["density"];
 }) {
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const pendingFocus = useRef<number | null>(null);
   const [top, setTop] = useState(0),
     ref = useRef<HTMLDivElement>(null),
     height = density === "compact" ? 78 : 97.5;
@@ -2002,8 +2019,14 @@ function VirtualChannels({
     if (ref.current) ref.current.scrollTop = 0;
     setTop(0);
   }, [items]);
-  const start = Math.max(0, Math.floor(top / height) - 5),
-    end = Math.min(items.length, start + 24);
+  const visibleStart = Math.max(0, Math.floor(top / height) - 5);
+  const start = focusIndex === null ? visibleStart : Math.max(0, Math.min(visibleStart, focusIndex-2), focusIndex-32),
+    end = Math.min(items.length, Math.max(start + 24, (focusIndex ?? start) + 3));
+  useLayoutEffect(() => {
+    if (pendingFocus.current === null) return;
+    const target = ref.current?.querySelector<HTMLElement>(`[data-list-index="${pendingFocus.current}"] button`);
+    if (target) { pendingFocus.current=null; target.focus({preventScroll:true}); scrollFocused(target); }
+  }, [focusIndex, start]);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -2020,7 +2043,20 @@ function VirtualChannels({
     <div
       class="channel-list"
       ref={ref}
-      onScroll={(e) => setTop(e.currentTarget.scrollTop)}
+      onFocus={(e) => { const index=(e.target as HTMLElement).closest('[data-list-index]')?.getAttribute('data-list-index'); if(index!==null && index!==undefined)setFocusIndex(Number(index)); }}
+      onBlur={(e) => { if(!e.currentTarget.contains(e.relatedTarget as Node))setFocusIndex(null); }}
+      onKeyDown={(e) => {
+        if(document.querySelector('.fullscreen,.modal'))return;
+        if(e.key!=="ArrowUp" && e.key!=="ArrowDown")return;
+        const index=Number((e.target as HTMLElement).closest('[data-list-index]')?.getAttribute('data-list-index'));
+        if(!Number.isFinite(index))return;
+        e.preventDefault();e.stopPropagation();
+        const next=Math.max(0,Math.min(items.length-1,(pendingFocus.current??index)+(e.key==='ArrowDown'?1:-1)));
+        pendingFocus.current=next;setFocusIndex(next);
+        const target=ref.current?.querySelector<HTMLElement>(`[data-list-index="${next}"] button`);
+        if(target){pendingFocus.current=null;target.focus({preventScroll:true});scrollFocused(target);}
+      }}
+      onScroll={(e) => { const next = Math.floor(e.currentTarget.scrollTop / height) * height; setTop(old => old === next ? old : next); }}
       style={{ "--row-height": `${height}px` }}
     >
       {!items.length ? (

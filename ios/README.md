@@ -66,7 +66,7 @@ The ios.yml workflow runs the device build and uploads Dado-Player-unsigned.ipa 
 
 GitHub Actions currently rejects jobs before execution because of an account billing/spending restriction. There is no runner queue ETA for this failure. See [local setup status](../docs/history/2026-11-14-local-ios-build-setup.md).
 
-The Windows/WSL device package **0.6.1 / build 10** is built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
+The Windows/WSL device package **0.6.2 / build 11** is built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
 
 `dado_host_options` passes the shared playback settings to Swift before loading an item:
 forward buffer duration, subtitle size and a startup timeout watchdog. A custom HTTP user agent
@@ -133,3 +133,12 @@ A successful device build verifies compilation/linking/packaging, not playback
 on an iPhone. Hardware decoding, provider responses, DRM and codec support still
 need real-device verification. Android emulator and TV browser mocks are not
 substitutes for that test.
+
+### 0.6.2 video/control layering
+
+The video window child is explicitly pinned below the transparent winit/Metal
+root using layer zPosition 0/1 and sibling order checks. The invariant is restored
+on attach, visibility/frame changes, native video layout and asynchronous VLC
+state changes. The VLC drawable also rejects touch input so player gestures
+reach Dado. This addresses the reported iPhone video-over-controls regression;
+only compilation/packaging can be checked locally without the user's iPhone.

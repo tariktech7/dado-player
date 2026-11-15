@@ -32,6 +32,7 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         vlcSurface.frame = bounds
+        VideoHost.shared.keepVideoBehindControls()
     }
 
     override class var layerClass: AnyClass { AVPlayerLayer.self }
@@ -83,6 +84,7 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
         vlcSurface.frame = bounds
         vlcSurface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         vlcSurface.isHidden = true
+        vlcSurface.isUserInteractionEnabled = false
         addSubview(vlcSurface)
         player.actionAtItemEnd = .pause
         do {
@@ -357,6 +359,7 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, let decoder = self.vlc,
                   let sender = notification.object as? VLCMediaPlayer, sender === decoder else { return }
+            VideoHost.shared.keepVideoBehindControls()
             switch decoder.state {
             case .playing, .paused:
                 self.startupTimeout?.cancel()

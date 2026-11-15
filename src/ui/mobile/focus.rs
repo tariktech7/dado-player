@@ -20,7 +20,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use egui::{Align, Color32, Rect, Response, Rounding, Stroke, Ui};
+use egui::{Color32, Rect, Response, Rounding, Stroke, Ui};
 
 use super::tokens;
 use crate::platform::RemoteKey;
@@ -378,7 +378,7 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
                 .rect_stroke(r, rounding, Stroke::new(line, tokens::focus_ring(ui)));
             s.focus_rect = Some(resp.rect);
             if s.moved {
-                ui.scroll_to_rect(resp.rect, Some(Align::Center));
+                ui.scroll_to_rect(resp.rect, None);
             }
         }
 
@@ -471,6 +471,16 @@ pub fn index() -> Option<usize> {
 ///
 /// Safe to call from `App::mobile_back()` (before `begin`) and from a UI
 /// callback during `draw` (it then takes effect on the next frame).
+pub fn request_id(id: egui::Id) {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        s.active = true;
+        s.desired_id = Some(id);
+        s.pending_ok = false;
+        s.moved = true;
+    });
+}
+
 pub fn request_index(i: usize) {
     STATE.with(|cell| cell.borrow_mut().queued_idx = Some(i));
 }

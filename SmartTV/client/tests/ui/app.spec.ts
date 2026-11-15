@@ -682,7 +682,10 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   });
   const last = await rail.locator("button").nth(7).boundingBox(),
     box = await rail.boundingBox();
-  expect(last!.x + last!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+  await expect.poll(async()=>{
+    const last=await rail.locator('button').nth(7).boundingBox(),box=await rail.boundingBox();
+    return last!.x+last!.width-box!.x-box!.width;
+  }).toBeLessThanOrEqual(1);
   for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowLeft");
   await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBe(0);
   await expect(page.locator(".home-hero")).toBeVisible();
@@ -1074,4 +1077,35 @@ test("rail motion keeps layout widths fixed while only transform offsets animate
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.locator('.categories button').first().focus();
   expect(await page.locator('.shell > .categories').evaluate(e=>e.getAnimations().length)).toBe(0);
+});
+
+test('OK focuses the movie/series play action, including episodes that arrive later',async({page})=>{
+  await fixture(page,true,true);await page.goto('/');
+  await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  const movie=page.getByRole('button',{name:/Demo Film/});await movie.focus();await page.keyboard.press('Enter');
+  await expect(page.locator('.catalog-details button.primary')).toBeFocused();
+  await page.keyboard.press('ArrowLeft');await expect(movie).toBeFocused();
+  await page.getByRole('button',{name:'▤ Serien',exact:true}).click();
+  await page.getByRole('button',{name:'Demo Serie',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page.locator('.series-play')).toBeFocused();
+  await page.keyboard.press('Enter');await expect(page.locator('.fullscreen')).toBeVisible();
+  const seeks=()=>page.evaluate(()=> (window as any).__avLog.filter((e:any[])=>e[0]==='seek').map((e:any[])=>e[1]));
+  await page.keyboard.press('ArrowRight');await expect.poll(seeks).toContain(10000);
+  await page.keyboard.press('ArrowRight');await expect.poll(seeks).toContain(20000);
+  await page.keyboard.press('ArrowLeft');await expect.poll(seeks).toContain(10000);
+  await page.keyboard.press('ArrowDown');const before=(await seeks()).length;await page.keyboard.press('ArrowRight');expect((await seeks()).length).toBe(before);
+  await expect(page.locator('.fullscreen')).toHaveClass(/controls-hidden/,{timeout:7000});
+  await page.keyboard.press('ArrowRight');await expect.poll(async()=> (await seeks()).length).toBe(before+1);
+});
+
+test('remote scrolling progresses through intermediate positions and honors reduced motion',async({page})=>{
+  await fixture(page,true,true);await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();
+  await page.locator('.channel[data-channel="1"]').focus();
+  await page.locator('.channel[data-channel="18"]').focus();
+  const values=await page.locator('.channel-list').evaluate(async el=>{
+    const values:number[]=[];for(let i=0;i<32;i++){values.push(el.scrollTop);await new Promise(requestAnimationFrame);}return values;
+  });
+  expect(values[values.length-1]).toBeGreaterThan(300);
+  expect(new Set(values.map(Math.round)).size).toBeGreaterThan(4);
+  await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.channel-list').evaluate(el=>{(el.querySelector('button') as HTMLElement)?.focus();});
 });

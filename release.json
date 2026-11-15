@@ -1,6 +1,6 @@
 {
-  "version": "0.6.1",
-  "androidBuild": 15,
-  "iosBuild": 10,
+  "version": "0.6.2",
+  "androidBuild": 16,
+  "iosBuild": 11,
   "channel": "beta"
 }

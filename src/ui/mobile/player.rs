@@ -98,6 +98,9 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     let reveal_only = std::mem::take(&mut app.player_reveal);
     let show_ui = (keep_ui || idle < HIDE_AFTER) && !reveal_only;
     app.player_chrome = show_ui;
+    if !show_ui {
+        app.player_menu_navigation = false;
+    }
     if show_ui && !keep_ui {
         // egui only redraws on input; without a scheduled wake-up the controls
         // would stay on screen until the next touch even after 4 seconds.

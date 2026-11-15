@@ -35,9 +35,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.6.1</string>
+    <string>0.6.2</string>
     <key>CFBundleVersion</key>
-    <string>10</string>
+    <string>11</string>
     <key>CFBundleIcons</key>
     <dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconFiles</key><array><string>AppIcon60</string></array></dict></dict>
     <key>CFBundleIcons~ipad</key>

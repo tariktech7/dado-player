@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.6.1
+# Gemeinsamer Produktstand 0.6.2
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-15 und iOS-Buildnummer 10 bleiben eigenständig monoton steigend. Nach Änderungen
+16 und iOS-Buildnummer 11 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe

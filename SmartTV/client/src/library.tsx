@@ -241,7 +241,7 @@ function PosterGrid({
     <div
       ref={root}
       class="catalog-title-list"
-      onScroll={(e) => setTop(e.currentTarget.scrollTop)}
+      onScroll={(e) => { const next = Math.floor(e.currentTarget.scrollTop / rowHeight) * rowHeight; setTop(old => old === next ? old : next); }}
     >
       <div style={{ height: start * rowHeight }} />
       <div
@@ -330,6 +330,14 @@ export function CatalogBrowser({
     );
   }, [items, category, query, favorites]);
   const item = detail?.id === selected?.id ? detail : selected;
+  const preview = useRef<HTMLElement>(null);
+  const activated = useRef<string | null>(null);
+  const activate = (value: Item) => { activated.current = itemKey(value); select(value); };
+  useLayoutEffect(() => {
+    if (!item || activated.current !== itemKey(item)) return;
+    const primary = preview.current?.querySelector<HTMLButtonElement>('.series-play,button.primary');
+    if (primary) { primary.focus({preventScroll:true}); activated.current = null; }
+  }, [item, episodes]);
   return (
     <div class="catalog-browser">
       <section class="categories" data-focus-zone="categories">
@@ -361,9 +369,9 @@ export function CatalogBrowser({
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
-        <PosterGrid items={filtered} selected={selected} select={select} />
+        <PosterGrid items={filtered} selected={selected} select={activate} />
       </section>
-      <aside class="catalog-details" data-focus-zone="details">
+      <aside ref={preview} class="catalog-details" data-focus-zone="details">
         <h2>{item?.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
         {item ? (
           <div class="catalog-detail-scroll" key={itemKey(item)}>

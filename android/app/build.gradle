@@ -15,8 +15,8 @@ android {
         // treats an APK as an *update* when versionCode grows; with a frozen
         // value the installer keeps reporting the same version and some OEM
         // installers refuse the package outright.
-        versionCode 15
-        versionName "0.6.1"
+        versionCode 16
+        versionName "0.6.2"
 
         // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the
         // prebuilt libmpv.so fetched from mpv-android). Restricting ABIs here keeps

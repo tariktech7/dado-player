@@ -1,3 +1,4 @@
+import { moveScroll, scrollDestination } from './scroll-motion';
 export const samsung = () =>
   typeof window !== "undefined" && !!(window as any).webapis?.avplay;
 export function registerKeys(): void {
@@ -220,35 +221,37 @@ export function scrollFocused(target: HTMLElement): void {
         rect = target.getBoundingClientRect(),
         scale = innerWidth / 1920,
         pad = 8 * scale;
-      if (focusables(parent)[0] === target) parent.scrollLeft = 0;
-      else if (rect.left < box.left + pad)
-        parent.scrollLeft -= (box.left + pad - rect.left) / scale;
-      else if (rect.right > box.right - pad)
-        parent.scrollLeft += (rect.right - box.right + pad) / scale;
+      const dest = scrollDestination(parent), shift = (dest.left-parent.scrollLeft)*scale;
+      let left = dest.left;
+      if (parent.querySelector(selector) === target) left = 0;
+      else if (rect.left-shift < box.left + pad) left -= (box.left+pad-rect.left+shift)/scale;
+      else if (rect.right-shift > box.right-pad) left += (rect.right-shift-box.right+pad)/scale;
+      moveScroll(parent,left,dest.top);
     }
     if (
       !/(auto|scroll)/.test(style.overflowY) ||
       parent.scrollHeight <= parent.clientHeight
     )
       continue;
-    const first = focusables(parent)[0],
+    const first = parent.querySelector(selector),
       virtual = parent.classList.contains("channel-list");
-    if (
+    let top = scrollDestination(parent).top;
+    const atStart = (
       (virtual &&
         target.closest("[data-list-index]")?.getAttribute("data-list-index") ===
           "0") ||
       (!virtual && first === target)
-    )
-      parent.scrollTop = 0;
+    );
+    if (atStart) top = 0;
     {
       const box = parent.getBoundingClientRect(),
         rect = target.getBoundingClientRect(),
         scale = innerWidth / 1920,
         pad = 8 * scale;
-      if (rect.top < box.top + pad)
-        parent.scrollTop -= (box.top + pad - rect.top) / scale;
-      else if (rect.bottom > box.bottom - pad)
-        parent.scrollTop += (rect.bottom - box.bottom + pad) / scale;
+      const shift = (top-parent.scrollTop)*scale;
+      if (!atStart && rect.top-shift < box.top+pad) top -= (box.top+pad-rect.top+shift)/scale;
+      else if (!atStart && rect.bottom-shift > box.bottom-pad) top += (rect.bottom-shift-box.bottom+pad)/scale;
+      moveScroll(parent,scrollDestination(parent).left,top);
     }
   }
   const root = document.getElementById("app");

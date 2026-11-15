@@ -138,3 +138,23 @@ opacity/transform. Fokuswechsel verursachen kein Resize/Repaint des gesamten
 App-Baums. Schnelle Richtungswechsel übernehmen die gerade sichtbare Position.
 Reduzierte Bewegung deaktiviert diese Animationen. Native AVPlay-Geometrie wird
 nach Abschluss synchronisiert; dessen feste rechte Vorschau bleibt verankert.
+
+## 0.6.2: Auswahl, Scrollen und Film-Tasten
+
+OK auf einem Film-/Serienposter fokussiert direkt Abspielen/Fortsetzen in der
+rechten Detailspalte. Bei asynchron geladenen Folgen wird genau dieser eine
+Fokuswechsel nachgeholt; spätere Metadaten dürfen den Fokus nicht zurücksetzen.
+Die vorherige Auswahl bleibt beim Zurückwechseln in die Titelliste erhalten.
+
+Links/Rechts spult Filme und Folgen zunächst um jeweils 10 Sekunden. Hoch/Runter
+aktiviert die Navigation der sichtbaren Player-Bedienelemente. Verschwindet das
+Overlay, gilt wieder die Spulfunktion. Live-TV behält die vorhandene Kanalwahl.
+Eingaben vor fertig vorbereitetem AVPlay werden als relative Spulschritte
+zwischengespeichert. Ein unbekannter Dauerwert begrenzt Spulen nicht auf Null.
+
+Fokus-Scrolling nutzt die native sanfte Browser-Animation und bündelt identische
+Scrollziele; reduzierte Bewegung bleibt sofort. Virtuelle Listen rendern erst
+beim Wechsel einer Reihe statt für jedes Pixel. Die Senderliste behält bei
+schnellen Richtungstasten den logischen nächsten Sender im DOM, ohne zur
+Vorschau abzuspringen. Android TV/Windows nutzen animiertes egui-Scrolling mit
+minimal nötigem Nachscrollen statt ständigem Zentrieren.
