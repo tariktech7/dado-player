@@ -235,7 +235,7 @@ pub fn allowed() -> bool {
     state().lock().unwrap().allowed()
 }
 pub fn tick(ctx: &Context) {
-    let request = {
+    let should_request = {
         let mut s = state().lock().unwrap();
         if !enabled() {
             return;
@@ -253,7 +253,7 @@ pub fn tick(ctx: &Context) {
         if let Some(c) = &s.claims {
             if c.kind == "trial" && c.expires_at.is_some_and(|t| t > s.now()) {
                 ctx.request_repaint_after(Duration::from_secs(
-                    (c.expires_at.unwrap_or(0) - s.now()).clamp(1, 3600) as u64,
+                    (((c.expires_at.unwrap_or(0) - s.now() - 1) % 86400) + 1).clamp(1, 3600) as u64,
                 ));
             }
         }
@@ -262,11 +262,32 @@ pub fn tick(ctx: &Context) {
             && s.now() - s.saved.last_check >= 21600)
             || expiry
     };
-    if request {
-        refresh(ctx);
+    if should_request {
+        request(ctx, RequestMode::Status);
     }
 }
 pub fn refresh(ctx: &Context) {
+    request(ctx, RequestMode::Activation);
+}
+#[derive(Clone, Copy, PartialEq)]
+enum RequestMode {
+    Trial,
+    Activation,
+    Status,
+}
+impl RequestMode {
+    fn path(self) -> &'static str {
+        match self {
+            Self::Trial => "/v1/trial/start",
+            Self::Activation => "/v1/license/activation",
+            Self::Status => "/v1/license",
+        }
+    }
+    fn accepts(self, claims: &Claims) -> bool {
+        self != Self::Activation || claims.kind == "permanent"
+    }
+}
+fn request(ctx: &Context, mode: RequestMode) {
     let (subject, mac) = {
         let mut s = state().lock().unwrap();
         if s.busy || s.subject.is_empty() || !enabled() {
@@ -286,13 +307,17 @@ pub fn refresh(ctx: &Context) {
             let token=rt.block_on(async{
             let mac_hash=mac.map(|m|fingerprint("mac-alias",&m));
             let client=reqwest::Client::builder().timeout(Duration::from_secs(10)).build().map_err(|_|"Verbindung fehlgeschlagen")?;
-            let r=client.post(format!("{}/v1/license",config().api_url)).json(&serde_json::json!({"subject":subject,"platform":"windows","mac_hash":mac_hash})).send().await.map_err(|_|"Lizenzdienst nicht erreichbar. Erneut versuchen.")?;
-            if !r.status().is_success(){return Err("Lizenzdienst derzeit nicht verfügbar.");}
+            let r=client.post(format!("{}{}",config().api_url,mode.path())).json(&serde_json::json!({"subject":subject,"platform":"windows","mac_hash":mac_hash})).send().await.map_err(|_|"Lizenzdienst nicht erreichbar. Erneut versuchen.")?;
+            let success=r.status().is_success();
             if r.content_length().is_some_and(|n|n>16384){return Err("Lizenzantwort zu groß.");}
             let value:serde_json::Value=r.json().await.map_err(|_|"Ungültige Lizenzantwort")?;
+            if !success {return Err(match value["code"].as_str(){Some("NOT_APPROVED")=>"Noch keine Freischaltung vorhanden.",Some("TRIAL_NOT_STARTED")=>"Testversion noch nicht gestartet.",_=>"Lizenzdienst derzeit nicht verfügbar."});}
             value["license"].as_str().map(str::to_owned).ok_or("Ungültige Lizenzantwort")
         })?;
             let c = verify(&token, &subject)?;
+            if !mode.accepts(&c) {
+                return Err("Noch keine Freischaltung vorhanden.".into());
+            }
             Ok((token, c))
         })();
         let mut s = state().lock().unwrap();
@@ -317,6 +342,32 @@ pub fn refresh(ctx: &Context) {
 pub fn settings(ui: &mut Ui) {
     ui.heading("Lizenz & Gerät");
     license_controls(ui);
+}
+
+pub fn trial_badge(ui: &mut Ui, compact: bool) {
+    if !enabled() {
+        return;
+    }
+    let s = state().lock().unwrap();
+    if let Some(c) = &s.claims {
+        if c.kind == "trial" {
+            let days = ((c.expires_at.unwrap_or(0) - s.now()).max(0) + 86399) / 86400;
+            let full = format!(
+                "Testversion · noch {days} {}",
+                if days == 1 { "Tag" } else { "Tage" }
+            );
+            ui.label(
+                egui::RichText::new(if compact {
+                    format!("{days} T")
+                } else {
+                    full.clone()
+                })
+                .size(11.0)
+                .color(crate::theme::accent(ui)),
+            )
+            .on_hover_text(full);
+        }
+    }
 }
 
 fn license_controls(ui: &mut Ui) {
@@ -382,7 +433,14 @@ fn license_controls(ui: &mut Ui) {
         )
         .clicked()
     {
-        refresh(ui.ctx());
+        request(
+            ui.ctx(),
+            if started {
+                RequestMode::Activation
+            } else {
+                RequestMode::Trial
+            },
+        );
     }
     if !started
         && ui
@@ -525,5 +583,21 @@ mod tests {
         let (token, keys) = certificate(&subject, "permanent", None);
         let paid = verify_with_keys(&token, &subject, &keys).unwrap();
         assert!(claims_allow_access(Some(&paid), i64::MAX));
+    }
+
+    #[test]
+    fn activation_cannot_accept_a_valid_signed_trial() {
+        let subject = "a".repeat(64);
+        let (token, keys) = certificate(&subject, "trial", Some(605800));
+        let trial = verify_with_keys(&token, &subject, &keys).unwrap();
+        assert!(!RequestMode::Activation.accepts(&trial));
+        assert!(RequestMode::Trial.accepts(&trial));
+        assert!(RequestMode::Status.accepts(&trial));
+        let (token, keys) = certificate(&subject, "permanent", None);
+        assert!(
+            RequestMode::Activation.accepts(&verify_with_keys(&token, &subject, &keys).unwrap())
+        );
+        assert_ne!(RequestMode::Trial.path(), RequestMode::Activation.path());
+        assert_ne!(RequestMode::Trial.path(), RequestMode::Status.path());
     }
 }

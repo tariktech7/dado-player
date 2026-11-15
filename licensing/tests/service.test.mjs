@@ -23,7 +23,7 @@ async function setup() {
 test('server owns trial start; reinstall cannot renew; admin activation creates non-expiring device license',async()=>{
  const s=await setup(),subject=await fingerprint('samsung','fixture-duid');
  const input={subject,platform:'samsung',mac_hash:await macAlias('AA-BB-CC-DD-EE-10'),started_at:9999999999,paid:true};
- let r=await s.post('/v1/license',input);assert.equal(r.status,200);
+ let r=await s.post('/v1/trial/start',input);assert.equal(r.status,200);
  let c=await verifyLicense((await r.json()).license,s.keys,subject,'samsung',s.getTime());
  assert.equal(c.kind,'trial');assert.equal(c.started_at,s.getTime());assert.equal(c.expires_at,c.started_at+TRIAL_SECONDS);
  const started=c.started_at;s.setTime(started+TRIAL_SECONDS);
@@ -41,6 +41,29 @@ test('server owns trial start; reinstall cannot renew; admin activation creates 
  await assert.rejects(()=>verifyLicense(parts.join('.'),s.keys,subject,'samsung',s.getTime()));
 });
 const awaitableSubject='a'.repeat(64);
+
+test('only explicit trial start creates a trial; activation never returns a trial on Windows or Samsung',async()=>{
+ for(const platform of ['windows','samsung']) {
+  const s=await setup(),subject=await fingerprint(platform,'explicit-start-only'),input={subject,platform};
+  assert.equal((await s.post('/v1/license',input)).status,404);
+  let r=await s.post('/v1/license/activation',input);
+  assert.equal(r.status,404);assert.equal((await r.json()).code,'NOT_APPROVED');
+  assert.equal((await s.env.DB.prepare('SELECT COUNT(*) AS count FROM devices').first()).count,0);
+  r=await s.post('/v1/trial/start',input);assert.equal(r.status,200);
+  const trial=await verifyLicense((await r.json()).license,s.keys,subject,platform,s.getTime());
+  assert.equal(trial.kind,'trial');const started=trial.started_at;
+  s.setTime(started+1234);
+  r=await s.post('/v1/license/activation',input);assert.equal(r.status,409);
+  const rejected=await r.json();assert.equal(rejected.code,'NOT_APPROVED');assert.equal(rejected.license,undefined);
+  r=await s.post('/v1/trial/start',input);
+  const repeated=await verifyLicense((await r.json()).license,s.keys,subject,platform,s.getTime());
+  assert.equal(repeated.started_at,started);assert.equal(repeated.expires_at,started+TRIAL_SECONDS);
+  assert.equal((await s.post('/admin/approve',{subject},true)).status,200);
+  r=await s.post('/v1/license/activation',input);assert.equal(r.status,200);
+  const paid=await verifyLicense((await r.json()).license,s.keys,subject,platform,s.getTime());
+  assert.equal(paid.kind,'permanent');assert.equal(paid.expires_at,null);
+ }
+});
 test('unknown admin, CSRF, malformed devices and flooding fail closed',async()=>{
  const s=await setup();
  assert.equal((await s.post('/admin/lookup',{query:'anything'})).status,403);
@@ -48,12 +71,12 @@ test('unknown admin, CSRF, malformed devices and flooding fail closed',async()=>
  assert.equal((await s.post('/v1/license',{subject:'invalid',platform:'windows'})).status,400);
  const r=await createHandler({authenticate:async()=> 'owner'})(new Request('https://licenses.example/admin/approve',{method:'POST',body:JSON.stringify({subject})}),s.env);
  assert.equal(r.status,403);
- for(let i=0;i<30;i++) assert.equal((await s.post('/v1/license',{subject,platform:'windows'})).status,200);
+ for(let i=0;i<30;i++) assert.equal((await s.post(i===0?'/v1/trial/start':'/v1/license',{subject,platform:'windows'})).status,200);
  assert.equal((await s.post('/v1/license',{subject,platform:'windows'})).status,429);
 });
 test('trial boundary and wrong platform/key do not unlock',async()=>{
  const s=await setup(),subject=await fingerprint('samsung','clock');
- const token=(await (await s.post('/v1/license',{subject,platform:'samsung'})).json()).license;
+ const token=(await (await s.post('/v1/trial/start',{subject,platform:'samsung'})).json()).license;
  let c=await verifyLicense(token,s.keys,subject,'samsung',s.getTime()+TRIAL_SECONDS-1);assert.equal(c.expired,false);
  c=await verifyLicense(token,s.keys,subject,'samsung',s.getTime()+TRIAL_SECONDS);assert.equal(c.expired,true);
  await assert.rejects(()=>verifyLicense(token,s.keys,subject,'windows',s.getTime()));

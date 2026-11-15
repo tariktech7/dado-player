@@ -227,6 +227,14 @@ hr {
   width: 48px;
   height: 48px;
 }
+.brand-copy { display: flex; flex-direction: column; min-width: 0; }
+.brand-copy strong { line-height: 1.1; }
+.brand .trial-badge { font-size: 15px; line-height: 20px; color: var(--accent); letter-spacing: 0; }
+.nav-collapsed .brand-copy { display: none; }
+.navigation { position: relative; }
+.nav-collapsed .trial-badge { display: none; }
+.trial-badge-compact { display: none; }
+.nav-collapsed .trial-badge-compact { display: block; color: var(--accent); font-size: 13px; line-height: 20px; text-align: center; }
 .navigation nav {
   display: flex;
   flex-direction: column;

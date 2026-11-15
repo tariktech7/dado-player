@@ -1,6 +1,6 @@
 # Dado Player für Samsung Tizen
 
-Erste eigenständige TV-Web-App, Version **0.1.6**. Ziel: Tizen **6.5+** (2022+),
+Eigenständige TV-Web-App, aktuelle Lizenz-Beta **0.1.8**. Ziel: Tizen **6.5+** (2022+),
 ES2020/Chromium-85-Build. Der Test-TV GQ77S94CATXZG meldet inzwischen Tizen 9.0.
 Ältere Geräte und LG webOS sind noch keine freigegebenen Ziele.
 
@@ -49,7 +49,7 @@ Node 24 und npm, vom Repository-Stamm:
 ```
 
 Der Einstieg führt `npm ci`, TypeScript-Prüfung, Unit-Tests und esbuild aus und erzeugt
-`Releases/Dado-Player-Tizen-0.1.6-unsigned.wgt`. **Unsigniert bedeutet: noch nicht auf einem
+`Releases/Dado-Player-Tizen-0.1.8-unsigned.wgt`. **Unsigniert bedeutet: noch nicht auf einem
 echten Samsung-TV installierbar.** Das Paket ist kein mit einem Emulatorzertifikat
 fälschlich als gerätegeeignet ausgewiesener Build.
 

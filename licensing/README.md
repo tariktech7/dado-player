@@ -12,7 +12,9 @@ Stand: 14.11.2026. Windows und Samsung haben eine siebentägige Testversion. And
 
 ## Verhalten der Apps
 
-- Ohne gespeicherte Lizenz erscheint vor Anmeldung und Katalog ein eigener Startbildschirm. Windows zeigt getrennte Knöpfe für „7 Tage kostenlos testen“ und den Abruf einer vorhandenen Freigabe; Samsung kombiniert beide im ersten Abrufknopf. Kein unbeabsichtigter Teststart allein durch Öffnen der App. Ab Windows 0.5.7: kompakte, bei kleinen Fenstern scrollbar bleibende Karte mit D7-Logo. Angezeigt und als MAC-Suchalias registriert wird derselbe bevorzugte Netzwerkadapter; virtuelle Wi-Fi-Direct-/VPN-Duplikate werden ausgefiltert. Die Gerätebindung bleibt unverändert.
+- Ohne gespeicherte Lizenz erscheint vor Anmeldung und Katalog ein eigener Startbildschirm. Windows 0.5.8 und Samsung 0.1.8 trennen „7 Tage kostenlos testen“ und „Freischaltung abrufen“ auch technisch. Nur der Teststart darf einen Trial anlegen. Ohne genehmigte Dauerlizenz meldet der Freischaltabruf „Noch keine Freischaltung vorhanden“ und startet keinen Trial. Beide Clients lehnen bei dieser Aktion auch eine gültig signierte Trial-Antwort ab. Bereits gestartete Testfristen bleiben erhalten.
+- Während einer Testversion zeigt die Navigation unter dem App-Namen die verbleibenden Tage. Eingeklappt bleibt eine Kurzform sichtbar. Die Anzeige aktualisiert sich lokal; sie verursacht keine zusätzlichen Serverabfragen. Bei Dauerfreigabe entfällt der Trial-Hinweis.
+- Ab Windows 0.5.7: kompakte, bei kleinen Fenstern scrollbar bleibende Karte mit D7-Logo. Angezeigt und als MAC-Suchalias registriert wird derselbe bevorzugte Netzwerkadapter; virtuelle Wi-Fi-Direct-/VPN-Duplikate werden ausgefiltert. Die Gerätebindung bleibt unverändert.
 - Nach genau 7 × 24 Stunden erscheint „Ihre Testversion ist abgelaufen“. Katalog und Wiedergabe bleiben gesperrt, auch im Windows-TV-Modus. Laufende Wiedergabe wird beendet. MAC-Adresse (sofern verfügbar), Geräte-ID, Fehlermeldungen und „Freischaltung abrufen“ bleiben erreichbar. Das ist unabhängig vom IPTV-Anbieterlogin. Es werden keine Profile oder Favoriten gelöscht.
 - Hintergrundabrufe: ausschließlich während einer gespeicherten Testversion beim App-Start, wenn der letzte erfolgreiche Abruf mindestens sechs Stunden zurückliegt. Windows versucht zusätzlich einmal bei erkanntem Ablauf, eine eventuell schon genehmigte Freigabe abzuholen. Samsung sperrt beim Ablauf lokal und bietet den manuellen Abruf. Kein dauerhaftes Polling und keine Abfrage pro Kanalwechsel. Für Hintergrundabrufe erscheint kein Bestätigungsdialog.
 - Netzfehler entziehen keine noch gültige Test- oder Dauerlizenz. Eine abgelaufene Testversion bleibt auch bei Netzfehler gesperrt. Eine fehlende/beschädigte lokale Lizenz kann über denselben Knopf wiederhergestellt werden; ein bereits abgelaufener Server-Trial beginnt dadurch nicht erneut.
@@ -25,6 +27,18 @@ Der öffentliche Dienst ist https://dado-license.dado-licensing.workers.dev. Er 
 Die Anwendung schützt den Worker `dado-admin`. Ihr öffentlicher Hostname lautet **dado-admin.dado-licensing.workers.dev**, Pfad `admin*`. In der Dashboard-Eingabe: Subdomain `dado-admin`, Domain `dado-licensing.workers.dev`. Ein leerer Subdomain-Eintrag leitete nach erfolgreichem Login auf die nicht existierende Basisadresse zurück (NXDOMAIN); am 14.11. korrigiert und angemeldete Suche im Browser geprüft.
 
 `Nur Tarik` bleibt eine Allow-Regel für die Eigentümer-E-Mail. Kein Everyone, kein Bypass. Der Worker prüft zusätzlich die authentisierte Identität. `dado-license` bleibt für Geräte ohne Admin-Login erreichbar. Den öffentlichen API-Worker nicht zur privaten Access-Anwendung hinzufügen.
+
+## Öffentliche API: strikt getrennte Aktionen
+
+Alle drei Aktionen verwenden POST und dieselbe Gerätebindung:
+
+| Pfad | Verhalten |
+| --- | --- |
+| `/v1/trial/start` | Einziger Einstieg zum Anlegen eines Trials. Wiederholung behält den bisherigen Beginn und Ablauf; eine bestehende Dauerfreigabe bleibt dauerhaft. |
+| `/v1/license` | Nur vorhandenen Lizenzstatus abrufen, z. B. während eines bestehenden Trials. Unbekanntes Gerät: HTTP 404, kein neuer Trial. |
+| `/v1/license/activation` | Ausschließlich genehmigte Dauerlizenz. Ohne Freigabe HTTP 404/409 mit `NOT_APPROVED`; kein Trial-Dokument und kein neuer Geräteeintrag. |
+
+Ältere Lizenz-Betas benötigen zum erstmaligen Teststart ein Update: Der bisherige allgemeine Abruf darf seit dieser Korrektur keinen Trial mehr erzeugen. Vorhandene signierte Trials und Dauerlizenzen bleiben gültig. Eine Freigabe setzt weiterhin einen bereits registrierten Gerätedatensatz voraus.
 
 ## Lokaler Verwaltungsweg
 

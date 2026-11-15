@@ -55,21 +55,25 @@ export class LicenseClient {
    }
    this.state.ready=true;this.update();this.emit();
    // A permanent cached entitlement never triggers an automatic server request.
-   if(this.settings.enabled && this.state.claims?.kind==='trial' && this.now()-(saved.lastCheck||0)>=21600) await this.refresh();
+   if(this.settings.enabled && this.state.claims?.kind==='trial' && this.now()-(saved.lastCheck||0)>=21600) await this.request('status');
    const resume=()=>{if(this.state.claims?.kind==='trial'){this.update();try{this.persist(this.lastCheck);}catch{this.state.error='Lizenzspeicher nicht verfügbar';}this.emit();}};
    this.resume=resume;document.addEventListener('visibilitychange',resume);window.addEventListener('focus',resume);
   }catch(e){this.state.ready=true;this.state.error=String((e as Error).message);this.emit();}
  }
- async refresh(){
+ startTrial(){return this.request('trial');}
+ refresh(){return this.request('activation');}
+ private async request(mode:'trial'|'activation'|'status'){
   if(this.state.busy || !this.state.subject) return;
   if(!this.settings.enabled || !this.settings.apiUrl){this.state.error='Der Lizenzdienst ist noch nicht eingerichtet.';this.emit();return;}
   this.state.busy=true;this.state.error='';this.emit();
   const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),10000);
   try {
-   const response=await fetch(this.settings.apiUrl+'/v1/license',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:this.state.subject,platform:'samsung',mac_hash:this.state.mac?await macAlias(this.state.mac):null}),signal:controller.signal});
-   if(!response.ok) throw Error('Freischaltung derzeit nicht abrufbar. Bitte erneut versuchen.');
+   const path=mode==='trial'?'/v1/trial/start':mode==='activation'?'/v1/license/activation':'/v1/license';
+   const response=await fetch(this.settings.apiUrl+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:this.state.subject,platform:'samsung',mac_hash:this.state.mac?await macAlias(this.state.mac):null}),signal:controller.signal});
    const data=await response.json();
+   if(!response.ok) throw Error(data.code==='NOT_APPROVED'?'Noch keine Freischaltung vorhanden.':data.code==='TRIAL_NOT_STARTED'?'Testversion noch nicht gestartet.':'Freischaltung derzeit nicht abrufbar. Bitte erneut versuchen.');
    const claims=await verifyLicense(data.license,this.settings.keys,this.state.subject,'samsung',this.now());
+   if(mode==='activation' && claims.kind!=='permanent') throw Error('Noch keine Freischaltung vorhanden.');
    this.high=Math.max(this.now(),claims.issued_at);this.originTime=this.high;this.originTick=performance.now();this.token=data.license;
    this.persist(this.now());this.state.claims=claims;this.update();
   }catch(e){this.state.error=(e as Error).message;}

@@ -824,8 +824,9 @@ function App() {
           <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
           <p class="muted">{license.identitySource}. Die Geräte-ID bleibt die Kennung für deine Freischaltung.</p>
           {license.error && <p role="status">{license.error}</p>}
+          {!license.claims && <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.startTrial()}>7 Tage kostenlos testen</button>}
           <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
-            {license.busy?'Wird abgerufen …':license.claims?.kind==='permanent'?'Lizenz wiederherstellen':license.claims?'Freischaltung abrufen':'7 Tage kostenlos testen / Freischaltung abrufen'}
+            {license.busy?'Wird abgerufen …':license.claims?.kind==='permanent'?'Lizenz wiederherstellen':'Freischaltung abrufen'}
           </button>
           <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
         </section>
@@ -1215,8 +1216,9 @@ function App() {
         <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
         <p class="muted">Nennen Sie für die manuelle Freigabe die Geräte-ID oder Ihre registrierte MAC-Adresse. Wählen Sie nach der Freigabe „Freischaltung abrufen“. Profile und Favoriten bleiben gespeichert.</p>
         {license.error && <p role="status">{license.error}</p>}
+        {!license.claims && <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.startTrial()}>7 Tage kostenlos testen</button>}
         <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
-          {license.busy?'Wird abgerufen …':license.claims?'Freischaltung abrufen':'7 Tage kostenlos testen / Freischaltung abrufen'}
+          {license.busy?'Wird abgerufen …':'Freischaltung abrufen'}
         </button>
         <button onClick={()=>exitApp()}>App schließen</button>
         <p class="muted">Nach der dauerhaften Freischaltung: Unlimited, ohne automatische Lizenz-Serverabfragen.</p>
@@ -1328,8 +1330,11 @@ function App() {
             <aside class="navigation" data-focus-zone="navigation">
               <div class="brand">
                 <img src="d7.svg" />
-                <strong>Dado Player</strong>
+                <div class="brand-copy"><strong>Dado Player</strong>
+                  {license.claims?.kind==='trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit','').replace('Noch','noch')}</small>}
+                </div>
               </div>
+              {license.claims?.kind==='trial' && <small class="trial-badge-compact" title={license.text}>Trial · {license.text.match(/\d+/)?.[0]} T</small>}
               <nav>
                 {nav.map(([id, icon, label]) => (
                   <button

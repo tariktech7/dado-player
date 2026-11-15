@@ -99,6 +99,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             ui.ctx().request_repaint();
         }
         ui::brand_mark(ui, 32.0);
+        #[cfg(target_os = "windows")]
+        crate::licensing::trial_badge(ui, true);
         ui.add_space(18.0);
         for (label, view) in [
             ("Startseite", View::Home),
@@ -128,6 +130,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     .size(10.5)
                     .weak(),
             ));
+            #[cfg(target_os = "windows")]
+            crate::licensing::trial_badge(ui, false);
         });
     });
 

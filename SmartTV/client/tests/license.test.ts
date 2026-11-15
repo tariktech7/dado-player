@@ -13,11 +13,11 @@ async function fixture(t:any,kind:'trial'|'permanent',saved=true){
  const prior={window:globalThis.window,document:globalThis.document,localStorage:globalThis.localStorage,fetch:globalThis.fetch};
  const win=new EventTarget() as any;win.webapis={productinfo:{getDuid:()=> 'TV-test-only'},network:{getMac:()=> 'aa:bb:cc:dd:ee:10'},avplay:{}};
  Object.assign(globalThis,{window:win,document:new EventTarget(),localStorage:{getItem:(key:string)=>values.get(key)||null,setItem:(key:string,value:string)=>values.set(key,value)}});
- let calls=0;
- globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({license:token,server_time:now}),{status:200});};
+ let calls=0;const paths:string[]=[];
+ globalThis.fetch=async(input)=>{calls++;paths.push(new URL(String(input)).pathname);return new Response(JSON.stringify({license:token,server_time:now}),{status:200});};
  const client=new LicenseClient({enabled:true,apiUrl:'https://licenses.example',keys:{test:pub}});
  t.after(()=>{client.dispose();Object.assign(globalThis,prior);});
- return {client,values,claims,now,calls:()=>calls,win};
+ return {client,values,claims,now,calls:()=>calls,win,paths};
 }
 test('saved permanent license starts Unlimited with zero network requests',async t=>{
  const f=await fixture(t,'permanent');await f.client.init();
@@ -26,9 +26,10 @@ test('saved permanent license starts Unlimited with zero network requests',async
  f.win.dispatchEvent(new Event('focus'));assert.equal(f.calls(),0);
 });
 test('trial registers once, persists signed token and reuses fresh cache without another call',async t=>{
- const f=await fixture(t,'trial',false);await f.client.init();assert.equal(f.calls(),0);await f.client.refresh();
+ const f=await fixture(t,'trial',false);await f.client.init();assert.equal(f.calls(),0);await f.client.startTrial();
  assert.equal(f.calls(),1);assert.equal(f.client.state.allowed,true);assert.match(f.client.state.text,/7 Tage/);
  assert.ok(JSON.parse(f.values.get('dado.license.v1')!).token);
+ assert.deepEqual(f.paths,['/v1/trial/start']);
  f.win.dispatchEvent(new Event('focus'));assert.equal(f.calls(),1);
 });
 test('expiry after resume blocks playback locally without a heartbeat',async t=>{
@@ -40,4 +41,19 @@ test('expiry after resume blocks playback locally without a heartbeat',async t=>
 test('a failed refresh preserves a previously verified permanent license',async t=>{
  const f=await fixture(t,'permanent');await f.client.init();globalThis.fetch=async()=>{throw Error('offline');};
  await f.client.refresh();assert.equal(f.client.state.allowed,true);assert.equal(f.client.state.text,'Unlimited');assert.match(f.client.state.error,/offline/);
+});
+
+test('activation rejects even a correctly signed trial returned by a misconfigured server',async t=>{
+ const f=await fixture(t,'trial',false);await f.client.init();await f.client.refresh();
+ assert.deepEqual(f.paths,['/v1/license/activation']);
+ assert.equal(f.client.state.allowed,false);assert.equal(f.client.state.claims,null);
+ assert.equal(f.values.has('dado.license.v1'),false);assert.match(f.client.state.error,/Noch keine Freischaltung/);
+ await f.client.startTrial();assert.equal(f.client.state.allowed,true);
+});
+
+test('background refresh only reads existing trial status and never starts one',async t=>{
+ const f=await fixture(t,'trial');
+ const saved=JSON.parse(f.values.get('dado.license.v1')!);saved.lastCheck=f.now-21600;
+ f.values.set('dado.license.v1',JSON.stringify(saved));
+ await f.client.init();assert.deepEqual(f.paths,['/v1/license']);assert.equal(f.client.state.allowed,true);
 });

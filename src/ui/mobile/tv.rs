@@ -238,6 +238,22 @@ fn paint_brand(ui: &mut Ui, rect: Rect, app: &App) {
     let mark = Rect::from_min_size(pos2(rect.left(), rect.center().y - 12.0), Vec2::splat(24.0));
     let mut brand_ui = ui.child_ui(mark, egui::Layout::top_down(Align::Min));
     crate::ui::brand_mark(&mut brand_ui, 24.0);
+    #[cfg(target_os = "windows")]
+    {
+        let badge_rect = Rect::from_min_size(
+            pos2(
+                if app.nav_collapsed {
+                    rect.left()
+                } else {
+                    mark.right() + 8.0
+                },
+                rect.center().y + 11.0,
+            ),
+            Vec2::new(if app.nav_collapsed { 45.0 } else { 180.0 }, 16.0),
+        );
+        let mut badge_ui = ui.child_ui(badge_rect, egui::Layout::top_down(Align::Min));
+        crate::licensing::trial_badge(&mut badge_ui, app.nav_collapsed);
+    }
     if !app.nav_collapsed {
         components::draw_line(
             ui,

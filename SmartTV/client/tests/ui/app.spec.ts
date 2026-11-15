@@ -231,7 +231,7 @@ test('expired trial replaces catalogue with device gate and verified activation 
   const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
   const token=await signLicense({v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',kind:'permanent',started_at:now-604801,issued_at:now,expires_at:null},key,'ui-test');
   let calls=0;
-  await page.route('https://license-fixture.invalid/v1/license',async route=>{calls++;await route.fulfill({json:{license:token}});});
+  await page.route('https://license-fixture.invalid/v1/license/activation',async route=>{calls++;await route.fulfill({json:{license:token}});});
   await page.goto('/');
   const gate=page.locator('[data-license-gate]');
   await expect(gate.getByRole('heading',{name:'Ihre Testversion ist abgelaufen'})).toBeVisible();
@@ -250,14 +250,52 @@ test('expired trial replaces catalogue with device gate and verified activation 
 test('first launch requires explicit trial start and offline failure keeps device gate available',async({page})=>{
   await fixture(page,false,true,'missing');
   let calls=0;
-  await page.route('https://license-fixture.invalid/v1/license',async route=>{calls++;await route.abort();});
+  await page.route('https://license-fixture.invalid/v1/trial/start',async route=>{calls++;await route.abort();});
   await page.goto('/');
   const gate=page.locator('[data-license-gate]');
-  const start=gate.getByRole('button',{name:'7 Tage kostenlos testen / Freischaltung abrufen',exact:true});
+  const start=gate.getByRole('button',{name:'7 Tage kostenlos testen',exact:true});
   await expect(start).toBeEnabled();expect(calls).toBe(0);
   await start.click();await expect(gate.getByRole('status')).toBeVisible();
   await expect(start).toBeEnabled();await expect(gate).toContainText('AA:BB:CC:DD:EE:10');
   expect(calls).toBe(1);
+});
+
+test('activation cannot start a trial; explicit start shows remaining days and paid activation removes badge',async({page})=>{
+  await fixture(page,true,true,'missing');
+  const now=Math.floor(Date.now()/1000),subject=await fingerprint('samsung','tv-ui-fixture');
+  const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
+  const base={v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',started_at:now,issued_at:now};
+  const trial=await signLicense({...base,kind:'trial',expires_at:now+604800},key,'ui-test');
+  const paid=await signLicense({...base,kind:'permanent',expires_at:null},key,'ui-test');
+  const paths:string[]=[];let approved=false;
+  await page.route('https://license-fixture.invalid/**',async route=>{
+    const path=new URL(route.request().url()).pathname;paths.push(path);
+    if(path==='/v1/trial/start')return route.fulfill({json:{license:trial}});
+    if(path==='/v1/license/activation')return approved?route.fulfill({json:{license:paid}}):route.fulfill({status:409,json:{code:'NOT_APPROVED',error:'Noch keine Freischaltung vorhanden.'}});
+    return route.fulfill({status:500});
+  });
+  await page.goto('/');const gate=page.locator('[data-license-gate]');
+  await gate.getByRole('button',{name:'Freischaltung abrufen',exact:true}).click();
+  await expect(gate.getByRole('status')).toHaveText('Noch keine Freischaltung vorhanden.');
+  await expect(gate).toBeVisible();expect(paths).toEqual(['/v1/license/activation']);
+  await gate.getByRole('button',{name:'7 Tage kostenlos testen',exact:true}).click();
+  await expect(gate).toHaveCount(0);
+  await expect(page.locator('[data-trial-badge]')).toContainText('7 Tage');
+  await page.evaluate(()=>{const original=Date.now;Date.now=()=>original()+86400000;window.dispatchEvent(new Event('focus'));});
+  await expect(page.locator('[data-trial-badge]')).toContainText('6 Tage');
+  await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();
+  await page.locator('[data-focus-zone="categories"] button').first().focus();
+  await expect(page.locator('.trial-badge-compact')).toBeVisible();
+  await expect(page.locator('.trial-badge-compact')).toContainText('6 T');
+  await page.screenshot({path:test.info().outputPath('trial-indicator.png')});
+  approved=true;
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  const status=page.locator('[data-license-status]');
+  await status.getByRole('button',{name:'Freischaltung abrufen',exact:true}).click();
+  await expect(status.getByText('Unlimited',{exact:true})).toBeVisible();
+  await expect(page.locator('[data-trial-badge]')).toHaveCount(0);
+  await page.reload();await expect(gate).toHaveCount(0);
+  expect(paths).toEqual(['/v1/license/activation','/v1/trial/start','/v1/license/activation']);
 });
 
 test("login is inline, saved profile resumes without a profile prompt", async ({

@@ -62,7 +62,8 @@ export function createHandler({clock=()=>Math.floor(Date.now()/1000), authentica
     return json({error:'Nicht gefunden'},404);
    }
    if(url.pathname==='/health' && request.method==='GET') return json({ok:true,product:PRODUCT});
-   if(url.pathname!=='/v1/license' || request.method!=='POST') return json({error:'Nicht gefunden'},404);
+   const startTrial=url.pathname==='/v1/trial/start', activation=url.pathname==='/v1/license/activation';
+   if(!['/v1/license','/v1/trial/start','/v1/license/activation'].includes(url.pathname) || request.method!=='POST') return json({error:'Nicht gefunden'},404);
    if(!env.SIGNING_JWK || !env.KEY_ID) return json({error:'Lizenzdienst wird eingerichtet'},503);
    const input=await body(request);
    if(!/^[a-f0-9]{64}$/.test(input.subject || '') || !['windows','samsung','lg','android-tv'].includes(input.platform) || (input.mac_hash != null && !/^[a-f0-9]{64}$/.test(input.mac_hash))) return json({error:'Ungültige Gerätekennung'},400);
@@ -74,9 +75,13 @@ export function createHandler({clock=()=>Math.floor(Date.now()/1000), authentica
    if(limit.count>30) return json({error:'Bitte später erneut versuchen'},429);
    await env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(now).run();
    const code=deviceCode(input.subject);
-   await env.DB.prepare('INSERT INTO devices(subject,code,platform,started_at,license_id) VALUES(?,?,?,?,?) ON CONFLICT(subject) DO NOTHING').bind(input.subject,code,input.platform,now,crypto.randomUUID()).run();
+   // Only the explicit trial-start endpoint may create a trial. Status/activation
+   // requests, including requests from older clients, never start or renew it.
+   if(startTrial) await env.DB.prepare('INSERT INTO devices(subject,code,platform,started_at,license_id) VALUES(?,?,?,?,?) ON CONFLICT(subject) DO NOTHING').bind(input.subject,code,input.platform,now,crypto.randomUUID()).run();
    const row=await env.DB.prepare('SELECT * FROM devices WHERE subject=?').bind(input.subject).first();
+   if(!row) return json({code:activation?'NOT_APPROVED':'TRIAL_NOT_STARTED',error:activation?'Noch keine Freischaltung vorhanden.':'Testversion noch nicht gestartet.'},404);
    if(row.platform!==input.platform) return json({error:'Geräteplattform stimmt nicht überein'},400);
+   if(activation && row.approved_at==null) return json({code:'NOT_APPROVED',error:'Noch keine Freischaltung vorhanden.'},409);
    if(input.mac_hash != null) {
     if(!/^[a-f0-9]{64}$/.test(input.mac_hash)) return json({error:'Ungültige MAC-Kennung'},400);
     await env.DB.prepare('INSERT INTO aliases(mac_hash,subject) VALUES(?,?) ON CONFLICT DO NOTHING').bind(input.mac_hash,input.subject).run();
