@@ -1,6 +1,9 @@
 # Dado Player
 
 Gemeinsamer Beta-Quellstand: **0.6.0** für Windows, Android (Build 14), iOS (Build 9) und Samsung Tizen.
+[Alle 0.6.0-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.6.0-beta).
+Diese Vorabversion wird direkt über den Release-Link geladen; die bisherigen stabilen
+Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.6.0-beta-2026-11-15.md).
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
 [Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
