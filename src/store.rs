@@ -24,7 +24,11 @@ pub fn storage_failed() -> bool {
 
 fn app_dir() -> PathBuf {
     #[cfg(test)]
-    return std::env::temp_dir().join(format!("dado-player-unit-{}", std::process::id()));
+    return std::env::temp_dir().join(format!(
+        "dado-player-unit-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
     #[cfg(not(test))]
     {
         let resolved =
@@ -244,10 +248,127 @@ pub fn save_history(h: &[crate::types::HistEntry]) -> Result<()> {
     write_json(&dir, h)
 }
 
+#[derive(Default, serde::Deserialize)]
+#[serde(default)]
+pub struct ProfileData {
+    pub favorites: HashSet<String>,
+    pub progress: HashMap<String, u64>,
+    pub durations: HashMap<String, u64>,
+    pub history: Vec<crate::types::HistEntry>,
+}
+fn profile_data_path(id: &str) -> PathBuf {
+    let digest = ring::digest::digest(&ring::digest::SHA256, id.as_bytes());
+    let name: String = digest.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+    app_dir().join("profile-data").join(format!("{name}.json"))
+}
+pub fn load_profile_data(id: &str, legacy_owner_hint: Option<&str>) -> Result<ProfileData> {
+    let path = profile_data_path(id);
+    if path.exists() {
+        if let Some(data) = read_json(&path) {
+            return Ok(data);
+        }
+        // Preserve unreadable bytes before any later user action can save again.
+        let backup = path.with_extension(format!(
+            "unreadable-{}",
+            chrono::Utc::now().timestamp_millis()
+        ));
+        let _ = std::fs::copy(&path, backup);
+        anyhow::bail!("Profildaten konnten nicht gelesen werden");
+    }
+    let owner_path = app_dir().join("legacy-profile-owner.json");
+    let owner: String =
+        read_json(&owner_path).unwrap_or_else(|| legacy_owner_hint.unwrap_or(id).to_string());
+    if !owner_path.exists() {
+        write_json(&owner_path, &owner)?;
+    }
+    let data = if owner == id {
+        ProfileData {
+            favorites: load_favorites(),
+            progress: load_progress(),
+            durations: load_durations(),
+            history: load_history(),
+        }
+    } else {
+        ProfileData::default()
+    };
+    save_profile_data(
+        id,
+        &data.favorites,
+        &data.progress,
+        &data.durations,
+        &data.history,
+    )?;
+    Ok(data)
+}
+pub fn save_profile_data(
+    id: &str,
+    favorites: &HashSet<String>,
+    progress: &HashMap<String, u64>,
+    durations: &HashMap<String, u64>,
+    history: &[crate::types::HistEntry],
+) -> Result<()> {
+    #[derive(serde::Serialize)]
+    struct Snapshot<'a> {
+        favorites: &'a HashSet<String>,
+        progress: &'a HashMap<String, u64>,
+        durations: &'a HashMap<String, u64>,
+        history: &'a [crate::types::HistEntry],
+    }
+    write_json(
+        &profile_data_path(id),
+        &Snapshot {
+            favorites,
+            progress,
+            durations,
+            history,
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn profile_data_migrates_legacy_once_and_never_leaks_matching_provider_ids() {
+        let favorites = HashSet::from(["live:1".to_string()]);
+        save_favorites(&favorites).unwrap();
+        save_progress(&HashMap::from([("vod:1".into(), 77)])).unwrap();
+        let legacy = std::fs::read(app_dir().join("favorites.json")).unwrap();
+        let first = load_profile_data("first-provider", Some("first-provider")).unwrap();
+        assert!(first.favorites.contains("live:1"));
+        assert_eq!(first.progress.get("vod:1"), Some(&77));
+        let second = load_profile_data("second-provider", Some("second-provider")).unwrap();
+        assert!(second.favorites.is_empty());
+        assert!(second.progress.is_empty());
+        save_profile_data(
+            "second-provider",
+            &HashSet::from(["vod:1".into()]),
+            &HashMap::from([("vod:1".into(), 999)]),
+            &HashMap::new(),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            load_profile_data("first-provider", None)
+                .unwrap()
+                .progress
+                .get("vod:1"),
+            Some(&77)
+        );
+        assert_eq!(
+            load_profile_data("second-provider", None)
+                .unwrap()
+                .progress
+                .get("vod:1"),
+            Some(&999)
+        );
+        assert_eq!(
+            std::fs::read(app_dir().join("favorites.json")).unwrap(),
+            legacy
+        );
+    }
 
     fn temp_file(label: &str) -> PathBuf {
         let nanos = SystemTime::now()

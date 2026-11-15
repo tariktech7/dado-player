@@ -29,6 +29,7 @@ export PATH="$JAVA_HOME/bin:$SDK/platform-tools:$PATH"
 BT="$SDK/build-tools/34.0.0"
 
 cd "$ROOT"
+python scripts/release_version.py --check
 
 echo "==> cargo ndk (release, arm64-v8a)"
 # No `| tail` here: it used to hide the actual Rust compiler error while the

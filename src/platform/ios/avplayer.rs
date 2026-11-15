@@ -30,6 +30,7 @@ impl Mpv {
     pub fn new(_wid: isize, s: &Settings) -> Result<Self, String> {
         bridge::attach();
         bridge::native_player(s.ios_native_player);
+        bridge::configure(s);
         Ok(Mpv {
             volume: std::sync::atomic::AtomicI64::new(100),
         })
@@ -61,6 +62,10 @@ impl Mpv {
 
     pub fn stop(&self) {
         bridge::stop();
+    }
+
+    pub fn configure(&self, settings: &Settings) {
+        bridge::configure(settings);
     }
 
     pub fn set_pause(&self, paused: bool) {

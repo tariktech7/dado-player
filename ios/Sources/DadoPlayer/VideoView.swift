@@ -17,6 +17,7 @@
 
 import UIKit
 import AVFoundation
+import CoreMedia
 
 final class VideoView: UIView {
 
@@ -36,6 +37,8 @@ final class VideoView: UIView {
     /// `demuxer-cache-time`.
     private var bufferedEnd: Double = 0
     private var pendingSeek: Double?
+    private var playbackOptions: [String: Any] = [:]
+    private var startupTimeout: DispatchWorkItem?
 
     /// Set by AVPlayerItemDidPlayToEndTime, cleared on load/seek/stop.
     private(set) var eof: Bool = false
@@ -74,10 +77,19 @@ final class VideoView: UIView {
 
     // MARK: - Control
 
+    func configure(options: [String: Any]) { playbackOptions = options }
+
     func load(url: URL) {
         clearItemState()
 
-        let item = AVPlayerItem(url: url)
+        var assetOptions: [String: Any] = [:]
+        if #available(iOS 16.0, *), let agent = playbackOptions["userAgent"] as? String, !agent.isEmpty {
+            assetOptions[AVURLAssetHTTPUserAgentKey] = agent
+        }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: assetOptions))
+        item.preferredForwardBufferDuration = min(600, max(5, (playbackOptions["buffer"] as? Double) ?? 45))
+        let size = min(120, max(20, (playbackOptions["subtitleSize"] as? Double) ?? 55))
+        item.textStyleRules = [AVTextStyleRule(textMarkupAttributes: [kCMTextMarkupAttribute_RelativeFontSize as String: size * 100 / 55])].compactMap { $0 }
         observe(item)
 
         // EOF is per item, so bind the observer to this item instance.
@@ -91,6 +103,14 @@ final class VideoView: UIView {
 
         player.replaceCurrentItem(with: item)
         player.play()
+        let timeout = DispatchWorkItem { [weak self, weak item] in
+            guard let self, let item, self.player.currentItem === item, item.status == .unknown else { return }
+            self.errorCode = -1001
+            self.player.pause()
+            VideoHost.shared.showError(-1001)
+        }
+        startupTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + min(120, max(5, (playbackOptions["timeout"] as? Double) ?? 20)), execute: timeout)
         #if targetEnvironment(simulator)
         if ProcessInfo.processInfo.environment["DADO_VIDEO_SMOKE"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now()+4) { [weak self] in
@@ -185,12 +205,14 @@ final class VideoView: UIView {
             item.observe(\.presentationSize, options: [.new]) { [weak self] item, _ in
                 let size = item.presentationSize
                 DispatchQueue.main.async {
+                    guard self?.player.currentItem === item else { return }
                     self?.videoSize = size
                 }
             },
             item.observe(\.loadedTimeRanges, options: [.new]) { [weak self] item, _ in
                 let end = item.loadedTimeRanges.last?.timeRangeValue.end.seconds ?? 0
                 DispatchQueue.main.async {
+                    guard self?.player.currentItem === item else { return }
                     self?.bufferedEnd = end.isFinite ? end : 0
                 }
             }
@@ -200,6 +222,7 @@ final class VideoView: UIView {
     private func apply(status: AVPlayerItem.Status, error: Error?) {
         switch status {
         case .readyToPlay:
+            startupTimeout?.cancel()
             errorCode = nil
             if let seconds=pendingSeek {pendingSeek=nil;seek(to:seconds)}
             if let item = player.currentItem {
@@ -207,6 +230,7 @@ final class VideoView: UIView {
             }
             NSLog("%@", "Dado: video item loaded")
         case .failed:
+            startupTimeout?.cancel()
             // Never log the URL — only the code.
             let code: Int
             if let error = error {
@@ -223,6 +247,8 @@ final class VideoView: UIView {
     }
 
     private func clearItemState() {
+        startupTimeout?.cancel()
+        startupTimeout = nil
         for observer in itemObservers {
             observer.invalidate()
         }

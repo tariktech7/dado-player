@@ -68,6 +68,7 @@ pub fn layout_seen() -> bool {
 // ---------------------------------------------------------------- host API ---
 
 extern "C" {
+    fn dado_host_options(json: *const c_char);
     fn dado_host_native_player(enabled: i32);
     fn dado_host_tracks(buffer: *mut c_char, capacity: i32) -> i32;
     fn dado_host_current_track(kind: i32) -> i64;
@@ -106,6 +107,13 @@ pub fn attach() {
 
 pub fn native_player(enabled: bool) {
     unsafe { dado_host_native_player(enabled as i32) }
+}
+
+pub fn configure(settings: &crate::types::Settings) {
+    let value = serde_json::json!({"buffer":settings.cache_secs.clamp(5,600),"timeout":settings.network_timeout_s.clamp(5,120),"subtitleSize":settings.sub_size.clamp(20.0,120.0),"userAgent":settings.user_agent});
+    if let Ok(json) = std::ffi::CString::new(value.to_string()) {
+        unsafe { dado_host_options(json.as_ptr()) };
+    }
 }
 
 pub fn tracks() -> Option<String> {

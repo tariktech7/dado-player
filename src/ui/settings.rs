@@ -11,6 +11,10 @@ const COL_W: f32 = 720.0;
 /// filter and the section headers can never drift apart.
 const SECTIONS: &[(&str, &str)] = &[
     (
+        "Sprachen",
+        "sprachen audio ton untertitel subtitles language standard",
+    ),
+    (
         "Lizenz & Gerät",
         "lizenz aktivierung freischaltung test tage trial unlimited mac adresse geräte-id",
     ),
@@ -177,6 +181,24 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
         .size(11.5)
         .weak(),
     ));
+
+    if sec(ui, q, "Sprachen") {
+        ui.label("Bevorzugte Audiosprache");
+        *player_changed |= ui
+            .text_edit_singleline(&mut app.settings.audio_language)
+            .changed();
+        ui.label("Bevorzugte Untertitelsprache");
+        *player_changed |= ui
+            .text_edit_singleline(&mut app.settings.subtitle_language)
+            .changed();
+        *player_changed |= ui
+            .checkbox(
+                &mut app.settings.subtitles_enabled,
+                "Untertitel standardmäßig aktiv",
+            )
+            .changed();
+        ui.small("Sprachcodes z. B. de, en, tr. Gilt ab der nächsten Wiedergabe.");
+    }
 
     // ---------- appearance ----------
     if sec(ui, q, "Darstellung") {

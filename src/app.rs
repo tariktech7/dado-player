@@ -72,7 +72,24 @@ pub enum AppEvent {
     LoginDone(u64, Box<Result<(Profile, Library), String>>),
     Epg(u64, u32, Result<Vec<EpgEntry>, String>),
     SeriesInfo(u64, u32, Result<Vec<Episode>, String>),
-    Image(String, Result<(Vec<u8>, u32, u32), String>),
+    Image(u64, String, Result<(Vec<u8>, u32, u32), String>),
+}
+
+/// Wake the reactive UI when network/decode work finishes, including after the
+/// cold-start repaint timer has stopped. No idle polling is necessary.
+#[derive(Clone)]
+struct EventSender {
+    inner: UnboundedSender<AppEvent>,
+    context: std::sync::Arc<std::sync::OnceLock<Context>>,
+}
+impl EventSender {
+    fn send(&self, event: AppEvent) -> Result<(), tokio::sync::mpsc::error::SendError<AppEvent>> {
+        self.inner.send(event)?;
+        if let Some(ctx) = self.context.get() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -149,6 +166,8 @@ pub struct Player {
     /// Currently selected audio / subtitle track id (mpv `aid` / `sid`).
     pub current_audio: i64,
     pub current_sub: i64,
+    audio_preference_applied: bool,
+    subtitle_preference_applied: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -160,11 +179,12 @@ pub enum ContinueTab {
 
 pub struct App {
     rt: Runtime,
-    tx: UnboundedSender<AppEvent>,
+    tx: EventSender,
     rx: UnboundedReceiver<AppEvent>,
 
     pub profiles: Vec<Profile>,
     pub active_profile: Option<Profile>,
+    data_profile: Option<String>,
     pub library: Library,
     pub view: View,
     previous_view: View,
@@ -257,6 +277,7 @@ pub struct App {
     /// Set when a watched movie/series is clicked; the UI renders the modal
     /// before anything actually starts. `None` = no dialog is open.
     pub pending_resume: Option<(String, PlayItem, u64)>,
+    pending_history_key: Option<String>,
     /// Channel currently shown in the inline preview (list stays visible).
     pub preview: Option<PlayItem>,
     /// Channel ids in the order the Live list currently shows them (for ←/→).
@@ -364,12 +385,17 @@ fn parse_tracks(json: &str, cur_a: i64, cur_s: i64) -> Option<(Vec<Track>, Vec<T
 impl App {
     pub fn new(rt: Runtime) -> Self {
         let (tx, rx) = unbounded_channel();
+        let tx = EventSender {
+            inner: tx,
+            context: Default::default(),
+        };
         let mut app = App {
             rt,
             tx,
             rx,
             profiles: store::load_profiles(),
             active_profile: None,
+            data_profile: None,
             library: Library::default(),
             view: View::Login,
             previous_view: View::Live,
@@ -458,6 +484,7 @@ impl App {
             sub_menu_open: false,
             frame_count: 0,
             pending_resume: None,
+            pending_history_key: None,
             palette_open: false,
             palette_q: String::new(),
             palette_sel: 0,
@@ -627,6 +654,7 @@ impl App {
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        let _ = self.tx.context.set(ctx.clone());
         #[cfg(target_os = "windows")]
         crate::licensing::tick(ctx);
         #[cfg(target_os = "ios")]
@@ -734,8 +762,7 @@ impl App {
                     if duration > 0 {
                         self.durations.insert(key, duration);
                     }
-                    let _ = store::save_progress(&self.progress);
-                    let _ = store::save_durations(&self.durations);
+                    self.save_user_data();
                 }
             }
 
@@ -821,13 +848,8 @@ impl App {
             // Track list (JSON parse) — only for VOD/Series, throttled so we
             // don't re-parse every frame. Force a refresh until we have at
             // least the audio list, then settle to every ~15 frames.
-            let is_vod = self
-                .current_play
-                .as_ref()
-                .map(|p| p.kind != PlayKind::Live)
-                .unwrap_or(false);
             self.frame_count = self.frame_count.wrapping_add(1);
-            if is_vod && (self.frame_count.is_multiple_of(15) || pl.audio_tracks.is_empty()) {
+            if self.frame_count.is_multiple_of(15) || pl.audio_tracks.is_empty() {
                 if let Some(json) = pl.mpv.track_list_json() {
                     if let Some((a, s, ca, cs)) =
                         parse_tracks(&json, pl.mpv.current_audio(), pl.mpv.current_sub())
@@ -836,6 +858,31 @@ impl App {
                         pl.sub_tracks = s;
                         pl.current_audio = ca;
                         pl.current_sub = cs;
+                        if !pl.audio_preference_applied && !pl.audio_tracks.is_empty() {
+                            if let Some(track) =
+                                preferred_track(&pl.audio_tracks, &self.settings.audio_language)
+                            {
+                                pl.mpv.set_audio_track(track.id);
+                                pl.current_audio = track.id;
+                            }
+                            pl.audio_preference_applied = true;
+                        }
+                        if !pl.subtitle_preference_applied
+                            && (!pl.audio_tracks.is_empty() || !pl.sub_tracks.is_empty())
+                        {
+                            if !self.settings.subtitles_enabled {
+                                pl.mpv.disable_sub();
+                                pl.current_sub = -1;
+                                pl.subtitle_preference_applied = true;
+                            } else if let Some(track) =
+                                preferred_track(&pl.sub_tracks, &self.settings.subtitle_language)
+                                    .or_else(|| pl.sub_tracks.first())
+                            {
+                                pl.mpv.set_sub_track(track.id);
+                                pl.current_sub = track.id;
+                                pl.subtitle_preference_applied = true;
+                            }
+                        }
                     }
                 }
             }
@@ -844,8 +891,7 @@ impl App {
         // Keyboard shortcuts (list, preview and full player).
         let now = ctx.input(|i| i.time);
         if self.player.is_some() && now - self.last_progress_save > 15.0 {
-            let _ = store::save_progress(&self.progress);
-            let _ = store::save_durations(&self.durations);
+            self.save_user_data();
             self.last_progress_save = now;
         }
         self.handle_keys(ctx);
@@ -1156,6 +1202,7 @@ impl App {
                             self.profiles.push(profile.clone());
                         }
                         let _ = store::save_profiles(&self.profiles);
+                        self.switch_user_profile(&profile.id);
                         self.settings.default_profile = Some(profile.id.clone());
                         self.settings.signed_out = false;
                         self.save_settings_now();
@@ -1211,14 +1258,36 @@ impl App {
                             id,
                             episodes,
                         );
+                        if self
+                            .pending_history_key
+                            .as_ref()
+                            .is_some_and(|key| key.starts_with(&format!("ep:{id}:")))
+                        {
+                            let key = self.pending_history_key.take().unwrap();
+                            self.play_history_key(&key);
+                        }
                     }
                     Err(e) => {
                         mark_detail_failed(&mut self.series_failed, id);
                         self.series_error = Some(redact(&e));
+                        if self
+                            .pending_history_key
+                            .as_ref()
+                            .is_some_and(|key| key.starts_with(&format!("ep:{id}:")))
+                        {
+                            self.pending_history_key = None;
+                            self.info = Some(
+                                "Die Folge konnte nicht geladen werden. Bitte erneut versuchen."
+                                    .into(),
+                            );
+                        }
                     }
                 }
             }
-            AppEvent::Image(key, res) => {
+            AppEvent::Image(generation, key, res) => {
+                if generation != self.login_generation {
+                    return;
+                }
                 self.images.requested.remove(&key);
                 match res {
                     Ok((rgba, w, h)) => self.images.pending.push((key, rgba, w, h)),
@@ -1275,6 +1344,7 @@ impl App {
     /// Keeping a category id from a different profile can make VOD/Series look
     /// empty even though the newly loaded library contains items.
     fn reset_profile_catalog_state(&mut self) {
+        self.pending_history_key = None;
         self.live_cat = "all".to_string();
         self.vod_cat = "all".to_string();
         self.series_cat = "all".to_string();
@@ -1541,8 +1611,8 @@ impl App {
                 sub,
             },
         );
-        self.history.truncate(60);
-        let _ = store::save_history(&self.history);
+        self.history.truncate(crate::release_info::HISTORY_LIMIT);
+        self.save_user_data();
     }
 
     /// Human readable title for a progress key ("live:12", "vod:7", "ep:3:9").
@@ -1653,6 +1723,7 @@ impl App {
     }
 
     pub fn play(&mut self, item: PlayItem) {
+        self.pending_history_key = None;
         #[cfg(target_os = "windows")]
         if crate::licensing::enabled() && !crate::licensing::allowed() {
             self.view = View::Settings;
@@ -1741,6 +1812,7 @@ impl App {
             let radio = self.is_radio(&item.progress_key);
             if let Some(pl) = &mut self.player {
                 pl.current_key = item.progress_key.clone();
+                pl.mpv.configure(&self.settings);
                 // Audio-only for radio stations (and back to video afterwards).
                 if radio {
                     pl.mpv.disable_video();
@@ -2139,7 +2211,10 @@ impl App {
         let key = format!("ep:{sid}:{}", episode.id);
         let pos = self.get_progress(&key);
         let duration = self.durations.get(&key).copied().unwrap_or(0);
-        if pos > 0 && duration > 0 && duration.saturating_sub(pos) <= 60 {
+        if pos > 0
+            && duration > 0
+            && duration.saturating_sub(pos) <= crate::release_info::RESUME_END_MARGIN_SECONDS
+        {
             let order = (episode.season, episode.episode, episode.id);
             let next = episodes
                 .iter()
@@ -2326,7 +2401,8 @@ impl App {
     }
 
     fn ensure_player(&mut self) -> bool {
-        if self.player.is_some() {
+        if let Some(player) = &self.player {
+            player.mpv.configure(&self.settings);
             return true;
         }
         // Android has no child window: mpv renders into egui's own GL context
@@ -2351,6 +2427,8 @@ impl App {
                         sub_tracks: Vec::new(),
                         current_audio: 0,
                         current_sub: 0,
+                        audio_preference_applied: false,
+                        subtitle_preference_applied: false,
                     });
                     self.player_error = None;
                     eprintln!("[player] libmpv initialisiert (render API)");
@@ -2391,6 +2469,8 @@ impl App {
                         sub_tracks: Vec::new(),
                         current_audio: 0,
                         current_sub: 0,
+                        audio_preference_applied: false,
+                        subtitle_preference_applied: false,
                     });
                     self.player_error = None;
                     eprintln!("[player] AVPlayer angebunden");
@@ -2431,6 +2511,8 @@ impl App {
                         sub_tracks: Vec::new(),
                         current_audio: 0,
                         current_sub: 0,
+                        audio_preference_applied: false,
+                        subtitle_preference_applied: false,
                     });
                     self.player_error = None;
                     eprintln!("[player] libmpv initialisiert");
@@ -2517,10 +2599,13 @@ impl App {
             pl.sub_tracks.clear();
             pl.current_audio = 0;
             pl.current_sub = 0;
+            pl.audio_preference_applied = false;
+            pl.subtitle_preference_applied = false;
         }
     }
 
     pub fn stop_play(&mut self) {
+        self.pending_history_key = None;
         #[cfg(target_os = "android")]
         crate::platform::android::render::cancel_load();
         let (key, pos) = if let Some(pl) = &self.player {
@@ -2539,8 +2624,7 @@ impl App {
         if !key.is_empty() {
             self.progress.insert(key, pos as u64);
         }
-        let _ = store::save_progress(&self.progress);
-        let _ = store::save_durations(&self.durations);
+        self.save_user_data();
         self.reset_track_state();
         self.current_play = None;
         self.view = self.previous_view;
@@ -2569,10 +2653,15 @@ impl App {
         }
         self.images.requested.insert(key.clone());
         let tx = self.tx.clone();
+        let generation = self.login_generation;
         let to = self.settings.network_timeout_s;
         self.rt.spawn(async move {
             let res = fetch_image(&url, to).await;
-            let _ = tx.send(AppEvent::Image(key, res.map_err(|e| e.to_string())));
+            let _ = tx.send(AppEvent::Image(
+                generation,
+                key,
+                res.map_err(|e| e.to_string()),
+            ));
         });
     }
 
@@ -2594,7 +2683,7 @@ impl App {
         } else {
             self.favorites.insert(key.to_string());
         }
-        let _ = store::save_favorites(&self.favorites);
+        self.save_user_data();
     }
 
     pub fn get_progress(&self, key: &str) -> u64 {
@@ -2634,7 +2723,7 @@ impl App {
     /// Play `item` from the very beginning: drop any saved progress first.
     pub fn play_from_beginning(&mut self, item: PlayItem) {
         self.progress.remove(&item.progress_key);
-        let _ = store::save_progress(&self.progress);
+        self.save_user_data();
         self.play(item);
     }
 
@@ -2826,6 +2915,96 @@ impl App {
         let _ = store::save_settings(&self.settings);
     }
 
+    fn save_user_data(&self) {
+        if let Some(id) = &self.data_profile {
+            let _ = store::save_profile_data(
+                id,
+                &self.favorites,
+                &self.progress,
+                &self.durations,
+                &self.history,
+            );
+        } else {
+            let _ = store::save_favorites(&self.favorites);
+            let _ = store::save_progress(&self.progress);
+            let _ = store::save_durations(&self.durations);
+            let _ = store::save_history(&self.history);
+        }
+    }
+    fn switch_user_profile(&mut self, id: &str) {
+        if self.data_profile.as_deref() == Some(id) {
+            return;
+        }
+        if self.data_profile.is_some() {
+            self.save_user_data();
+        }
+        let data = match store::load_profile_data(id, self.settings.default_profile.as_deref()) {
+            Ok(data) => data,
+            Err(_) => {
+                self.info = Some(
+                    "Profildaten konnten nicht geladen werden. Eine Sicherung wurde erhalten."
+                        .into(),
+                );
+                store::ProfileData::default()
+            }
+        };
+        self.favorites = data
+            .favorites
+            .into_iter()
+            .map(|key| favorite_key(&key))
+            .collect();
+        self.progress = data.progress;
+        self.durations = data.durations;
+        self.history = data.history;
+        self.data_profile = Some(id.to_string());
+    }
+
+    /// A continue action survives asynchronous episode loading.
+    pub fn play_history_key(&mut self, key: &str) {
+        if let Some(sid) = key
+            .strip_prefix("ep:")
+            .and_then(|s| s.split(':').next())
+            .and_then(|s| s.parse::<u32>().ok())
+        {
+            if self.series_episodes_for(sid).is_none() {
+                self.pending_history_key = Some(key.to_string());
+                self.info = Some("Folge wird geladen …".into());
+                if self.series_failed(sid) {
+                    self.retry_series(sid);
+                } else {
+                    self.request_series(sid);
+                }
+                return;
+            }
+            if self.durations.get(key).is_some_and(|duration| {
+                *duration > 0
+                    && self.get_progress(key) > 0
+                    && duration.saturating_sub(self.get_progress(key))
+                        <= crate::release_info::RESUME_END_MARGIN_SECONDS
+            }) {
+                self.play_series_resume(sid);
+                return;
+            }
+        }
+        self.pending_history_key = None;
+        if let Some(item) = self.resolve_play(key) {
+            if item.kind == PlayKind::Vod
+                && self.durations.get(key).is_some_and(|d| {
+                    *d > 0
+                        && self.get_progress(key) > 0
+                        && d.saturating_sub(self.get_progress(key))
+                            <= crate::release_info::RESUME_END_MARGIN_SECONDS
+                })
+            {
+                self.play_from_beginning(item);
+            } else {
+                self.play(item);
+            }
+        } else {
+            self.info = Some("Dieser Inhalt ist im aktuellen Profil nicht verfügbar.".into());
+        }
+    }
+
     /// True when the resolved theme is dark (used by the command palette).
     pub fn want_dark(&self) -> bool {
         if let Some(d) = self.dark_mode_override {
@@ -2833,6 +3012,16 @@ impl App {
         }
         self.settings.theme.resolve(self.system_dark)
     }
+}
+
+fn preferred_track<'a>(tracks: &'a [Track], language: &str) -> Option<&'a Track> {
+    let wanted = crate::types::language_key(language);
+    if wanted.is_empty() {
+        return None;
+    }
+    tracks
+        .iter()
+        .find(|t| crate::types::language_key(&t.lang) == wanted)
 }
 
 /// Optional QA state log. Set `DADO_QA_STATE_LOG` to a file path to get one
@@ -3295,8 +3484,70 @@ mod tests {
         assert_eq!(app.current_play.as_ref().unwrap().progress_key, "live:1");
     }
 
-    use super::{App, AppEvent, ImageState, View, MAX_DETAIL_CACHE_ITEMS, MAX_DETAIL_ROWS};
-    use crate::types::{EpgEntry, Episode, Library, PlayItem, PlayKind, Profile, ProfileKind};
+    use super::{
+        preferred_track, App, AppEvent, ImageState, View, MAX_DETAIL_CACHE_ITEMS, MAX_DETAIL_ROWS,
+    };
+    use crate::types::{
+        EpgEntry, Episode, Library, PlayItem, PlayKind, Profile, ProfileKind, Track,
+    };
+
+    #[test]
+    fn old_profile_images_do_not_overwrite_the_new_provider() {
+        let mut app = App::test_app();
+        app.login_generation = 2;
+        app.images.requested.insert("logo:1".into());
+        app.handle_event(AppEvent::Image(
+            1,
+            "logo:1".into(),
+            Ok((vec![255; 4], 1, 1)),
+        ));
+        assert!(app.images.pending.is_empty());
+        assert!(app.images.requested.contains("logo:1"));
+        app.handle_event(AppEvent::Image(
+            2,
+            "logo:1".into(),
+            Ok((vec![255; 4], 1, 1)),
+        ));
+        assert_eq!(app.images.pending.len(), 1);
+        assert!(!app.images.requested.contains("logo:1"));
+    }
+
+    #[test]
+    fn background_results_wake_an_idle_ui_without_another_touch() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let app = App::test_app();
+        let ctx = egui::Context::default();
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let observed = wakes.clone();
+        ctx.set_request_repaint_callback(move |_| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        });
+        for _ in 0..4 {
+            let _ = ctx.run(egui::RawInput::default(), |_| {});
+        }
+        wakes.store(0, Ordering::Relaxed);
+        let _ = app.tx.context.set(ctx);
+        let sender = app.tx.clone();
+        std::thread::spawn(move || {
+            assert!(sender
+                .send(AppEvent::Image(
+                    0,
+                    "late-cover".into(),
+                    Err("fixture".into())
+                ))
+                .is_ok());
+        })
+        .join()
+        .unwrap();
+        assert!(
+            wakes.load(Ordering::Relaxed) > 0,
+            "late image/login/EPG results must wake the event loop"
+        );
+        assert!(!app.rx.is_empty());
+    }
 
     #[test]
     fn texture_budget_eviction_and_replacement_keep_accounting_consistent() {
@@ -3627,6 +3878,61 @@ mod tests {
             app.series_resume_target(77).map(|(e, p)| (e.id, p)),
             Some((2, 1740))
         );
+    }
+    #[test]
+    fn continue_waits_for_episode_details_and_explicit_other_play_cancels_it() {
+        let mut app = App::test_app();
+        app.active_profile = None;
+        app.login_generation = 11;
+        app.progress.insert("ep:77:2".into(), 321);
+        app.play_history_key("ep:77:2");
+        assert_eq!(app.pending_history_key.as_deref(), Some("ep:77:2"));
+        let episode = Episode {
+            id: 2,
+            series_id: 77,
+            season: 1,
+            episode: 2,
+            title: "provider.filename".into(),
+            container_extension: "mp4".into(),
+            stream_url: "https://example.invalid/video.mp4".into(),
+        };
+        app.handle_event(AppEvent::SeriesInfo(11, 77, Ok(vec![episode])));
+        assert!(app.pending_history_key.is_none());
+        assert_eq!(
+            app.current_play.as_ref().map(|p| p.progress_key.as_str()),
+            Some("ep:77:2")
+        );
+        assert_eq!(app.get_progress("ep:77:2"), 321);
+        app.play_history_key("ep:99:7");
+        assert!(app.pending_history_key.is_some());
+        app.play(PlayItem {
+            title: "Other".into(),
+            url: "https://example.invalid/live".into(),
+            kind: PlayKind::Live,
+            progress_key: "live:1".into(),
+        });
+        assert!(app.pending_history_key.is_none());
+    }
+    #[test]
+    fn track_preferences_accept_language_aliases_without_matching_unrelated_titles() {
+        let tracks = vec![
+            Track {
+                id: 1,
+                kind: "audio".into(),
+                lang: "eng".into(),
+                title: "Deutsch commentary".into(),
+            },
+            Track {
+                id: 2,
+                kind: "audio".into(),
+                lang: "deu-DE".into(),
+                title: "".into(),
+            },
+        ];
+        assert_eq!(preferred_track(&tracks, "de").map(|t| t.id), Some(2));
+        assert_eq!(preferred_track(&tracks, "en-US").map(|t| t.id), Some(1));
+        assert!(preferred_track(&tracks, "").is_none());
+        assert!(preferred_track(&tracks, "tr").is_none());
     }
     #[test]
     fn poster_catalogue_only_draws_visible_titles_and_opens_saved_season() {

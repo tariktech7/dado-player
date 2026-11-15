@@ -28,7 +28,7 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Rounding, Sense, Stroke, U
 const TOP_H: f32 = 56.0;
 const BOT_H: f32 = 120.0;
 /// Seconds of inactivity before the chrome fades out.
-const HIDE_AFTER: f64 = 2.0;
+const HIDE_AFTER: f64 = crate::release_info::CONTROLS_HIDE_SECONDS;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
@@ -477,8 +477,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let line_h = 16.0;
         let info_h = line_h * 2.0 + 12.0; // two text lines + vertical padding
         let is_vod = !is_live;
-        let btns_h = if is_vod { 32.0 } else { 0.0 };
-        let gap = if is_vod { 8.0 } else { 0.0 };
+        let has_tracks = atracks.len() > 1 || !stracks.is_empty();
+        let btns_h = if has_tracks { 32.0 } else { 0.0 };
+        let gap = if has_tracks { 8.0 } else { 0.0 };
         let panel_h = info_h;
         let panel_w = 276.0;
         let panel = Rect::from_min_size(
@@ -550,7 +551,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
         // Audio / subtitle buttons (movies & series only). They sit BELOW the
         // glass info panel, as free-standing pills on the bottom bar.
-        if is_vod {
+        if has_tracks {
             let by = panel.bottom() + gap;
             let inner_w = panel_w - 24.0;
             let btn_w = (inner_w - 8.0) / 2.0;

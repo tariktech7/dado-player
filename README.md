@@ -1,7 +1,10 @@
 # Dado Player
 
-Stabile Pakete: Windows portable **0.5.5**, Android **0.2.9 / Build 13**, iOS **0.2.6 / Build 8**, Samsung Tizen **0.1.6**.
-Aktuelle separate [Lizenz-Beta: Windows **0.5.8** und Samsung **0.1.8**](https://github.com/tariktech7/dado-player/releases/tag/dado-trial-2026-11-15) mit 7 Tagen Testzeit,
+Gemeinsamer Beta-Quellstand: **0.6.0** für Windows, Android (Build 14), iOS (Build 9) und Samsung Tizen.
+Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
+`--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
+[Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
+Windows und Samsung enthalten die Lizenz-Beta mit 7 Tagen Testzeit,
 eigenem Sperrbildschirm, MAC/Geräte-ID und manuellem Freischaltabruf. Dauerlizenzen werden
 offline geprüft und lösen keine automatischen Lizenz-Serverabrufe aus. Android/iOS bleiben
 ohne diese Kaufsperre. Betrieb und Einrichtung: [Lizenzverwaltung](licensing/README.md).
@@ -18,7 +21,7 @@ und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Fa
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der gemeinsame iOS-Stand **0.2.6 / Build 8** wird lokal unter Windows/WSL mit
+Der iOS-Stand **0.6.0 / Build 9** wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
 mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
 Der lokale Buildweg steht in [ios/README.md](ios/README.md).
@@ -33,7 +36,7 @@ Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Daten
 | Windows | src/main.rs → src/platform/windows, libmpv | `./windows/build.ps1` in PowerShell | target/release/Dado-Player.exe |
 | Android | android/ (Gradle), src/platform/android, JNI und libmpv | `bash android/build.sh` unter Windows mit Git Bash | Dado-Player-arm64-debug.apk |
 | iOS | ios/Sources (UIKit, AVPlayer), src/platform/ios (Rust und C-ABI) | `bash ios/build.sh --ipa` mit iOS-SDK | Dado-Player-unsigned.ipa |
-| Samsung Tizen 6.5+ | SmartTV/client (Preact/TypeScript, AVPlay) | `./SmartTV/client/build.ps1` | Dado-Player-Tizen-0.1.6-unsigned.wgt; TV-Zertifikat für Installation erforderlich |
+| Samsung Tizen 6.5+ | SmartTV/client (Preact/TypeScript, AVPlay) | `./SmartTV/client/build.ps1` | Dado-Player-Tizen-0.6.0-unsigned.wgt; TV-Zertifikat für Installation erforderlich |
 
 Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wird mit `packaging/build_portable.py` aus dem Inhalt von dist gebaut. Der Cargo-Build aktualisiert dist nicht. Android benötigt JDK, Android SDK, NDK, cargo-ndk und für den lokalen signierten Build den vorhandenen Projektschlüssel. Details zum Swift-Host stehen in [ios/README.md](ios/README.md).
 
@@ -59,7 +62,7 @@ Ohne konfigurierte Identität bleiben die Pakete unsigniert. Ein selbstsignierte
 
 Unter Einstellungen → App-Updates kann der Player ein Paket prüfen und laden. Für das private Repository einen kurzlebigen Fine-grained Token mit Contents: Read für dado-player eingeben oder die Release-Seite im angemeldeten Browser öffnen. Android öffnet den Systeminstaller. Auf iOS die IPA in Dateien sichern und in AltStore Classic über My Apps → + mit derselben Apple-ID installieren.
 
-Bei jedem mobilen Release die native Buildnummer und die entsprechende Buildnummer in src/ui/mobile/update.rs gemeinsam erhöhen. Die APK als Dado-Player-arm64-debug.apk mit Asset-Label android-build-<versionCode>, die IPA als Dado-Player-unsigned.ipa mit ios-build-<CFBundleVersion> veröffentlichen. Der Updater prüft Buildnummer, Dateigröße und den SHA-256-Digest von GitHub.
+Bei jedem mobilen Release die Buildnummer in release.json erhöhen und python scripts/release_version.py ausführen. Native Konstanten und Paketmetadaten werden gemeinsam erzeugt. Die APK als Dado-Player-arm64-debug.apk mit Asset-Label android-build-<versionCode>, die IPA als Dado-Player-unsigned.ipa mit ios-build-<CFBundleVersion> veröffentlichen. Der Updater prüft Buildnummer, Dateigröße und den SHA-256-Digest von GitHub.
 
 ## D7-Oberfläche und Wiedergabe
 

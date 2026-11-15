@@ -5,6 +5,8 @@ import path from "node:path";
 const testConfig = process.env.DADO_LICENSE_TEST_CONFIG;
 const root = fileURLToPath(new URL("..", import.meta.url));
 process.chdir(root);
+const release = JSON.parse(await readFile('../../release.json', 'utf8'));
+if (JSON.parse(await readFile('package.json', 'utf8')).version !== release.version) throw new Error('Run python scripts/release_version.py before building');
 const out = path.resolve("dist");
 if (out !== path.join(root, "dist")) throw new Error("Unexpected output path");
 await rm(out, { recursive: true, force: true });

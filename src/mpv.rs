@@ -1,6 +1,7 @@
 //! Minimal safe-ish wrapper over the libmpv C API (loaded at runtime via libloading).
 //! We only use the small subset needed for playback control + polling.
 
+use crate::types::Settings;
 use libloading::Library;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::PathBuf;
@@ -375,6 +376,30 @@ impl Mpv {
 
     pub fn stop(&self) {
         let _ = self.command(&["stop"]);
+    }
+
+    pub fn configure(&self, settings: &Settings) {
+        for (key, value) in [
+            ("cache-secs", settings.cache_secs.clamp(5, 600).to_string()),
+            (
+                "network-timeout",
+                settings.network_timeout_s.clamp(5, 120).to_string(),
+            ),
+            (
+                "sub-font-size",
+                settings.sub_size.clamp(20.0, 120.0).to_string(),
+            ),
+            (
+                "user-agent",
+                if settings.user_agent.trim().is_empty() {
+                    "Mozilla/5.0 (Dado-Player)".into()
+                } else {
+                    settings.user_agent.trim().into()
+                },
+            ),
+        ] {
+            let _ = self.command(&["set", key, &value]);
+        }
     }
 
     pub fn set_pause(&self, paused: bool) {

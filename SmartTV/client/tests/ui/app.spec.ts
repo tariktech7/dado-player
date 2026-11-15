@@ -156,9 +156,9 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
         },
         avplay: {
           getState: () => state,
-          open: () => {
+          open: (url: string) => {
             state = "IDLE";
-            log.push(["open"]);
+            log.push(["open", url]);
           },
           setListener: (l: any) => (listener = l),
           setBufferingParam() {},
@@ -264,7 +264,7 @@ test('activation cannot start a trial; explicit start shows remaining days and p
   await fixture(page,true,true,'missing');
   const now=Math.floor(Date.now()/1000),subject=await fingerprint('samsung','tv-ui-fixture');
   const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
-  const base={v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',started_at:now,issued_at:now};
+  const base={v:1 as const,product:'dado-player',subject,platform:'samsung' as const,license_id:'ui-only',started_at:now,issued_at:now};
   const trial=await signLicense({...base,kind:'trial',expires_at:now+604800},key,'ui-test');
   const paid=await signLicense({...base,kind:'permanent',expires_at:null},key,'ui-test');
   const paths:string[]=[];let approved=false;
@@ -968,4 +968,25 @@ test("series details restore season five and episode six, keep episodes visible,
     "Staffel 5",
   );
   expect(infoRequests).toBe(1);
+});
+
+test('home continue advances across seasons at one minute without a second resume prompt', async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto('/');
+  await expect(page.locator('.home-hero')).toBeVisible();
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('dado.tv.v1')!);
+    saved.history.qa = [{item: {
+      id:'11', kind:'episode', seriesId:'2', season:1, episode:2,
+      name:'Staffel 1 · Folge 2', category:'1', logo:'',
+      url:'https://provider.invalid/series/demo/demo/11.mp4',
+    }, position:1740, duration:1800, at:Date.now()}];
+    localStorage.setItem('dado.tv.v1', JSON.stringify(saved));
+  });
+  await page.reload();
+  await page.locator('.home-hero').getByRole('button', {name:'▶ Fortsetzen', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__avLog
+    .filter((entry:any[]) => entry[0]==='open').at(-1)?.[1])).toContain('/12.mp4');
+  await expect.poll(() => page.evaluate(() => (window as any).__avLog
+    .filter((entry:any[]) => entry[0]==='play').length)).toBeGreaterThan(0);
 });

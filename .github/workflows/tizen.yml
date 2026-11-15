@@ -1,9 +1,9 @@
 name: Samsung Tizen
 on:
   push:
-    paths: ['SmartTV/client/**', 'SmartTV/shared/**', 'assets/**', '.github/workflows/tizen.yml']
+    paths: ['SmartTV/client/**', 'SmartTV/shared/**', 'shared/**', 'release.json', 'assets/**', '.github/workflows/tizen.yml']
   pull_request:
-    paths: ['SmartTV/client/**', 'SmartTV/shared/**', 'assets/**', '.github/workflows/tizen.yml']
+    paths: ['SmartTV/client/**', 'SmartTV/shared/**', 'shared/**', 'release.json', 'assets/**', '.github/workflows/tizen.yml']
   workflow_dispatch:
 jobs:
   web-client:

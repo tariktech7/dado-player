@@ -209,6 +209,19 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         changed = true;
                     }
 
+                    components::section(ui, "Ton & Untertitel");
+                    let mut reveal = false;
+                    changed |= components::field(ui, "Bevorzugte Audiosprache", &mut app.settings.audio_language, "z. B. de, en, tr", components::Kb::Text, &mut reveal).changed();
+                    changed |= components::field(ui, "Bevorzugte Untertitelsprache", &mut app.settings.subtitle_language, "Leer = erste verfügbare Spur", components::Kb::Text, &mut reveal).changed();
+                    if let Some(value) = components::switch_row(ui, "Untertitel standardmäßig aktiv", app.settings.subtitles_enabled) { app.settings.subtitles_enabled = value; changed = true; }
+                    ui.label("Untertitelgröße");
+                    changed |= ui.add(egui::Slider::new(&mut app.settings.sub_size, 20.0..=120.0)).changed();
+                    ui.small("Sprachen und Größe gelten ab der nächsten Wiedergabe im integrierten Player. Externe Android-Player verwenden eigene Einstellungen.");
+                    components::section(ui, "Netzwerk");
+                    changed |= components::field(ui, "Player-User-Agent", &mut app.settings.user_agent, "Leer = Standard", components::Kb::Text, &mut reveal).changed();
+                    #[cfg(target_os = "ios")]
+                    ui.small("Ein eigener Player-User-Agent wird ab iOS 16 unterstützt.");
+
                     // ---- profile ----
                     components::section(ui, "Profil");
                     if let Some(p) = app.active_profile.clone() {

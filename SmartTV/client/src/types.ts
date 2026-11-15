@@ -73,6 +73,7 @@ export interface Saved {
   history: Record<string, Watched[]>;
 }
 export interface Track {
+  language?: string;
   type: "AUDIO" | "TEXT";
   index: number;
   label: string;

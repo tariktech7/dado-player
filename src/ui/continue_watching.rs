@@ -115,12 +115,7 @@ fn resume_dialog(app: &mut App, ui: &mut Ui) {
 }
 
 fn play_or_ask(app: &mut App, item: PlayItem) {
-    let pos = app.get_progress(&item.progress_key);
-    if pos > 1 {
-        app.pending_resume = Some((item.progress_key.clone(), item, pos));
-    } else {
-        app.play(item);
-    }
+    app.play_history_key(&item.progress_key);
 }
 
 fn empty(ui: &mut Ui, text: &str) {
@@ -295,7 +290,7 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
     }
 
     let mut play: Option<PlayItem> = None;
-    let mut open_detail: Option<u32> = None;
+    let mut history_key: Option<String> = None;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -337,7 +332,7 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
                                             progress_key: key.clone(),
                                         });
                                     }
-                                    None => open_detail = sid,
+                                    None => history_key = Some(key.clone()),
                                 }
                             }
                             ui.add_space(4.0);
@@ -357,11 +352,8 @@ fn series_tab(app: &mut App, ui: &mut Ui) {
 
     if let Some(item) = play {
         play_or_ask(app, item);
-    } else if let Some(sid) = open_detail {
-        app.selected_series = Some(sid);
-        app.series_season = 0;
-        app.request_series(sid);
-        app.view = crate::app::View::Series;
+    } else if let Some(key) = history_key {
+        app.play_history_key(&key);
     }
 }
 

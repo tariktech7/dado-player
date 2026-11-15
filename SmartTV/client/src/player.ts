@@ -1,6 +1,7 @@
 import { Item, PlayerStatus, Settings, Track } from "./types";
 import { screensaver } from "./platform";
 import { licenseClient } from "./licensing";
+import {languageKey} from './languages';
 export function resolvePackagedMedia(
   url: string,
   filesystem: any = (globalThis as any).tizen?.filesystem,
@@ -313,12 +314,14 @@ export class Player {
               return {
                 type: t.type,
                 index: t.index,
+                language: String(extra.language || extra.track_lang || ''),
                 label: `${extra.language || extra.track_lang || "Spur " + (t.index + 1)}${extra.codec ? ` · ${extra.codec}` : ""}`,
               };
             })
         : Array.from(this.video?.textTracks || []).map((t, i) => ({
             type: "TEXT" as const,
             index: i,
+            language: t.language,
             label: t.label || t.language || `Untertitel ${i + 1}`,
           }));
     } catch {
@@ -332,19 +335,15 @@ export class Player {
       (t) =>
         t.type === "AUDIO" &&
         this.settings.audioLanguage &&
-        t.label
-          .toLowerCase()
-          .includes(this.settings.audioLanguage.toLowerCase()),
+        languageKey(t.language || t.label.split(' ')[0]) === languageKey(this.settings.audioLanguage),
     );
     if (audio) this.selectTrack(audio);
     const sub = this.status.tracks.find(
       (t) =>
         t.type === "TEXT" &&
         (!this.settings.subtitleLanguage ||
-          t.label
-            .toLowerCase()
-            .includes(this.settings.subtitleLanguage.toLowerCase())),
-    );
+          languageKey(t.language || t.label.split(' ')[0]) === languageKey(this.settings.subtitleLanguage)),
+    ) || this.status.tracks.find(t=>t.type==='TEXT');
     this.subtitleOff();
     if (wantSubtitles && sub) this.selectTrack(sub);
   }

@@ -1,5 +1,11 @@
 # Arbeitsrichtlinien für Dado Player
 
+Produktversionen ausschließlich in release.json erhöhen, danach python scripts/release_version.py ausführen.
+python scripts/release_version.py --check gehört zu jedem Release. Gemeinsame Ablaufwerte stehen in
+shared/product-policy.json; Sprachkürzel in shared/language-aliases.json. Plattformgrenzen und
+Abnahmeumfang stehen in docs/PLATFORM-PARITY.md. Android/iOS behalten bis zur IAP-Einführung
+die ausdrücklich vereinbarte Ausnahme von der Windows-/TV-Kaufsperre.
+
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 
 Samsung Tizen ist ein separater Web-TV-Client unter SmartTV/client. Gemeinsame Produktabläufe

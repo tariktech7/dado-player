@@ -60,7 +60,7 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
                 .and_then(|v| v.parse::<u32>().ok())
         })
         .collect();
-    for id in series {
+    for id in series.into_iter().take(3) {
         app.request_series(id);
     }
     egui::ScrollArea::vertical()
@@ -164,7 +164,24 @@ fn filter_by_kind(
 fn featured_item(app: &App) -> Option<PlayItem> {
     app.history
         .iter()
-        .filter_map(|h| app.resolve_play(&h.key))
+        .filter_map(|h| {
+            app.resolve_play(&h.key).or_else(|| {
+                let sid = h
+                    .key
+                    .strip_prefix("ep:")?
+                    .split(':')
+                    .next()?
+                    .parse::<u32>()
+                    .ok()?;
+                let series = app.library.series.iter().find(|s| s.id == sid)?;
+                Some(PlayItem {
+                    title: series.name.clone(),
+                    url: String::new(),
+                    kind: PlayKind::Episode,
+                    progress_key: h.key.clone(),
+                })
+            })
+        })
         .find(|item| item.kind != PlayKind::Live)
         .or_else(|| {
             app.library.movies.first().map(|m| PlayItem {
@@ -249,7 +266,7 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
         play_response.clicked()
     };
     if play_hit {
-        app.play(item.clone());
+        app.play_history_key(&item.progress_key);
     }
 }
 

@@ -58,7 +58,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                 let row = Row::new(&h.title).img(&img_key, &img_url).sub(&sub);
                 let r = components::list_row(app, ui, row, l.pad);
                 if focus::clicked(ui, &r) {
-                    play = app.resolve_play(&h.key);
+                    play = Some(h.key.clone());
                 }
             }
             // Bottom safe-area: clear the bottom nav bar (NAV_H) plus a gap so the
@@ -66,8 +66,8 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
             ui.add_space(GAP);
         });
 
-    if let Some(item) = play {
-        app.play(item);
+    if let Some(key) = play {
+        app.play_history_key(&key);
     }
 }
 

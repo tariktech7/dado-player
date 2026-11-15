@@ -66,7 +66,13 @@ The ios.yml workflow runs the device build and uploads Dado-Player-unsigned.ipa 
 
 GitHub Actions currently rejects jobs before execution because of an account billing/spending restriction. There is no runner queue ETA for this failure. See [local setup status](../docs/history/2026-11-14-local-ios-build-setup.md).
 
-The Windows/WSL device package **0.2.6 / build 8** was built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
+The Windows/WSL device package **0.6.0 / build 9** is built locally with Swift 6.4.0, Rust 1.99.1 and the iPhoneOS 27.3 SDK extracted from the user's official Xcode XIP. The SDK archive is kept in git-ignored `ios/SDKs/`, not Downloads or Releases. No Apple-account login through xtool is needed for the unsigned AltStore package.
+
+`dado_host_options` passes the shared playback settings to Swift before loading an item:
+forward buffer duration, subtitle size and a startup timeout watchdog. A custom HTTP user agent
+uses the public AVURLAssetHTTPUserAgentKey on iOS 16+. This does not impose a timeout on every
+subsequent media segment. Audio/subtitle preferences are applied after track discovery;
+manual choices remain in effect for the current stream. Device playback still requires separate verification.
 
 Use the same `bash ios/build.sh --ipa` entry point inside WSL with the Linux Swift/Rust tools on PATH and xtool's Darwin artifact installed. Set `CARGO_TARGET_DIR` to a Linux-filesystem cache (locally `/home/dado-build/.cache/dadoplayer/target`) to keep Windows outputs separate. Swift uses a separate cache under `~/.cache/dadoplayer/swift-build`; `DADO_SWIFT_BUILD_DIR` overrides it.
 

@@ -2,6 +2,8 @@ param([string]$Python = 'python', [string]$SigningThumbprint = '')
 $ErrorActionPreference = 'Stop'
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
+    & $Python scripts/release_version.py --check
+    if ($LASTEXITCODE) { throw 'Produktversionen sind nicht synchron.' }
     if ($SigningThumbprint) { $env:DADO_SIGN_CERT_THUMBPRINT = $SigningThumbprint }
     cargo build --locked --release --bin Dado-Player
     if ($LASTEXITCODE) { throw 'Windows-Build fehlgeschlagen.' }

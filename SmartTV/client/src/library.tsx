@@ -8,6 +8,7 @@ import {
 import { createPortal } from "preact/compat";
 import { Item, Category, Watched, itemKey } from "./types";
 import { TVInput } from "./input";
+import policy from '../../../shared/product-policy.json' with { type: 'json' };
 
 export function resumeEpisode(episodes: Item[], history: Watched[]) {
   const ordered = [...episodes].sort(
@@ -27,7 +28,7 @@ export function resumeEpisode(episodes: Item[], history: Watched[]) {
     watched &&
     watched.position > 0 &&
     watched.duration > 0 &&
-    watched.duration - watched.position <= 60
+    watched.duration - watched.position <= policy.resumeEndMarginSeconds
   )
     return { item: ordered[index + 1] || ordered[0], position: 0 };
   return { item: ordered[index], position: watched?.position || 0 };

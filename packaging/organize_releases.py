@@ -102,7 +102,11 @@ def main():
         current.append(dict(platform="iOS (AltStore/Sideloadly)",
                             version=f"{ios['version']} / Build {ios['build']}", file=ipa.name,
                             bytes=ipa.stat().st_size, sha256=hashlib.sha256(ipa.read_bytes()).hexdigest()))
-    (RELEASES / "AKTUELL.json").write_text(json.dumps(dict(packages=current, ios=ios), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    usb_preparation = RELEASES / f"Dado-Player-Samsung-USB-Vorbereitung-{tv}.zip"
+    usb = dict(installable=False, status="Samsung-TMG und Lizenzdatei fehlen; kein direkter USB-Installer")
+    if usb_preparation.exists():
+        usb["preparationFile"] = usb_preparation.name
+    (RELEASES / "AKTUELL.json").write_text(json.dumps(dict(packages=current, ios=ios, samsungUsb=usb), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     lines = ["# Aktuelle Dado-Player-Downloads", "", "| Plattform | Version | Datei |", "| --- | --- | --- |"]
     lines += [f"| {p['platform']} | {p['version']} | [{p['file']}]({p['file']}) |" for p in current]
     ios_note = ("iOS: Aktuelle IPA mit AltStore/Sideloadly und eigener Apple-ID signieren und installieren. "
@@ -110,6 +114,7 @@ def main():
                 "iOS: Kein aktueller Geräte-Build. Alte IPA-Dateien unter Archiv/iOS enthalten die aktuellen Änderungen nicht.")
     lines += ["", "Windows: portable EXE direkt starten. Android: signierte APK installieren; der historische Dateiname enthält weiterhin ‚debug‘.",
               "Samsung: signierte WGT für den eingerichteten Entwickler-TV. Installation über den PC; nicht per USB-Dateiauswahl.",
+              "Samsung-USB: Das Vorbereitungsarchiv ist kein Installer. Es fehlen die von Samsung ausgestellten TMG-/Lizenzdateien; siehe SmartTV/USB-STATUS.md im Projekt.",
               "Die unsignierte WGT ist nur für Entwickler und benötigt ein Samsung-Zertifikat für das jeweilige Gerät.",
               "", ios_note,
               "", "Archiv enthält vorherige Builds nach Plattform und Version. Es wurde kein Paket gelöscht.",

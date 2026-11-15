@@ -340,6 +340,12 @@ impl VideoSync {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    #[serde(default)]
+    pub audio_language: String,
+    #[serde(default)]
+    pub subtitle_language: String,
+    #[serde(default)]
+    pub subtitles_enabled: bool,
     /// Opt in to AVKit's full-screen controls; Dado's controls are the default.
     #[serde(default)]
     pub ios_native_player: bool,
@@ -351,7 +357,7 @@ pub struct Settings {
     pub theme: Theme,
     #[serde(default)]
     pub settings_mode: SettingsMode,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_auto_play_last")]
     pub auto_play_last: bool,
     #[serde(default)]
     pub default_profile: Option<String>,
@@ -418,8 +424,8 @@ fn default_cache() -> u64 {
 fn default_timeout() -> u64 {
     20
 }
-fn default_true() -> bool {
-    true
+fn default_auto_play_last() -> bool {
+    crate::release_info::AUTOPLAY_LAST
 }
 fn default_sub_size() -> f32 {
     55.0
@@ -428,12 +434,15 @@ fn default_sub_size() -> f32 {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            audio_language: String::new(),
+            subtitle_language: String::new(),
+            subtitles_enabled: false,
             ios_native_player: false,
             cache_secs: default_cache(),
             network_timeout_s: default_timeout(),
             theme: Theme::System,
             settings_mode: SettingsMode::Easy,
-            auto_play_last: true,
+            auto_play_last: default_auto_play_last(),
             default_profile: None,
             signed_out: false,
             hwdec: HwDec::AutoSafe,
@@ -694,6 +703,21 @@ pub struct StreamInfo {
 }
 
 /// Small helper to generate a unique id without extra deps.
+pub fn language_key(value: &str) -> String {
+    let lower = value.trim().to_lowercase();
+    let primary = lower.split(['-', '_']).next().unwrap_or("");
+    static ALIASES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+        std::sync::OnceLock::new();
+    ALIASES
+        .get_or_init(|| {
+            serde_json::from_str(include_str!("../shared/language-aliases.json"))
+                .expect("language aliases")
+        })
+        .get(primary)
+        .cloned()
+        .unwrap_or_else(|| primary.to_string())
+}
+
 pub fn uuid_v4() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

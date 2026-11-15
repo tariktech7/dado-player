@@ -13,6 +13,7 @@ pub mod demo;
 pub mod fonts;
 #[cfg(target_os = "windows")]
 pub mod licensing;
+pub mod release_info;
 // iOS has no libmpv; the AVPlayer shim implements the same public surface.
 // Aliasing the *module* keeps `app.rs` free of platform branches.
 #[cfg(not(target_os = "ios"))]

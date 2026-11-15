@@ -21,7 +21,8 @@ import { Provider, hostUrl, httpUrl } from "./api";
 import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
-import { CatalogBrowser, EpisodePicker } from "./library";
+import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
+import policy from '../../../shared/product-policy.json' with { type: 'json' };
 import { Home } from "./home";
 import {licenseClient} from './licensing';
 import packageInfo from "../package.json";
@@ -131,6 +132,7 @@ function App() {
     new Map<string, { item: Item; episodes: Item[] }>(),
   );
   const detailRequest = useRef(0);
+  const continueRequest = useRef(0);
   const [category, setCategory] = useState("all"),
     [query, setQuery] = useState(""),
     [preview, setPreview] = useState<Item | null>(null),
@@ -404,6 +406,26 @@ function App() {
       setResume({ item, position: h.position });
     else void start(item, true);
   };
+  async function continueWatching(item: Item, position: number) {
+    const request = ++continueRequest.current, playing = loadToken.current;
+    const watched = history.find(h => itemKey(h.item)===itemKey(item));
+    if(watched && position > 0 && watched.duration > 0 && watched.duration-position <= policy.resumeEndMarginSeconds) {
+      if(item.kind==='episode' && item.seriesId) {
+        const series=catalog.series.find(s=>s.id===item.seriesId);
+        if(series) {
+          try {
+            const gen=generation.current;
+            const rows=detailCache.current.get(itemKey(series))?.episodes || await providerRef.current?.episodes(series) || [];
+            if(gen!==generation.current || request!==continueRequest.current || playing!==loadToken.current)return;
+            const target=resumeEpisode(rows,[{...watched,position}]);
+            if(target){await start(target.item,true,target.position);return;}
+          } catch {setMessage('Die nächste Folge konnte nicht geladen werden. Bitte erneut versuchen.');return;}
+        }
+      }
+      position=0;
+    }
+    await start(item,true,position);
+  }
   async function openDetail(item: Item) {
     const token = ++detailRequest.current,
       gen = generation.current,
@@ -711,7 +733,7 @@ function App() {
         !tracksRef.current &&
         !document.querySelector(".modal") &&
         playerRef.current?.status.state === "playing" &&
-        Date.now() - lastInteraction.current > 2000
+        Date.now() - lastInteraction.current > policy.controlsHideMs
       )
         setControlsVisible(false);
     }, 100);
@@ -1510,7 +1532,7 @@ function App() {
                     program={(i) =>
                       info(i)[0]?.title || "Keine Programmdaten verfügbar"
                     }
-                    play={(i, pos) => void start(i, true, pos)}
+                    play={(i, pos) => void continueWatching(i, pos)}
                     section={section}
                     logo={(i) => <Logo item={i} />}
                   />
@@ -1550,7 +1572,7 @@ function App() {
                         )
                         .map((h) => (
                           <div>
-                            <button onClick={() => playTitle(h.item)}>
+                            <button onClick={() => void continueWatching(h.item,h.position)}>
                               <Logo item={h.item} />
                               <span>
                                 <strong>{h.item.name}</strong>

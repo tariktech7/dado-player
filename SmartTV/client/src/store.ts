@@ -1,7 +1,8 @@
 import { Saved, Settings, Item, Watched, itemKey } from "./types";
+import policy from '../../../shared/product-policy.json' with { type: 'json' };
 export const defaults: Settings = {
-  theme: "dark",
-  autoplayLast: false,
+  theme: "system",
+  autoplayLast: policy.autoplayLast,
   liveFormat: "m3u8",
   player: "avplay",
   aspect: "fit",
@@ -70,7 +71,7 @@ export function remember(
       at: Date.now(),
     },
     ...rows.filter((r) => itemKey(r.item) !== itemKey(item)),
-  ].slice(0, 150);
+  ].slice(0, policy.historyLimit);
 }
 export function favorite(state: Saved, profile: string, item: Item): Item[] {
   const rows = state.favorites[profile] || [],
