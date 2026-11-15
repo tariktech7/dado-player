@@ -56,9 +56,17 @@ let package = Package(
             name: "DadoPlayer",
             dependencies: ["DadoBridge"],
             path: "Sources/DadoPlayer",
+            swiftSettings: [.unsafeFlags(["-F\(vendorPath)"])],
             linkerSettings: [
                 // libdadoplayer.a, copied here by ios/build.sh.
                 .unsafeFlags(["-L\(vendorPath)", "-ldadoplayer"]),
+                .unsafeFlags(["-F\(vendorPath)", "-framework", "MobileVLCKit", "-Xlinker", "-ObjC"]),
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/Frameworks"]),
+                .linkedLibrary("c++"), .linkedLibrary("xml2"),
+                .linkedLibrary("z"), .linkedLibrary("bz2"), .linkedLibrary("iconv"),
+                .linkedFramework("AudioToolbox"), .linkedFramework("VideoToolbox"),
+                .linkedFramework("CFNetwork"), .linkedFramework("CoreText"),
+                .linkedFramework("OpenGLES"), .linkedFramework("Accelerate"),
 
                 // Frameworks the Swift host references, plus the ones the Rust
                 // core pulls in transitively:

@@ -432,6 +432,8 @@ test("favorites remain separate from history; series and settings work with remo
   await page
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
+  await expect(page.getByRole("combobox", { name: "Live-Streamformat" })).toHaveCount(0);
+  await page.getByLabel("Expertenmodus", {exact:true}).click();
   await page.getByRole("combobox", { name: "Live-Streamformat" }).click();
   await page.getByRole("option", { name: "MPEG-TS (.ts)" }).click();
   await page.reload();
@@ -675,6 +677,9 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowRight");
   await expect(rail.locator("button").nth(7)).toBeFocused();
   expect(await rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
+  await page.locator(".shell").evaluate(async el => {
+    await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
+  });
   const last = await rail.locator("button").nth(7).boundingBox(),
     box = await rail.boundingBox();
   expect(last!.x + last!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
@@ -989,4 +994,84 @@ test('home continue advances across seasons at one minute without a second resum
     .filter((entry:any[]) => entry[0]==='open').at(-1)?.[1])).toContain('/12.mp4');
   await expect.poll(() => page.evaluate(() => (window as any).__avLog
     .filter((entry:any[]) => entry[0]==='play').length)).toBeGreaterThan(0);
+});
+
+test("automatic playback tries HTML once after AVPlay failure and retains the original VOD URL", async ({ page }) => {
+  await fixture(page, true, true);
+  await page.addInitScript(() => {
+    (window as any).webapis.avplay.prepareAsync = (_ok: unknown, fail: () => void) => setTimeout(fail, 10);
+    (window as any).__htmlAttempts = [];
+    HTMLMediaElement.prototype.play = function() {
+      (window as any).__htmlAttempts.push(this.getAttribute("src"));
+      return Promise.reject(new Error("Unsupported fixture codec"));
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
+  await page.getByRole("button", { name: /Demo Film/ }).click();
+  await page.getByRole("button", { name: "▶ Abspielen / Fortsetzen", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__htmlAttempts.length)).toBe(1);
+  const log = await page.evaluate(() => ({ native: (window as any).__avLog.filter((x: any[]) => x[0] === "open"), html: (window as any).__htmlAttempts }));
+  expect(log.native).toHaveLength(1);
+  expect(log.html[0]).toBe(log.native[0][1]);
+  expect(log.html[0]).toContain("/movie/demo/demo/1.mp4");
+  await expect(page.locator(".fullscreen")).toContainText("Video kann nicht abgespielt werden");
+});
+
+test("settings move through adjacent panels before the main rail; Back returns to the rail then asks to exit", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  const navigation = page.getByRole("button", {name: "⚙ Einstellungen", exact: true});
+  await navigation.click();
+  const expert = page.getByLabel("Expertenmodus", {exact:true});
+  await expert.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator('[data-focus-zone="settings-license"] button').first()).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(expert).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeFocused();
+  await expect(page.locator(".settings-grid")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name:"Dado Player beenden?"})).toBeVisible();
+  await page.getByRole("button", {name:"Weitersehen", exact:true}).click();
+  await expert.focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect(navigation).toBeFocused();
+  // Lower settings panels remain reachable vertically in their own column.
+  const appearanceLast = page.locator('[data-focus-zone="settings-appearance"] button').last();
+  await appearanceLast.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[data-focus-zone]')?.getAttribute('data-focus-zone'))).toBe('settings-audio');
+});
+
+test("rail motion keeps layout widths fixed while only transform offsets animate", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name:"▣ Live TV",exact:true}).click();
+  const samples = await page.evaluate(async () => {
+    const shell = document.querySelector<HTMLElement>('.shell')!;
+    const column = document.querySelector<HTMLElement>('.shell > .categories')!;
+    const control = column.querySelector<HTMLButtonElement>('button')!;
+    control.focus();
+    const properties = column.getAnimations().flatMap(a => (a.effect as KeyframeEffect).getKeyframes().flatMap(k=>Object.keys(k)));
+    const frames: {width:number,x:number}[] = [];
+    for (let i=0;i<18;i++) {
+      frames.push({width:column.offsetWidth,x:column.getBoundingClientRect().left});
+      await new Promise(requestAnimationFrame);
+    }
+    return {frames,properties,transition:getComputedStyle(shell).transitionProperty};
+  });
+  expect(new Set(samples.frames.map(f=>f.width)).size).toBe(1);
+  expect(samples.frames[0].x-samples.frames[samples.frames.length - 1].x).toBeGreaterThan(100);
+  expect(samples.properties).toContain('transform');
+  expect(samples.properties).not.toContain('width');
+  expect(samples.transition).not.toContain('grid-template-columns');
+  // A quick reversal ends in the correct expanded layout, without trapping focus.
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('.shell')).not.toHaveClass(/nav-collapsed/);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.locator('.categories button').first().focus();
+  expect(await page.locator('.shell > .categories').evaluate(e=>e.getAnimations().length)).toBe(0);
 });

@@ -1,20 +1,7 @@
-//! AVPlayer-backed stand-in for the libmpv wrapper, used on iOS.
-//!
-//! `src/mpv.rs` is libmpv FFI. iOS ships no libmpv: there is no `.so`/`.dylib`
-//! to `libloading`, the license obligations differ, and AVFoundation already
-//! decodes HLS/HEVC/H.264 in hardware. So this file implements the *same public
-//! surface* as `Mpv` and forwards to the Swift host, which owns an `AVPlayer`.
-//!
-//! Why not a `PlayerBackend` impl: `app.rs` stores a concrete `Mpv` in
-//! `App::player` and calls ~30 methods on it. Aliasing the module on iOS keeps
-//! `app.rs` free of platform branches; converting the whole app to
-//! `dyn PlayerBackend` is the cleaner long-term move and is noted in the plan,
-//! but it is a Windows/Android regression risk that this port does not need to
-//! take today.
-//!
-//! Everything that AVPlayer cannot report — codec names, container format,
-//! track lists — returns an empty value instead of inventing one. The UI already
-//! treats empty stream info as "unknown" and hides those rows.
+//! iOS adapter for the shared Mpv API. The Swift host chooses AVPlayer for
+//! HLS and embedded VLCKit for file streams, with Dado controls by default.
+//! Track/state/control commands cross the same stable C ABI for either engine.
+//! Unavailable codec/cache/FPS metadata stays empty rather than being invented.
 
 #![allow(dead_code)]
 
@@ -65,6 +52,7 @@ impl Mpv {
     }
 
     pub fn configure(&self, settings: &Settings) {
+        bridge::native_player(settings.ios_native_player);
         bridge::configure(settings);
     }
 
@@ -146,8 +134,7 @@ impl Mpv {
         bridge::current_track(1)
     }
 
-    /// No track list over the current bridge. The audio/subtitle popover is
-    /// hidden when this returns `None`, which is the correct degradation.
+    /// Track IDs and language metadata come from the currently active engine.
     pub fn track_list_json(&self) -> Option<String> {
         bridge::tracks()
     }

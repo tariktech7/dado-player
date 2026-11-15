@@ -1,3 +1,4 @@
+import { animateNavigation } from "./navigation-motion";
 import { render, ComponentChildren } from "preact";
 import {
   useEffect,
@@ -33,8 +34,10 @@ import {
   resetFocusMemory,
   focusables,
   moveFocus,
+  focusNavigation,
   registerKeys,
   resizeCanvas,
+  scrollFocused,
   samsung,
 } from "./platform";
 import "./style.css";
@@ -127,7 +130,15 @@ function App() {
     [editing, setEditing] = useState(false);
   const [favoriteKind, setFavoriteKind] = useState("live");
   const [historyKind, setHistoryKind] = useState("live");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const navCollapsed = useRef(false);
+  const setNavCollapsed = (collapsed: boolean) => {
+    if (navCollapsed.current === collapsed) return;
+    navCollapsed.current = collapsed;
+    void animateNavigation(document.querySelector<HTMLElement>(".shell"), collapsed).then(() => {
+      if (surface.current && previewRef.current)
+        playerRef.current?.position(surface.current.getBoundingClientRect());
+    });
+  };
   const detailCache = useRef(
     new Map<string, { item: Item; episodes: Item[] }>(),
   );
@@ -202,7 +213,9 @@ function App() {
   const setting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     changed({
       ...savedRef.current,
-      settings: { ...savedRef.current.settings, [key]: value },
+      settings: { ...savedRef.current.settings,
+          ...(key === "expertMode" && !value ? {player: "auto" as const, bufferSeconds: 20, timeoutSeconds: 20, userAgent: ""} : {}),
+          [key]: value },
     });
   };
   const pid = session?.id || "",
@@ -520,8 +533,8 @@ function App() {
       setEditing(false);
       return;
     }
-    if (view !== "home") {
-      go("home");
+    if (!document.activeElement?.closest(".navigation")) {
+      focusNavigation();
       return;
     }
     setExit(true);
@@ -606,7 +619,7 @@ function App() {
     }
     const target = e.target as HTMLElement;
     if (
-      target.matches("input,textarea") &&
+      target.matches('textarea,input:not([type="checkbox"]):not([type="radio"])') &&
       !(target as HTMLInputElement).readOnly &&
       (e.key === "ArrowLeft" || e.key === "ArrowRight")
     )
@@ -646,7 +659,9 @@ function App() {
       if (target.closest(".shell"))
         setNavCollapsed(!target.closest(".navigation"));
       rememberFocus(target);
-      resize();
+      requestAnimationFrame(() => {
+        if (document.activeElement === target) scrollFocused(target);
+      });
     };
     document.addEventListener("focusin", focus);
     document.addEventListener("visibilitychange", visibility);
@@ -839,7 +854,7 @@ function App() {
         </p>
       </header>
       <div class="settings-grid">
-        <section class="glass" data-license-status>
+        <section class="glass" data-license-status data-focus-zone="settings-license">
           <h2>Lizenz & Gerät</h2>
           <p><strong>{license.text}</strong></p>
           <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
@@ -852,8 +867,13 @@ function App() {
           </button>
           <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
         </section>
-        <section class="glass">
+        <section class="glass" data-focus-zone="settings-appearance">
           <h2>Darstellung</h2>
+          <Field label="Expertenmodus">
+            <TVInput type="checkbox" checked={saved.settings.expertMode}
+              onChange={(e) => setting("expertMode", e.currentTarget.checked)} />
+          </Field>
+          <p class="muted">Standard: automatische Wiedergabe mit Dado-Steuerung. Zusätzliche Player- und Netzwerkoptionen im Expertenmodus.</p>
           <Field label="Farbschema">
             {choose(
               saved.settings.theme,
@@ -880,14 +900,16 @@ function App() {
             Seitenverhältnis.
           </p>
         </section>
-        <section class="glass">
+        <section class="glass" data-focus-zone="settings-playback">
           <h2>Wiedergabe</h2>
+          {saved.settings.expertMode && <>
           <Field label="Wiedergabe-Engine">
             {choose(
               saved.settings.player,
               (v) => setting("player", v as Settings["player"]),
               [
-                ["avplay", "Samsung AVPlay · empfohlen"],
+                ["auto", "Automatisch · empfohlen"],
+                ["avplay", "Samsung AVPlay"],
                 ["html", "HTML-Video · Alternative"],
               ],
             )}
@@ -914,6 +936,7 @@ function App() {
               ],
             )}
           </Field>
+          </>}
           <Field label="Bildformat">
             {choose(
               saved.settings.aspect,
@@ -936,7 +959,7 @@ function App() {
             />
           </Field>
         </section>
-        <section class="glass">
+        <section class="glass" data-focus-zone="settings-audio">
           <h2>Ton & Untertitel</h2>
           <Field label="Bevorzugte Audiosprache">
             <TVInput
@@ -978,8 +1001,9 @@ function App() {
             Tonausgabe und Passthrough verwaltet der Fernseher.
           </p>
         </section>
-        <section class="glass">
+        <section class="glass" data-focus-zone="settings-network">
           <h2>Netzwerk</h2>
+          {saved.settings.expertMode && <>
           <Field label="Stream-Puffer">
             {choose(
               String(saved.settings.bufferSeconds),
@@ -1011,6 +1035,7 @@ function App() {
               placeholder="Standard des Fernsehers"
             />
           </Field>
+          </>}
           <Field label="Anbieterzugriff">
             {choose(
               saved.settings.networkMode,
@@ -1052,7 +1077,7 @@ function App() {
             Bibliothek neu laden
           </button>
         </section>
-        <section class="glass">
+        <section class="glass" data-focus-zone="settings-profiles">
           <h2>Profile & Updates</h2>
           <p>
             {session?.name} · {samsung() ? "Samsung-TV" : "Browser-Vorschau"}
@@ -1347,7 +1372,7 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${navCollapsed ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
+            class={`shell ${navCollapsed.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
           >
             <aside class="navigation" data-focus-zone="navigation">
               <div class="brand">
@@ -1504,7 +1529,7 @@ function App() {
                           .match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1]
                           .toUpperCase() || "STREAM"}{" "}
                         ·{" "}
-                        {saved.settings.player === "avplay" && samsung()
+                        {saved.settings.player !== "html" && samsung()
                           ? "Samsung AVPlay"
                           : "HTML-Video"}
                       </small>
@@ -1515,7 +1540,7 @@ function App() {
             ) : (
               <main
                 data-focus-zone={
-                  ["home", "vod", "series"].includes(view)
+                  ["home", "vod", "series", "settings"].includes(view)
                     ? undefined
                     : "content"
                 }

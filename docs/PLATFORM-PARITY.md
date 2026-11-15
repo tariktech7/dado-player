@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.6.0
+# Gemeinsamer Produktstand 0.6.1
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-14 und iOS-Buildnummer 9 bleiben eigenständig monoton steigend. Nach Änderungen
+15 und iOS-Buildnummer 10 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -32,7 +32,7 @@ Die Werte für Zeitgrenzen, Verlaufslimit und den Standard für automatischen St
 | TV-/Desktop-UI | Kategorien, Poster/Sender, Detailbereich; unabhängige Fokuszonen | Nur bei breiter Darstellung/TV-Modus sinnvoll | Spalten und virtuelle Listen |
 | Lizenz | Windows: 7 Tage Trial, manuelle Dauerfreigabe; Android: noch keine Kaufsperre | Keine Kaufsperre bis IAP | Gleiche Trial-/Freigabelogik wie Windows |
 | Updates | Portable ersetzt eigene EXE; Android öffnet Systeminstaller | IPA herunterladen, mit eigener Apple-ID neu signieren/installieren | Signatur, TV-Berechtigung und Samsung-Verteilweg erforderlich |
-| Puffer/Timeout | libmpv-Netzwerkoptionen | Vorwärtspuffer und Lade-Watchdog; eigener User-Agent ab iOS 16 | AVPlay-Optionen nach Geräteunterstützung |
+| Puffer/Timeout | libmpv-Netzwerkoptionen | Automatisch AVPlayer für HLS / VLC für Dateien, begrenzter Fallback; Puffer und Lade-Watchdog | AVPlay-Optionen nach Geräteunterstützung |
 
 Identische Bedienabläufe bedeuten keine identischen Codec-, DRM-, Installations- oder Store-Fähigkeiten.
 Ein User-Agent erweitert keine Codec-Unterstützung. Samsung-USB-Demo-Lizenzen sind unabhängig
@@ -47,3 +47,22 @@ von der Dado-Dauerlizenz und können selbst zeitlich oder auf Geräte beschränk
 - Echte iPhone-/TV-Wiedergabe, Overscan und Fernbedienung erst nach Gerätetest als bestätigt bezeichnen.
 - Alte Pakete archivieren. Windows aktuell ausschließlich Releases/Dado-Player.exe.
 - Eine WGT niemals als USB-installierbar ausgeben. Dafür müssen von Samsung erzeugte TMG- und Lizenzdateien vorliegen.
+
+## Automatik und Experten (0.6.1)
+
+Standard ist integrierte Wiedergabe mit Dado-Steuerung. Android benötigt keine
+externe Player-App. iOS verwendet AVPlayer für HLS und den eingebetteten
+VLC-Decoder für Dateicontainer; ein AVPlayer-Fehler kann einmal auf VLC wechseln.
+Der optionale Apple-Player erzwingt AVPlayer und dessen Formatgrenzen.
+Samsung verwendet im Automatikmodus AVPlay mit einmaliger HTML-Alternative bei
+Fehlern. Diese Alternative erweitert nicht die Hardware-Codecs des Fernsehers.
+Decoderwahl, externe Android-Apps und Netzwerkexperimente stehen im Expertenmodus.
+Filme/Folgen behalten die tatsächliche Anbieter-Dateiendung auf allen Plattformen.
+
+Samsung: Einstellungen haben eigene Fokuszonen pro Bereich. Links/Rechts bewegt
+sich durch die benachbarten Spalten, Hoch/Runter erreicht weitere Bereiche der
+aktuellen Spalte. Zurück schließt zunächst offene Dialoge/Player-Stufen und führt
+anschließend zur Hauptnavigation desselben Menüs. Dort öffnet Zurück die
+Beenden-Abfrage. Die schmale Leiste ändert ihr Raster nur einmal pro Wechsel;
+Animationen verwenden transform/opacity und respektieren reduzierte Bewegung.
+Ein Browser-Test der Mechanik ersetzt keine Messung der Framerate auf dem TV.

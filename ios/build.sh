@@ -45,6 +45,10 @@ for arg in "$@"; do
     esac
 done
 
+VLC_ARGS=()
+[ "$SIM" -eq 0 ] || VLC_ARGS=(--sim)
+python3 ios/prepare_vlc.py "${VLC_ARGS[@]}"
+
 if [ "$SIM" -eq 1 ] && [ "$MODE" = ipa -o "$MODE" = deploy ]; then
     echo "Simulator builds support --sim alone; IPA and deploy require a device target." >&2
     exit 2
@@ -274,6 +278,9 @@ if [ "$MODE" = "ipa" ] || [ "$MODE" = "simapp" ]; then
     cp "$BIN" "$APP/DadoPlayer"
     cp ios/Info.plist "$APP/Info.plist"
     cp ios/Resources/*.png ios/Resources/Playback.mp4 "$APP/"
+    cp ios/Resources/VLCKit-COPYING.txt "$APP/"
+    cp ios/Resources/ThirdPartyNotices.txt "$APP/"
+    python3 ios/package_vlc.py "$APP"
     if [ "$LINUX_SDK" -eq 0 ]; then
         xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" ios/Resources/LaunchScreen.storyboard --target-device iphone --target-device ipad --minimum-deployment-target 15.0
         /usr/libexec/PlistBuddy -c "Add :DTPlatformName string $APPLE_SDK" "$APP/Info.plist"
@@ -310,14 +317,17 @@ PY
     # signing is possible when ldid/codesign is present and makes the artefact
     # closer to installable, so try it but do not require it.
     if command -v ldid >/dev/null 2>&1; then
+        ldid -S "$APP/Frameworks/MobileVLCKit.framework/MobileVLCKit"
         ldid -S "$APP/DadoPlayer" && echo "    ad-hoc signed (ldid)"
     elif command -v codesign >/dev/null 2>&1; then
+        codesign -f -s - "$APP/Frameworks/MobileVLCKit.framework"
         codesign -f -s - "$APP/DadoPlayer" 2>/dev/null && echo "    ad-hoc signed (codesign)"
     else
         echo "    not signed (no ldid/codesign) — expected for a sideload artefact"
     fi
 
     ( cd "$STAGE" && zip -qry packaged.ipa Payload && unzip -tq packaged.ipa )
+    python3 ios/verify_ipa.py "$STAGE/packaged.ipa"
     mkdir -p "$ROOT/Releases"
     # Copy across WSL/NTFS without attempting to preserve Linux ownership.
     # Rename on the destination filesystem only after the complete copy.

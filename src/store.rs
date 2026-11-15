@@ -196,6 +196,12 @@ pub fn load_settings() -> Settings {
         s.live_format = crate::types::LiveFormat::Hls;
         s.settings_version = 4;
     }
+    if s.settings_version < 5 {
+        if s.settings_mode == crate::types::SettingsMode::Easy {
+            s.automatic_playback();
+        }
+        s.settings_version = 5;
+    }
     s
 }
 

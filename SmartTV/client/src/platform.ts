@@ -85,6 +85,11 @@ function zoneTarget(zone: HTMLElement) {
     controls[0]
   );
 }
+export function focusNavigation(): void {
+  const zone = document.querySelector<HTMLElement>(".navigation[data-focus-zone]");
+  const target = zone && zoneTarget(zone);
+  if (target) { target.focus({preventScroll: true}); scrollFocused(target); }
+}
 export function moveFocus(
   direction: string,
   root: ParentNode = document,
@@ -102,7 +107,7 @@ export function moveFocus(
   const horizontal = direction === "ArrowLeft" || direction === "ArrowRight",
     sign = direction === "ArrowLeft" || direction === "ArrowUp" ? -1 : 1;
   const rail = horizontal
-    ? current.closest<HTMLElement>(".card-rail,.season-buttons")
+    ? current.closest<HTMLElement>(".card-rail,.season-buttons,.kind-tabs")
     : null;
   if (rail) {
     const controls = focusables(rail),
@@ -133,6 +138,23 @@ export function moveFocus(
     }
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
+  const settingsGrid = zone?.closest<HTMLElement>(".settings-grid");
+  if (horizontal && settingsGrid && zone) {
+    const box = zone.getBoundingClientRect();
+    const adjacent = [...settingsGrid.querySelectorAll<HTMLElement>("[data-focus-zone]")]
+      .filter((candidate) => candidate !== zone && focusables(candidate).length > 0)
+      .map((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        const distance = (rect.left - box.left) * sign;
+        return {candidate, distance, score: distance + Math.abs(rect.top - box.top) * 3};
+      })
+      .filter((candidate) => candidate.distance > 2)
+      .sort((a, b) => a.score - b.score)[0]?.candidate;
+    const target = adjacent && zoneTarget(adjacent);
+    if (target) { target.focus({preventScroll: true}); rememberFocus(target); scrollFocused(target); }
+    else if (sign < 0) focusNavigation();
+    return;
+  }
   if (horizontal && zone && !current.closest(".modal,.fullscreen")) {
     const scope = zone.closest<HTMLElement>("[data-focus-scope]")!;
     const zones = [
@@ -161,7 +183,19 @@ export function moveFocus(
     })
     .filter((c) => c.primary > 2)
     .sort((a, b) => a.score - b.score);
-  const target = candidates[0]?.el;
+  let target: HTMLElement | undefined = candidates[0]?.el;
+  if (!target && !horizontal && settingsGrid && zone) {
+    const box = zone.getBoundingClientRect();
+    const next = [...settingsGrid.querySelectorAll<HTMLElement>("[data-focus-zone]")]
+      .filter((candidate) => candidate !== zone && focusables(candidate).length > 0)
+      .map((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return {candidate, distance: (rect.top - box.top) * sign, cross: Math.abs(rect.left - box.left)};
+      })
+      .filter((candidate) => candidate.distance > 2 && candidate.cross < box.width / 2)
+      .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+    target = next ? zoneTarget(next) : undefined;
+  }
   if (target) {
     target.focus({ preventScroll: true });
     rememberFocus(target);

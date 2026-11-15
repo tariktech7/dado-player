@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Provider, parseM3u, hostUrl, decode } from "../src/api";
+import { Provider, parseM3u, hostUrl, decode, streamExtension } from "../src/api";
 import { fresh, load, save, favorite, remember } from "../src/store";
 import { Profile, Item } from "../src/types";
 import { xmltvTime } from "../src/xmltv";
@@ -119,4 +119,13 @@ test("XMLTV timezone offsets are honored; omitted zone defaults to UTC", () => {
   );
   assert.equal(xmltvTime("20261114180000"), Date.UTC(2026, 10, 14, 18) / 1000);
   assert.ok(Number.isNaN(xmltvTime("broken")));
+});
+
+test("VOD/episode URLs preserve provider containers and normalize decorated extensions", () => {
+  const p = new Provider(profile, fresh().settings);
+  for (const [raw, expected] of [[" .MKV ", "mkv"], ["avi", "avi"], ["MP4", "mp4"], ["../../bad", "mp4"], ["", "mp4"]]) {
+    assert.equal(streamExtension(raw), expected);
+    assert.ok(p.stream("series", "episode01", raw).endsWith("/episode01." + expected));
+    assert.ok(p.stream("movie", 7, raw).endsWith("/7." + expected));
+  }
 });

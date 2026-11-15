@@ -93,12 +93,12 @@ android/app/src/main/jniLibs/arm64-v8a/
 ```
 
 kopiert. Der pinbare Tag steht in `.github/workflows/android-apk.yml`
-(`env: MPV_ANDROID_TAG`). mpv-android linkt ffmpeg statisch in libmpv.so, aber
+(`env: MPV_ANDROID_TAG`). Das verwendete Laufzeitpaket enthält FFmpeg als Shared Objects;
 die oben genannten Shared Objects müssen zur Ladezeit vorhanden sein — daher
 wird der komplette `lib/arm64-v8a/`-Ordner des APK extrahiert, nicht nur
 libmpv.so.
 
-Lokal ist libmpv.so **nicht** nötig (die APK wird ausschließlich in CI gebaut).
+Auch der lokale Build benötigt diese Bibliotheken unter jniLibs; `bash android/build.sh` paketiert sie mit dem Rust-Host.
 
 ---
 
@@ -139,3 +139,15 @@ Lokal ist libmpv.so **nicht** nötig (die APK wird ausschließlich in CI gebaut)
 - Launcher-Icon ist ein minimaler adaptiver Icon-Platzhalter
   (`mipmap-anydpi-v26`, API 26+). Für volle Abdeckung (API 24/25) später
   density-PNGs ergänzen.
+
+## Playback defaults since 0.6.1
+
+Automatic mode uses the bundled libmpv/FFmpeg player and Dado controls, without
+requiring MX Player or VLC to be installed. External apps, hardware-decoder
+experiments, live format and custom network options are available in expert
+mode. Older Easy-mode settings migrate once to the integrated player; profiles,
+favorites and history remain intact. Expert selections are preserved. Actual
+MP4/MKV decoding is part of the compatibility smoke checks; individual provider
+codec combinations and Android TV hardware still require device validation.
+The local build entry point is `bash android/build.sh` (SDK/NDK/JDK required),
+which signs updates with the existing project key.

@@ -113,7 +113,7 @@ export class Player {
       }
     }
   }
-  async open(item: Item, resume = 0): Promise<void> {
+  async open(item: Item, resume = 0, htmlFallback = false): Promise<void> {
     if (!licenseClient.state.allowed) throw new Error('Testzeit abgelaufen oder noch nicht gestartet. Freischaltung in den Einstellungen abrufen.');
     this.stop();
     const gen = ++this.generation;
@@ -128,9 +128,19 @@ export class Player {
     };
     this.host.hidden = false;
     this.emit();
+    const automatic = !this.settings.expertMode || this.settings.player === "auto";
+    const useNative = !htmlFallback && (automatic || this.settings.player === "avplay");
+    const failed = (message: string) => {
+      if (gen !== this.generation) return;
+      if (automatic && useNative && (window as any).webapis?.avplay) {
+        // One alternate engine, same original URL and resume point. Never rename
+        // a provider's file extension or loop through failing engines forever.
+        void this.open(item, Math.max(resume, this.status.time), true);
+      } else this.fail(message);
+    };
     try {
       const native = (window as any).webapis?.avplay;
-      if (this.settings.player === "avplay" && native) {
+      if (useNative && native) {
         this.av = native;
         const object = document.createElement("object");
         object.type = "application/avplayer";
@@ -174,8 +184,8 @@ export class Player {
               ? String(code)
               : "UNBEKANNTER_FEHLER";
             if (gen === this.generation)
-              this.fail(
-                `Samsung AVPlay: ${safeCode}. ${item.id === "dado-diagnostic" ? "Lokales Testvideo konnte nicht geöffnet werden." : "Format HLS/TS und Anbieter prüfen."}`,
+              failed(
+                `Samsung AVPlay: ${safeCode}. ${item.id === "dado-diagnostic" ? "Lokales Testvideo konnte nicht geöffnet werden." : "Dateiformat, Codec und Anbieter prüfen."}`,
               );
           },
           onsubtitlechange: (duration: number, text: string) => {
@@ -245,7 +255,7 @@ export class Player {
         this.refreshTracks();
         this.applyLanguages();
       } else {
-        if (this.settings.player === "avplay" && (window as any).tizen)
+        if (!automatic && useNative && (window as any).tizen)
           throw new Error(
             "Samsung AVPlay ist auf diesem Gerät nicht verfügbar. In Einstellungen HTML-Video versuchen.",
           );
@@ -283,7 +293,7 @@ export class Player {
       this.emit();
     } catch (error) {
       if (gen === this.generation)
-        this.fail(
+        failed(
           (error as Error).message.includes("http")
             ? "Wiedergabe fehlgeschlagen."
             : (error as Error).message,

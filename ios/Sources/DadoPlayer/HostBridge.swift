@@ -200,20 +200,9 @@ public func dado_host_native_player(_ enabled: Int32) {
     VideoHost.shared.nativePlayer = enabled != 0
 }
 
-// Stable per-item option IDs match the shared Dado audio/subtitle menus.
-private func mediaGroup(_ kind: Int32) -> AVMediaSelectionGroup? {
-    VideoHost.shared.view?.player.currentItem?.asset.mediaSelectionGroup(forMediaCharacteristic: kind == 0 ? .audible : .legible)
-}
-
 @_cdecl("dado_host_tracks")
 public func dado_host_tracks(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity: Int32) -> Int32 {
-    var tracks: [[String: Any]] = []
-    for kind in [Int32(0), Int32(1)] {
-        guard let group = mediaGroup(kind) else { continue }
-        for (index, option) in group.options.enumerated() {
-            tracks.append(["id": index + 1, "type": kind == 0 ? "audio" : "sub", "lang": option.extendedLanguageTag ?? "", "title": option.displayName])
-        }
-    }
+    let tracks = VideoHost.shared.view?.tracks ?? []
     guard let data = try? JSONSerialization.data(withJSONObject: tracks) else { return 0 }
     if let buffer = buffer, capacity >= data.count + 1 {
         data.withUnsafeBytes { raw in
@@ -226,19 +215,12 @@ public func dado_host_tracks(_ buffer: UnsafeMutablePointer<CChar>?, _ capacity:
 
 @_cdecl("dado_host_current_track")
 public func dado_host_current_track(_ kind: Int32) -> Int64 {
-    guard let item = VideoHost.shared.view?.player.currentItem,
-          let group = mediaGroup(kind),
-          let selected = item.currentMediaSelection.selectedMediaOption(in: group),
-          let index = group.options.firstIndex(of: selected) else { return -1 }
-    return Int64(index + 1)
+    return VideoHost.shared.view?.currentTrack(kind) ?? -1
 }
 
 @_cdecl("dado_host_select_track")
 public func dado_host_select_track(_ kind: Int32, _ id: Int64) {
-    guard let item = VideoHost.shared.view?.player.currentItem, let group = mediaGroup(kind) else { return }
-    if id <= 0 { if group.allowsEmptySelection { item.select(nil, in: group) }; return }
-    guard id <= Int64(group.options.count) else { return }
-    item.select(group.options[Int(id - 1)], in: group)
+    VideoHost.shared.withView { $0.selectTrack(kind, id) }
 }
 
 /// Places the native video view. Points, relative to the root view.

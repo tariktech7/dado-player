@@ -100,6 +100,15 @@ pub enum SettingsMode {
     Expert,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum IosPlaybackEngine {
+    #[default]
+    Auto,
+    Apple,
+    Vlc,
+}
+
 /// Which presentation the library screens use on a TV / set-top box.
 ///
 /// `Auto` follows Android's `UiModeManager` (MOBILE-BAUPLAN §23.10). `Always`
@@ -164,27 +173,18 @@ pub enum HwDec {
 
 /// Which app actually plays the stream.
 ///
-/// On Android the built-in libmpv build is deliberately conservative (it ships
-/// without several demuxers and hardware decoders), so Live-TS and series
-/// containers can fail while a normal `.mp4` movie plays fine. MX Player is the
-/// default because it brings its own codec set and works on the widest range of
-/// devices. VLC and the system chooser are real alternatives, not aliases, and
-/// the internal player stays selectable for offline/local test patterns.
-///
-/// `MxPlayer` MUST remain the `Default`: `Settings::player_backend` uses
-/// `#[serde(default)]`, so an old settings.json without the field resolves to
-/// this variant. Making `Mpv` the default again would silently restore the
-/// broken behaviour on every upgrade.
+/// Automatic mode always uses the integrated player. External Android apps
+/// remain opt-in expert choices; old serialized variants stay readable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PlayerBackend {
     /// MX Player (free `…ad`, falling back to Pro `…pro`).
-    #[default]
     MxPlayer,
     /// VLC for Android.
     Vlc,
     /// Android's resolver / chooser — any installed video player.
     System,
     /// Built-in libmpv. Also the only backend available on desktop.
+    #[default]
     Mpv,
     /// MX Player integrated capability - embedded player without needing to install MX Player app.
     MxPlayerIntegrated,
@@ -349,6 +349,8 @@ pub struct Settings {
     /// Opt in to AVKit's full-screen controls; Dado's controls are the default.
     #[serde(default)]
     pub ios_native_player: bool,
+    #[serde(default)]
+    pub ios_playback_engine: IosPlaybackEngine,
     #[serde(default = "default_cache", alias = "cache_mb")]
     pub cache_secs: u64,
     #[serde(default = "default_timeout")]
@@ -438,6 +440,7 @@ impl Default for Settings {
             subtitle_language: String::new(),
             subtitles_enabled: false,
             ios_native_player: false,
+            ios_playback_engine: IosPlaybackEngine::Auto,
             cache_secs: default_cache(),
             network_timeout_s: default_timeout(),
             theme: Theme::System,
@@ -456,15 +459,40 @@ impl Default for Settings {
             sub_size: default_sub_size(),
             user_agent: String::new(),
             tls_verify: false,
-            player_backend: PlayerBackend::MxPlayer,
-            live_format: LiveFormat::Ts,
+            player_backend: PlayerBackend::Mpv,
+            live_format: if cfg!(target_os = "ios") {
+                LiveFormat::Hls
+            } else {
+                LiveFormat::Ts
+            },
             tv_mode: TvMode::Auto,
-            settings_version: 2,
+            settings_version: 5,
         }
     }
 }
 
 impl Settings {
+    /// Restore playback compatibility without touching profiles or personal UI/language preferences.
+    pub fn automatic_playback(&mut self) {
+        self.preset_standard();
+        self.player_backend = PlayerBackend::Mpv;
+        self.ios_native_player = false;
+        self.ios_playback_engine = IosPlaybackEngine::Auto;
+        self.network_timeout_s = default_timeout();
+        self.user_agent.clear();
+        #[cfg(target_os = "ios")]
+        {
+            self.live_format = LiveFormat::Hls;
+        }
+    }
+
+    pub fn effective_player_backend(&self) -> PlayerBackend {
+        if self.settings_mode == SettingsMode::Easy {
+            PlayerBackend::Mpv
+        } else {
+            self.player_backend
+        }
+    }
     pub fn startup_profile<'a>(&self, profiles: &'a [Profile]) -> Option<&'a Profile> {
         if self.signed_out {
             return None;
@@ -732,6 +760,27 @@ pub fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_playback_is_internal_and_experiments_are_opt_in() {
+        let mut s = Settings {
+            player_backend: PlayerBackend::Vlc,
+            ..Settings::default()
+        };
+        assert_eq!(s.effective_player_backend(), PlayerBackend::Mpv);
+        s.settings_mode = SettingsMode::Expert;
+        assert_eq!(s.effective_player_backend(), PlayerBackend::Vlc);
+        s.ios_native_player = true;
+        s.ios_playback_engine = IosPlaybackEngine::Apple;
+        s.hwdec = HwDec::Off;
+        s.audio_language = "de".into();
+        s.automatic_playback();
+        assert_eq!(s.player_backend, PlayerBackend::Mpv);
+        assert_eq!(s.ios_playback_engine, IosPlaybackEngine::Auto);
+        assert!(!s.ios_native_player);
+        assert_eq!(s.hwdec, HwDec::AutoSafe);
+        assert_eq!(s.audio_language, "de");
+    }
 
     #[test]
     fn profile_debug_never_leaks_credentials() {

@@ -165,6 +165,10 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
         } else {
             SettingsMode::Expert
         };
+        if i == 0 {
+            app.settings.automatic_playback();
+            *player_changed = true;
+        }
         app.save_settings_now();
     }
     ui.add_space(4.0);

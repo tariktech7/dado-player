@@ -49,7 +49,8 @@ export interface Settings {
   theme: "dark" | "light" | "system";
   autoplayLast: boolean;
   liveFormat: "m3u8" | "ts";
-  player: "avplay" | "html";
+  player: "auto" | "avplay" | "html";
+  expertMode: boolean;
   aspect: "fit" | "fill" | "stretch";
   bufferSeconds: number;
   timeoutSeconds: number;

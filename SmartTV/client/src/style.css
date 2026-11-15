@@ -230,11 +230,11 @@ hr {
 .brand-copy { display: flex; flex-direction: column; min-width: 0; }
 .brand-copy strong { line-height: 1.1; }
 .brand .trial-badge { font-size: 15px; line-height: 20px; color: var(--accent); letter-spacing: 0; }
-.nav-collapsed .brand-copy { display: none; }
+
 .navigation { position: relative; }
-.nav-collapsed .trial-badge { display: none; }
-.trial-badge-compact { display: none; }
-.nav-collapsed .trial-badge-compact { display: block; color: var(--accent); font-size: 13px; line-height: 20px; text-align: center; }
+
+.trial-badge-compact { position: absolute; top: 58px; left: 0; width: 80px; opacity: 0; pointer-events: none; font-size: 13px; line-height: 18px; text-align: center; }
+.nav-collapsed .trial-badge-compact { opacity: 1; color: var(--accent); font-size: 13px; line-height: 20px; text-align: center; }
 .navigation nav {
   display: flex;
   flex-direction: column;
@@ -1236,7 +1236,7 @@ hr {
 .shell {
   --nav-width: 276px;
   grid-template-columns: var(--nav-width) minmax(0, 1fr);
-  transition: grid-template-columns 0.16s ease-out;
+  /* Width changes once. navigation-motion.ts animates only transforms. */
 }
 .shell.nav-collapsed {
   --nav-width: 80px;
@@ -1257,11 +1257,26 @@ hr {
   overflow: hidden;
   flex-shrink: 0;
 }
-.nav-collapsed .brand strong,
+.navigation .brand-copy, .navigation .nav-label, .navigation footer {
+  transition: opacity 150ms ease-out, transform 220ms cubic-bezier(.22,1,.36,1);
+}
+.navigation .brand-copy { position: absolute; left: 64px; }
+.navigation .nav-label { position: absolute; left: 70px; }
+.nav-collapsed .brand-copy,
 .nav-collapsed .navigation .nav-label,
 .nav-collapsed .navigation footer {
-  display: none;
+  opacity: 0;
+  transform: translate3d(-8px, 0, 0);
+  pointer-events: none;
 }
+.navigation:before {
+  right: auto;
+  width: 382px;
+  transform-origin: left center;
+  transition: transform 220ms cubic-bezier(.22,1,.36,1);
+  will-change: transform;
+}
+.nav-collapsed .navigation:before { transform: scaleX(0.486911); }
 .nav-collapsed .navigation nav button {
   justify-content: center;
   padding: 12px;

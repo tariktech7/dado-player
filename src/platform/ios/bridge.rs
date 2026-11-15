@@ -110,7 +110,7 @@ pub fn native_player(enabled: bool) {
 }
 
 pub fn configure(settings: &crate::types::Settings) {
-    let value = serde_json::json!({"buffer":settings.cache_secs.clamp(5,600),"timeout":settings.network_timeout_s.clamp(5,120),"subtitleSize":settings.sub_size.clamp(20.0,120.0),"userAgent":settings.user_agent});
+    let value = serde_json::json!({"buffer":settings.cache_secs.clamp(5,600),"timeout":settings.network_timeout_s.clamp(5,120),"subtitleSize":settings.sub_size.clamp(20.0,120.0),"userAgent":settings.user_agent,"engine":settings.ios_playback_engine});
     if let Ok(json) = std::ffi::CString::new(value.to_string()) {
         unsafe { dado_host_options(json.as_ptr()) };
     }

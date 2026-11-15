@@ -7,7 +7,9 @@ use super::focus;
 use super::tokens::*;
 use super::Layout;
 use crate::app::App;
-use crate::types::{HwDec, LiveFormat, PlayerBackend, Theme, TvMode};
+#[cfg(not(target_os = "ios"))]
+use crate::types::{HwDec, PlayerBackend};
+use crate::types::{LiveFormat, SettingsMode, Theme, TvMode};
 
 pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
     let mut changed = false;
@@ -26,6 +28,20 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     components::storage_banner(ui, storage_failed);
                     #[cfg(target_os = "windows")]
                     crate::licensing::settings(ui);
+
+                    components::section(ui, "Einstellungen");
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, mode) in [("Automatisch", SettingsMode::Easy), ("Expertenmodus", SettingsMode::Expert)] {
+                            let r = components::chip(ui, label, app.settings.settings_mode == mode);
+                            if focus::clicked(ui, &r) {
+                                app.settings.settings_mode = mode;
+                                if mode == SettingsMode::Easy { app.settings.automatic_playback(); }
+                                changed = true;
+                            }
+                        }
+                    });
+                    let expert = app.settings.settings_mode == SettingsMode::Expert;
+                    if !expert { ui.small("Integrierte Wiedergabe mit automatischer Formatauswahl. Weitere Player- und Netzwerkoptionen im Expertenmodus."); }
 
                     // ---- appearance ----
                     components::section(ui, "Darstellung");
@@ -73,7 +89,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     // ---- playback ----
                     components::section(ui, "Wiedergabe");
                     #[cfg(target_os = "ios")]
-                    {
+                    if expert {
                         ui.label("Player-Oberfläche");
                         ui.horizontal_wrapped(|ui| {
                             for (label, native) in [("Dado Player", false), ("Apple Player", true)]
@@ -90,6 +106,15 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                                 }
                             }
                         });
+                        ui.label("Decoder");
+                        ui.horizontal_wrapped(|ui| {
+                            use crate::types::IosPlaybackEngine as Engine;
+                            for (label, engine) in [("Automatisch", Engine::Auto), ("Apple AVPlayer", Engine::Apple), ("VLC", Engine::Vlc)] {
+                                let r = components::chip(ui, label, app.settings.ios_playback_engine == engine);
+                                if focus::clicked(ui, &r) { app.settings.ios_playback_engine = engine; changed = true; }
+                            }
+                        });
+                        ui.small("Apple-Oberfläche erfordert AVPlayer; dessen unterstützte Formate gelten dann weiterhin.");
                         ui.label(
                             egui::RichText::new("Gilt ab der nächsten Wiedergabe.")
                                 .font(reg(FS_CAP))
@@ -104,6 +129,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         app.settings.auto_play_last = v;
                         changed = true;
                     }
+                    if expert {
                     if components::stepper_row(
                         ui,
                         "Puffer",
@@ -127,8 +153,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         changed = true;
                     }
 
-                    #[cfg(target_os = "ios")]
-                    ui.label("Wiedergabe mit Apple AVPlayer");
+
                     #[cfg(not(target_os = "ios"))]
                     {
                         // ---- picture ----
@@ -153,7 +178,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         components::section(ui, "Player");
                         ui.label(
                             egui::RichText::new(
-                                "Standard: MX Player. Externe Player öffnen den Stream in \
+                                "Standard: integrierter Player. Externe Player öffnen den Stream in \
                              einer anderen App; „Integriert\" nutzt den eingebauten \
                              libmpv-Player (auf dem Desktop immer aktiv).",
                             )
@@ -209,6 +234,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                         changed = true;
                     }
 
+                    } // expert playback options
                     components::section(ui, "Ton & Untertitel");
                     let mut reveal = false;
                     changed |= components::field(ui, "Bevorzugte Audiosprache", &mut app.settings.audio_language, "z. B. de, en, tr", components::Kb::Text, &mut reveal).changed();
@@ -217,11 +243,13 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
                     ui.label("Untertitelgröße");
                     changed |= ui.add(egui::Slider::new(&mut app.settings.sub_size, 20.0..=120.0)).changed();
                     ui.small("Sprachen und Größe gelten ab der nächsten Wiedergabe im integrierten Player. Externe Android-Player verwenden eigene Einstellungen.");
+                    if expert {
                     components::section(ui, "Netzwerk");
                     changed |= components::field(ui, "Player-User-Agent", &mut app.settings.user_agent, "Leer = Standard", components::Kb::Text, &mut reveal).changed();
                     #[cfg(target_os = "ios")]
                     ui.small("Ein eigener Player-User-Agent wird ab iOS 16 unterstützt.");
 
+                    }
                     // ---- profile ----
                     components::section(ui, "Profil");
                     if let Some(p) = app.active_profile.clone() {

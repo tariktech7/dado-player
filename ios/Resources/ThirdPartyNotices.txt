@@ -1,0 +1,18 @@
+Dado Player iOS — additional playback library
+
+MobileVLCKit 3.7.3 / libVLC, Copyright the VideoLAN and VLC authors.
+Distributed unmodified as a dynamically linked framework under LGPL 2.1 or later.
+The complete license is included beside this file as VLCKit-COPYING.txt.
+
+Official SDK archive (also used by our checksum-pinned build script):
+https://download.videolan.org/cocoapods/prod/MobileVLCKit-3.7.3-319ed2c0-79128878.tar.xz
+Corresponding upstream source and build instructions:
+https://code.videolan.org/videolan/VLCKit/-/tree/319ed2c0
+https://code.videolan.org/videolan/vlc/-/tree/79128878
+
+The library is embedded in Frameworks/MobileVLCKit.framework. It is not merged
+into the application executable. A compatible modified framework can replace
+it before re-signing the app with your own development identity. Dado Player
+does not restrict modification, reverse engineering for debugging such changes,
+or replacement of this LGPL library. Apple's platform code-signing requirements
+continue to apply. Dado Player is not affiliated with or endorsed by VideoLAN.

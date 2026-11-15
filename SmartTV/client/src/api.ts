@@ -8,6 +8,11 @@ import {
   emptyCatalog,
 } from "./types";
 import { parseXmltv } from "./xmltv";
+// Match native Xtream extension normalization; preserve real MKV/AVI files.
+export function streamExtension(value: unknown): string {
+  const clean = String(value ?? "").trim().replace(/^\.+/, "").toLowerCase();
+  return /^[a-z0-9]{1,8}$/.test(clean) ? clean : "mp4";
+}
 export function httpUrl(value: string): string {
   const u = new URL(value);
   if (!["http:", "https:"].includes(u.protocol))
@@ -82,7 +87,7 @@ export class Provider {
   }
   stream(kind: string, id: unknown, extension: string): string {
     const p = this.profile;
-    return `${hostUrl(p.host)}/${kind}/${encodeURIComponent(p.username)}/${encodeURIComponent(p.password)}/${encodeURIComponent(String(id))}.${extension.replace(/[^a-zA-Z0-9]/g, "") || "mp4"}`;
+    return `${hostUrl(p.host)}/${kind}/${encodeURIComponent(p.username)}/${encodeURIComponent(p.password)}/${encodeURIComponent(String(id))}.${streamExtension(extension)}`;
   }
   async catalog(): Promise<Catalog> {
     if (this.profile.kind === "M3u")

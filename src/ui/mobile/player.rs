@@ -165,7 +165,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
             }
             let code = unsafe { dado_host_error_code() };
             (code != 0)
-                .then(|| format!("AVPlayer-Fehler {code}. Streamformat und Verbindung prüfen."))
+                .then(|| format!("Wiedergabe-Fehler {code}. Streamformat und Verbindung prüfen."))
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {

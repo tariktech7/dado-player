@@ -140,3 +140,19 @@ Offizielle Grundlagen:
 [Web-Engines](https://developer.samsung.com/smarttv/develop/specifications/web-engine-specifications.html),
 [Zertifikate](https://developer.samsung.com/smarttv/develop/getting-started/setting-up-sdk/creating-certificates.html),
 [TV-Geräteverbindung](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html).
+
+### 0.6.1 playback and navigation
+
+Default playback uses AVPlay and Dado controls, with one HTML-video attempt on
+native playback failure using the unchanged original URL and resume position.
+The expert switch reveals forced engines/live format/buffer/network overrides.
+Settings groups are spatial focus zones: Left crosses the neighboring settings
+column before reaching navigation, Up/Down reaches the next group in the same
+column. Back returns to navigation, then asks before exiting (open inputs,
+dialogs and playback stages close first).
+
+`navigation-motion.ts` applies one grid layout change and animates only visual
+transform offsets. It avoids grid-width transitions and whole-app renders on
+focus, supports mid-animation reversal and honors prefers-reduced-motion. Browser
+checks validate stable layout widths while offsets change; device smoothness is
+a separate hardware acceptance check.

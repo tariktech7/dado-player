@@ -116,3 +116,25 @@ Staffelbuttons stehen in einer horizontal scrollbaren Zeile. Die Folgenliste dar
 unabhängig vom Kopf und bleibt sofort sichtbar. Ohne neue Auswahl springt das Öffnen anhand
 des gespeicherten Fortschritts zur passenden Staffel und Folge; die bestehende 60-Sekunden-
 Regel für den Play-Button gilt weiterhin. Staffelwechsel setzt nur die Folgenansicht um.
+
+## Tizen 0.6.1: Fokus und Bewegung
+
+Die Einstellungen besitzen unabhängige Zonen für Lizenz, Darstellung,
+Wiedergabe, Ton/Untertitel, Netzwerk und Profile/Updates. Links aus der rechten
+Spalte führt zuerst zur benachbarten linken Einstellungsgruppe. Erst von dort
+geht es zur Hauptnavigation. Hoch/Runter erreicht weitere Gruppen derselben
+Spalte; jede Gruppe merkt ihren letzten Eintrag. Checkboxen sind keine aktiven
+Texteingaben und dürfen die Richtungstasten nicht verschlucken.
+
+Zurück schließt zunächst aktive Eingaben, Auswahllisten, Dialoge und die
+bestehenden Vollbild-/Vorschaustufen. Im Inhaltsmenü führt Zurück zur
+Hauptnavigation, ohne das Menü auf Startseite umzuschalten. Ein weiteres Zurück
+in der Hauptnavigation zeigt die bestätigungspflichtige Beenden-Abfrage.
+
+Keine Animation von grid-template-columns oder Breiten über mehrere Frames:
+Nach einmaligem Layoutwechsel werden Spalten/Icon-Positionen mittels FLIP und
+Web Animations mit translate3d über 220 ms bewegt. Titel verschwinden per
+opacity/transform. Fokuswechsel verursachen kein Resize/Repaint des gesamten
+App-Baums. Schnelle Richtungswechsel übernehmen die gerade sichtbare Position.
+Reduzierte Bewegung deaktiviert diese Animationen. Native AVPlay-Geometrie wird
+nach Abschluss synchronisiert; dessen feste rechte Vorschau bleibt verankert.

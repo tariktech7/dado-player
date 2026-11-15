@@ -1757,15 +1757,14 @@ impl App {
         };
 
         // ---- external player (Android) ----
-        // The bundled libmpv is deliberately conservative: Live-TS and series
-        // containers fail on some devices while a plain .mp4 movie plays fine.
-        // MX Player (the default) ships its own demuxers/codecs. When another
-        // app takes over we must NOT switch to our own player view: the user
+        // Automatic mode uses our integrated player. Expert mode may delegate
+        // to an explicitly selected Android app. When another app takes over,
+        // do not switch to our own player view: the user
         // returns with BACK and expects the list where they left it, not a
         // black internal player with a stale stream.
         #[cfg(target_os = "android")]
         {
-            let backend = self.settings.player_backend;
+            let backend = self.settings.effective_player_backend();
             // Try external player first, but not for integrated capabilities
             if backend.is_external() && backend != crate::types::PlayerBackend::MxPlayerIntegrated {
                 match crate::platform::open_external(
@@ -1992,7 +1991,7 @@ impl App {
         // internal preview remains as a working fallback.
         #[cfg(target_os = "android")]
         {
-            let backend = self.settings.player_backend;
+            let backend = self.settings.effective_player_backend();
             // For MX Player integrated capability, use it directly without app installation
             if !self.tv && backend == crate::types::PlayerBackend::MxPlayerIntegrated {
                 if crate::platform::open_external(
