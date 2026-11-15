@@ -5,16 +5,24 @@ eine Umwandlung über das USB Demo Packaging Tool im TV Seller Office. Eine norm
 auf Consumer-TVs nicht direkt vom USB-Stick installieren. Die erzeugten Samsung-Dateien wären
 eine TMG und eine zugehörige Lizenzdatei. Das lokale Entwicklerzertifikat ersetzt diese nicht.
 
-Im angemeldeten Seller Office war am 15.11.2026 noch keine Seller-Gruppe eingerichtet und kein
-Tools-/USB-Packaging-Menü sichtbar. Das Formular Membership → Group Information → Create Group
-ist erreichbar. Es verlangt Kontotyp, Land/Region sowie Verkäufer- und Kontaktinformationen
-einschließlich Homepage, Telefonnummer und Adresse. Die Seite weist auf die Anzeige von
-Verkäuferinformationen auf dem TV hin. Diese Angaben müssen vom Betreiber kommen.
+Die Gruppe **DadoPlayer** wurde am 15.11.2026 erfolgreich als **Public Group** angelegt.
+Nach erneuter Anmeldung sind Group Information und Group Members verfügbar. Ein erster
+Versuch hatte beim Abruf der Gruppendaten einen 401-Fehler geliefert; dieser Fehler ist kein
+Nachweis für eine ungültige Homepage oder Support-Adresse. Persönliche Verkäuferdaten werden
+hier nicht dokumentiert.
+
+Auch nach erfolgreicher Gruppenerstellung enthält das tatsächlich angezeigte Hauptmenü nur
+Applications, Membership, 1:1 Q&A, Notification, Guide und Reports. Ein Tools-/USB-Packaging-Menü
+ist für dieses Konto weiterhin nicht sichtbar.
 
 Eine Gruppenerstellung allein ist noch keine bestätigte Berechtigung für USB-Packaging.
 Die Oberfläche unterscheidet Public Groups und Partner Groups; für letztere nennt sie einen
-Samsung-Vertrag und die Zustimmung eines Content Managers. Der tatsächliche Zugang zum
-USB-Werkzeug und die Kompatibilität mit dem Ziel-TV müssen danach erneut geprüft werden.
+Samsung-Vertrag und die Zustimmung eines Content Managers. Die aufgerufene Partnerschaftsseite
+verlangt ausdrücklich die E-Mail-Adresse des eigenen Samsung Content Managers und einen Kommentar.
+Es wurde kein Partnerschaftsantrag und keine Supportnachricht abgesendet. Ohne einen entsprechenden
+Samsung-Kontakt kann dieses Formular nicht wahrheitsgemäß abgeschlossen werden.
+Der tatsächliche Zugang zum USB-Werkzeug und die Kompatibilität mit dem Ziel-TV müssten auch
+nach einer solchen Freigabe erneut geprüft werden.
 
 ## Vorbereiteter Buildweg
 
