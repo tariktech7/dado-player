@@ -151,7 +151,11 @@ impl State {
                 if left == 0 {
                     "Testzeit abgelaufen".into()
                 } else {
-                    format!("Noch {} Tage Testzeit", (left + 86399) / 86400)
+                    let days = (left + 86399) / 86400;
+                    format!(
+                        "Noch {days} {} Testzeit",
+                        if days == 1 { "Tag" } else { "Tage" }
+                    )
                 }
             }
             None => "Testzeit noch nicht gestartet".into(),
@@ -311,6 +315,11 @@ pub fn refresh(ctx: &Context) {
     });
 }
 pub fn settings(ui: &mut Ui) {
+    ui.heading("Lizenz & Gerät");
+    license_controls(ui);
+}
+
+fn license_controls(ui: &mut Ui) {
     let (text, code, macs, error, busy, started, permanent) = {
         let s = state().lock().unwrap();
         (
@@ -323,28 +332,33 @@ pub fn settings(ui: &mut Ui) {
             s.claims.as_ref().is_some_and(|c| c.kind == "permanent"),
         )
     };
-    ui.heading("Lizenz & Gerät");
-    ui.label(egui::RichText::new(text).strong());
+    ui.label(
+        egui::RichText::new(text)
+            .color(crate::theme::accent(ui))
+            .strong(),
+    );
+    ui.add_space(8.0);
     ui.horizontal_wrapped(|ui| {
-        ui.label(format!("Geräte-ID: {code}"));
-        if ui.button("Kopieren").clicked() {
+        ui.label("Geräte-ID");
+        ui.label(egui::RichText::new(&code).monospace());
+        if ui.small_button("ID kopieren").clicked() {
             ui.output_mut(|o| o.copied_text = code.clone());
         }
     });
-    if macs.is_empty() {
-        ui.label("MAC-Adresse: Nicht verfügbar");
-    } else {
-        for mac in macs {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(format!("MAC-Adresse: {mac}"));
-                if ui.button("Kopieren").clicked() {
-                    ui.output_mut(|o| o.copied_text = mac.clone());
-                }
-            });
+    ui.horizontal_wrapped(|ui| {
+        ui.label("MAC-Adresse");
+        if let Some(mac) = macs.first() {
+            ui.label(egui::RichText::new(mac).monospace());
+            if ui.small_button("MAC kopieren").clicked() {
+                ui.output_mut(|o| o.copied_text = mac.clone());
+            }
+        } else {
+            ui.label("Nicht verfügbar – bitte Geräte-ID verwenden");
         }
-    }
+    });
+    ui.add_space(12.0);
     if !error.is_empty() {
-        ui.label(error);
+        ui.colored_label(crate::theme::DANGER, error);
     }
     if !enabled() {
         ui.label("Lizenzdienst wird eingerichtet. Noch keine Testzeit gestartet.");
@@ -360,15 +374,28 @@ pub fn settings(ui: &mut Ui) {
                 } else if started {
                     "Freischaltung abrufen"
                 } else {
-                    "7 Tage kostenlos testen / Freischaltung abrufen"
+                    "7 Tage kostenlos testen"
                 }
-            }),
+            })
+            .min_size(egui::vec2(0.0, 42.0))
+            .fill(crate::theme::accent_fill(ui)),
         )
         .clicked()
     {
         refresh(ui.ctx());
     }
-    ui.small("Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen benötigen anschließend keinen Lizenzserver.");
+    if !started
+        && ui
+            .add_enabled(
+                !busy && enabled(),
+                egui::Button::new("Bereits freigeschaltet? Lizenz abrufen"),
+            )
+            .clicked()
+    {
+        refresh(ui.ctx());
+    }
+    ui.add_space(8.0);
+    ui.label(egui::RichText::new("Nach der Freigabe einmal abrufen. Danach Unlimited – ohne automatische Lizenz-Serverabfragen.").small().color(crate::theme::muted(ui)));
     ui.add_space(12.0);
 }
 
@@ -381,20 +408,41 @@ pub fn blocked_screen(ctx: &Context) {
         .as_ref()
         .is_some_and(|c| c.kind == "trial");
     egui::CentralPanel::default().show(ctx, |ui| {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.add_space(32.0);
-            ui.heading("Dado Player");
-            ui.add_space(16.0);
-            ui.heading(if expired { "Ihre Testversion ist abgelaufen" } else { "Willkommen bei Dado Player" });
-            ui.label(if expired {
-                "Die 7 Tage Testzeit sind vorbei. Zur weiteren Nutzung benötigen Sie eine dauerhafte Freischaltung."
-            } else {
-                "Testen Sie Dado Player 7 Tage kostenlos. Starten Sie die Testversion einmal mit Internetverbindung oder rufen Sie eine vorhandene Freischaltung ab."
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let available = ui.available_size();
+            let padding = if available.x < 480.0 { 16.0 } else { 32.0 };
+            let content_width = (available.x - padding * 2.0 - 32.0).clamp(120.0, 540.0);
+            ui.allocate_ui_with_layout(available, egui::Layout::top_down(egui::Align::Center), |ui| {
+                ui.add_space(((available.y - 510.0) * 0.5).clamp(12.0, 180.0));
+                egui::Frame::none()
+                    .fill(ui.visuals().window_fill)
+                    .stroke(egui::Stroke::new(1.0_f32, ui.visuals().widgets.noninteractive.bg_stroke.color))
+                    .rounding(24.0)
+                    .inner_margin(egui::Margin::same(padding))
+                    .show(ui, |ui| {
+                        ui.set_width(content_width);
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                            ui.horizontal(|ui| {
+                                crate::ui::brand_mark(ui, 48.0);
+                                ui.add_space(8.0);
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new("Dado Player").size(23.0).strong());
+                                    ui.label(egui::RichText::new("WINDOWS · LIZENZ & GERÄT").size(11.0).color(crate::theme::muted(ui)));
+                                });
+                            });
+                            ui.add_space(22.0);
+                            ui.label(egui::RichText::new(if expired { "Ihre Testversion ist abgelaufen" } else { "Dein Player. 7 Tage kostenlos." }).size(27.0).strong());
+                            ui.add_space(8.0);
+                            ui.label(if expired { "Deine Testzeit ist vorbei. Lass dein Gerät manuell freischalten und rufe die Freigabe hier ab." } else { "Starte deine Testversion einmal online. Danach kannst du Dado Player 7 Tage nutzen – auch offline." });
+                            ui.add_space(20.0);
+                            ui.separator();
+                            ui.add_space(12.0);
+                            license_controls(ui);
+                            ui.label(egui::RichText::new("Für die manuelle Freigabe genügt deine Geräte-ID oder die angezeigte MAC-Adresse. Profile und Favoriten bleiben erhalten.").small().color(crate::theme::muted(ui)));
+                        });
+                    });
+                ui.add_space(16.0);
             });
-            ui.label("Nennen Sie für die manuelle Freischaltung Ihre Geräte-ID oder eine der unten angezeigten MAC-Adressen. Nach der Freigabe wählen Sie „Freischaltung abrufen“. Ihre Profile und Favoriten bleiben gespeichert.");
-            ui.add_space(16.0);
-            settings(ui);
-            ui.small("Eine gültige Testversion funktioniert auch offline. Nach dauerhafter Freischaltung: Unlimited, ohne automatische Lizenz-Serverabfragen.");
         });
     });
 }

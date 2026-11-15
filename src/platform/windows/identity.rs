@@ -38,13 +38,33 @@ pub fn mac_addresses() -> Vec<String> {
     if unsafe { GetAdaptersInfo(adapter, &mut size) } != 0 {
         return Vec::new();
     }
-    let mut rows = Vec::new();
+    let mut rows: Vec<(bool, String)> = Vec::new();
     for _ in 0..256 {
         if adapter.is_null() {
             break;
         }
         let a = unsafe { &*adapter };
+        let description = a
+            .Description
+            .iter()
+            .take_while(|b| **b != 0)
+            .map(|b| *b as u8 as char)
+            .collect::<String>()
+            .to_lowercase();
+        let virtual_adapter = [
+            "virtual",
+            "wi-fi direct",
+            "wifi direct",
+            "hyper-v",
+            "vmware",
+            "bluetooth",
+            "tunnel",
+            "vpn",
+        ]
+        .iter()
+        .any(|name| description.contains(name));
         if matches!(a.Type, 6 | 71)
+            && !virtual_adapter
             && a.AddressLength == 6
             && a.Address[..6].iter().any(|b| *b != 0)
         {
@@ -53,11 +73,34 @@ pub fn mac_addresses() -> Vec<String> {
                 .map(|b| format!("{b:02X}"))
                 .collect::<Vec<_>>()
                 .join(":");
-            if !rows.contains(&value) {
-                rows.push(value);
+            let has_ip = a
+                .IpAddressList
+                .IpAddress
+                .String
+                .iter()
+                .take_while(|b| **b != 0)
+                .map(|b| *b as u8 as char)
+                .collect::<String>()
+                .parse::<std::net::Ipv4Addr>()
+                .is_ok_and(|ip| !ip.is_unspecified());
+            let has_gateway = a
+                .GatewayList
+                .IpAddress
+                .String
+                .iter()
+                .take_while(|b| **b != 0)
+                .map(|b| *b as u8 as char)
+                .collect::<String>()
+                .parse::<std::net::Ipv4Addr>()
+                .is_ok_and(|ip| !ip.is_unspecified());
+            if !rows.iter().any(|(_, mac)| *mac == value) {
+                rows.push((has_ip && has_gateway, value));
             }
         }
         adapter = a.Next;
     }
-    rows
+    // Display and register the same primary adapter; Wi-Fi Direct duplicates
+    // must not look like four different activation identities.
+    rows.sort_by_key(|(active, _)| !*active);
+    rows.into_iter().map(|(_, mac)| mac).collect()
 }

@@ -1,7 +1,7 @@
 # Dado Player
 
 Aktuell: Windows portable **0.5.5**, Android **0.2.9 / Build 13**, iOS **0.2.6 / Build 8**, Samsung Tizen **0.1.6**.
-[Separate Lizenz-Beta](https://github.com/tariktech7/dado-player/releases/tag/dado-license-beta-2026-11-15): Windows **0.5.6** und Samsung **0.1.7** mit 7 Tagen Testzeit,
+Separate Lizenz-Beta: [Windows **0.5.7**](https://github.com/tariktech7/dado-player/releases/tag/dado-windows-0.5.7) und [Samsung **0.1.7**](https://github.com/tariktech7/dado-player/releases/tag/dado-license-beta-2026-11-15) mit 7 Tagen Testzeit,
 eigenem Sperrbildschirm, MAC/Geräte-ID und manuellem Freischaltabruf. Dauerlizenzen werden
 offline geprüft und lösen keine automatischen Lizenz-Serverabrufe aus. Android/iOS bleiben
 ohne diese Kaufsperre. Betrieb und Einrichtung: [Lizenzverwaltung](licensing/README.md).
@@ -38,7 +38,7 @@ Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wir
 
 ## Portable Windows-Updates
 
-Aktuelle Pakete liegen direkt in `Releases/`; `README.md` und `AKTUELL.json` dort nennen Plattform, Version und SHA-256. Frühere Pakete stehen nach Plattform/Version unter `Releases/Archiv/`. `python packaging/organize_releases.py` ordnet alte Tizen-Versionen und veraltete IPAs ein, ohne Pakete zu löschen. Der Android-Build prüft die Signatur der APK, der iOS-Build erzeugt die IPA für die anschließende Gerätesignierung.
+Aktuelle Pakete liegen direkt in `Releases/`; die Windows-Datei heißt immer **Dado-Player.exe**, ohne Versionsnummer. `windows/package.ps1` ersetzt sie über `packaging/organize_releases.py --install-windows`, prüft die Kopie und sichert die Vorgängerdatei im Archiv. Eine geöffnete/gesperrte EXE führt zu einem klaren Fehler statt einer zweiten aktuellen Datei. `README.md` und `AKTUELL.json` dort nennen Plattform, Version und SHA-256. Frühere Pakete stehen unter `Releases/Archiv/`. `python packaging/organize_releases.py` archiviert frühere Windows-/Tizen-Dateinamen und veraltete IPAs. Der Android-Build prüft die Signatur der APK, der iOS-Build erzeugt die IPA für die anschließende Gerätesignierung.
 
 Die Windows-Version steht in `windows/VERSION`. Zum Paketieren `./windows/package.ps1` mit einer Python-Installation mit Pillow ausführen (optional `-Python <Pfad>`). Die portable EXE steht danach in `Releases/Dado-Player.exe`. Für ein neues Update zuerst die Version erhöhen, testen, den zugehörigen Quellstand committen und das Paket bauen. Anschließend `./windows/publish-portable.ps1` ausführen. Der Befehl veröffentlicht die EXE im privaten Repo als Git-Tag `portable-vX.Y.Z`.
 

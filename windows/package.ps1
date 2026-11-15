@@ -11,5 +11,6 @@ try {
     & $Python packaging/build_portable.py
     if ($LASTEXITCODE) { throw 'Portables Paket konnte nicht erstellt werden.' }
     New-Item -ItemType Directory -Path Releases -Force | Out-Null
-    Copy-Item packaging/out/Dado-Player.exe Releases/Dado-Player.exe
+    & $Python packaging/organize_releases.py --install-windows packaging/out/Dado-Player.exe
+    if ($LASTEXITCODE) { throw 'Dado-Player.exe konnte nicht ersetzt werden. Laufende portable App schließen und Paketierung erneut ausführen.' }
 } finally { Pop-Location }

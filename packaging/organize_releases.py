@@ -4,6 +4,7 @@ import json
 import plistlib
 import re
 import shutil
+import sys
 import zipfile
 from pathlib import Path
 
@@ -19,14 +20,44 @@ def archive(file, platform, version):
     if target.exists():
         digest = hashlib.sha256(file.read_bytes()).hexdigest()[:12]
         target = target.with_name(f"{target.stem}-{digest}{target.suffix}")
-    if target.exists():
-        raise RuntimeError(f"Archive already contains this package: {target}")
+    base = target
+    index = 2
+    while target.exists():
+        target = base.with_name(f"{base.stem}-{index}{base.suffix}")
+        index += 1
     shutil.move(str(file), str(target))
     print(f"Archived {file.name} → {target.relative_to(RELEASES)}")
 
 
+def install_windows(package):
+    """Keep one canonical download and preserve the previous file before replacing it."""
+    package = Path(package).resolve()
+    destination = RELEASES / "Dado-Player.exe"
+    RELEASES.mkdir(exist_ok=True)
+    if not package.is_file():
+        raise RuntimeError(f"Portable package missing: {package}")
+    if package == destination.resolve():
+        return
+    incoming = hashlib.sha256(package.read_bytes()).digest()
+    if destination.exists() and hashlib.sha256(destination.read_bytes()).digest() != incoming:
+        backup = RELEASES / "Archiv" / "Windows" / "vorherige-Datei" / f"Dado-Player-{hashlib.sha256(destination.read_bytes()).hexdigest()[:12]}.exe"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        if not backup.exists():
+            shutil.copy2(destination, backup)
+        elif hashlib.sha256(backup.read_bytes()).digest() != hashlib.sha256(destination.read_bytes()).digest():
+            raise RuntimeError("Windows archive backup differs; refusing to replace it")
+    staging = RELEASES / "Dado-Player.exe.pending"
+    shutil.copy2(package, staging)
+    if hashlib.sha256(staging.read_bytes()).digest() != incoming:
+        raise RuntimeError("Windows download copy verification failed")
+    # A running/locked EXE fails here rather than silently publishing a second name.
+    staging.replace(destination)
+
+
 def main():
     RELEASES.mkdir(exist_ok=True)
+    if len(sys.argv) == 3 and sys.argv[1] == "--install-windows":
+        install_windows(sys.argv[2])
     tv = json.loads((ROOT / "SmartTV/client/package.json").read_text())["version"]
     for file in RELEASES.glob("Dado-Player-Tizen-*.wgt"):
         version = re.fullmatch(r"Dado-Player-Tizen-(\d+\.\d+\.\d+)(?:-unsigned)?\.wgt", file.name)
@@ -49,12 +80,10 @@ def main():
                        version=metadata["CFBundleShortVersionString"], build=metadata["CFBundleVersion"],
                        file=ipa.name)
     windows = (ROOT / "windows/VERSION").read_text().strip()
-    versioned_windows = f"Dado-Player-Windows-{windows}.exe"
-    windows_file = versioned_windows if (RELEASES / versioned_windows).exists() else "Dado-Player.exe"
-    legacy_windows = windows_file != "Dado-Player.exe" and (RELEASES / "Dado-Player.exe").exists()
+    windows_file = "Dado-Player.exe"
     for file in RELEASES.glob("Dado-Player-Windows-*.exe"):
         match = re.fullmatch(r"Dado-Player-Windows-(\d+\.\d+\.\d+)\.exe", file.name)
-        if match and match[1] != windows:
+        if match:
             archive(file, "Windows", match[1])
     gradle = (ROOT / "android/app/build.gradle").read_text()
     android = re.search(r'versionName "([^"]+)"', gradle)[1]
@@ -76,8 +105,6 @@ def main():
     (RELEASES / "AKTUELL.json").write_text(json.dumps(dict(packages=current, ios=ios), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     lines = ["# Aktuelle Dado-Player-Downloads", "", "| Plattform | Version | Datei |", "| --- | --- | --- |"]
     lines += [f"| {p['platform']} | {p['version']} | [{p['file']}]({p['file']}) |" for p in current]
-    if legacy_windows:
-        lines += ["", "Hinweis: Dado-Player.exe ist noch die bisherige geöffnete/gesperrte Datei. Für die neue Windows-Version die oben verlinkte Datei mit Versionsnummer verwenden."]
     ios_note = ("iOS: Aktuelle IPA mit AltStore/Sideloadly und eigener Apple-ID signieren und installieren. "
                 "Ein Paketbuild ersetzt keinen Wiedergabetest auf dem iPhone." if current_ipa else
                 "iOS: Kein aktueller Geräte-Build. Alte IPA-Dateien unter Archiv/iOS enthalten die aktuellen Änderungen nicht.")
