@@ -263,6 +263,7 @@ function PosterGrid({
                   src={i.logo}
                   alt=""
                   loading="lazy"
+                  decoding="async"
                   onError={(e) => {
                     e.currentTarget.style.visibility = "hidden";
                   }}

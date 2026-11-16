@@ -72,7 +72,7 @@ pub enum AppEvent {
     LoginDone(u64, Box<Result<(Profile, Library), String>>),
     Epg(u64, u32, Result<Vec<EpgEntry>, String>),
     SeriesInfo(u64, u32, Result<Vec<Episode>, String>),
-    Image(u64, String, Result<(Vec<u8>, u32, u32), String>),
+    Image(u64, String, Result<egui::ColorImage, String>),
 }
 
 /// Wake the reactive UI when network/decode work finishes, including after the
@@ -98,7 +98,7 @@ pub struct ImageState {
     /// Decoded RGBA bytes tracked for a strict aggregate texture-cache budget.
     pub texture_bytes: HashMap<String, usize>,
     pub total_texture_bytes: usize,
-    pub pending: Vec<(String, Vec<u8>, u32, u32)>,
+    pub pending: Vec<(String, egui::ColorImage)>,
     pub requested: HashSet<String>,
     pub failed: HashSet<String>,
     pub failed_order: std::collections::VecDeque<String>,
@@ -1315,7 +1315,7 @@ impl App {
                 }
                 self.images.requested.remove(&key);
                 match res {
-                    Ok((rgba, w, h)) => self.images.pending.push((key, rgba, w, h)),
+                    Ok(image) => self.images.pending.push((key, image)),
                     Err(_) => {
                         if self.images.failed.insert(key.clone()) {
                             self.images.failed_order.push_back(key);
@@ -2271,9 +2271,8 @@ impl App {
         let started = std::time::Instant::now();
         let mut uploaded = 0;
         while !self.images.pending.is_empty() && uploaded < 2 {
-            let (key, rgba, w, h) = self.images.pending.remove(0);
-            let bytes = rgba.len();
-            let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+            let (key, image) = self.images.pending.remove(0);
+            let bytes = image.pixels.len() * 4;
             let texture = ctx.load_texture(key.clone(), image, egui::TextureOptions::LINEAR);
             self.images
                 .insert_texture(key, texture, bytes, MAX_TEXTURE_CACHE_BYTES);
@@ -2718,12 +2717,18 @@ impl App {
         if self.images.textures.contains_key(&key)
             || self.images.requested.contains(&key)
             || self.images.failed.contains(&key)
+            || self
+                .images
+                .pending
+                .iter()
+                .any(|(pending, _)| pending == &key)
         {
             return;
         }
-        // Keep image work bounded; each decode is capped at 8 MiB RGBA.
-        if self.images.textures.len() + self.images.requested.len() >= 600
-            || self.images.requested.len() >= 8
+        // Cache insertion evicts old entries. A full cache must not prevent
+        // newly scrolled-to covers from ever being requested.
+        if self.images.requested.len() >= 4
+            || self.images.requested.len() + self.images.pending.len() >= 8
         {
             return;
         }
@@ -2731,8 +2736,13 @@ impl App {
         let tx = self.tx.clone();
         let generation = self.login_generation;
         let to = self.settings.network_timeout_s;
+        let edge = if key.starts_with("poster:") || key.starts_with("detail:") {
+            640
+        } else {
+            1280
+        };
         self.rt.spawn(async move {
-            let res = fetch_image(&url, to).await;
+            let res = fetch_image(&url, to, edge).await;
             let _ = tx.send(AppEvent::Image(
                 generation,
                 key,
@@ -3184,9 +3194,157 @@ impl eframe::App for App {
     }
 }
 
-async fn fetch_image(url: &str, timeout_s: u64) -> anyhow::Result<(Vec<u8>, u32, u32)> {
+#[cfg(test)]
+mod scroll_profile {
+    use super::App;
+
+    #[test]
+    fn decoded_cover_waiting_for_upload_is_not_requested_again() {
+        let mut app = App::test_app();
+        app.images.pending.push((
+            "poster:1".into(),
+            egui::ColorImage::new([1, 1], egui::Color32::WHITE),
+        ));
+        app.request_image(
+            "poster:1".into(),
+            "https://provider.invalid/cover.jpg".into(),
+        );
+        assert!(app.images.requested.is_empty());
+        assert_eq!(app.images.pending.len(), 1);
+    }
+
+    #[test]
+    fn virtual_categories_keep_remote_navigation_across_viewport_boundaries() {
+        let mut app = App::test_app();
+        app.tv = true;
+        app.library.vod_categories = (0..120)
+            .map(|i| crate::types::Category {
+                id: format!("provider-{i}"),
+                name: format!("Kategorie {i}"),
+            })
+            .collect();
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx, true);
+        for frame in 0..415 {
+            let keys = if frame > 10 && frame <= 410 && (frame - 11) % 10 == 0 {
+                vec![crate::platform::RemoteKey::Down]
+            } else if frame == 414 {
+                vec![crate::platform::RemoteKey::Ok]
+            } else {
+                vec![]
+            };
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280.0, 800.0),
+                    )),
+                    time: Some(f64::from(frame) / 120.0),
+                    ..Default::default()
+                },
+                |ctx| {
+                    crate::ui::mobile::focus::begin(&keys, 0x6404, false, false, true);
+                    egui::CentralPanel::default()
+                        .show(ctx, |ui| crate::ui::library::show(&mut app, ui, false));
+                    crate::ui::mobile::focus::end();
+                },
+            );
+            if frame == 9 {
+                crate::ui::mobile::focus::request_index(0);
+            }
+        }
+        assert_eq!(app.vod_cat, "provider-37");
+    }
+
+    #[test]
+    fn poster_decode_limits_upload_size_without_stretching_or_upscaling() {
+        for (w, h, expected) in [
+            (1000, 1600, (400, 640)),
+            (1600, 900, (640, 360)),
+            (32, 16, (32, 16)),
+        ] {
+            let mut encoded = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::new_rgba8(w, h)
+                .write_to(&mut encoded, image::ImageFormat::Png)
+                .unwrap();
+            let image = super::decode_image(encoded.get_ref(), 640).unwrap();
+            assert_eq!((image.width() as u32, image.height() as u32), expected);
+            assert_eq!(image.pixels.len(), image.width() * image.height());
+            assert!(
+                image
+                    .pixels
+                    .iter()
+                    .all(|v| *v == egui::Color32::TRANSPARENT),
+                "Transparency must survive downsampling"
+            );
+        }
+    }
+
+    #[test]
+    fn catalogue_scroll_work_is_bounded_by_viewport() {
+        for category_count in [20, 1000] {
+            let mut app = App::test_app();
+            app.library.vod_categories = (0..category_count)
+                .map(|i| crate::types::Category {
+                    id: i.to_string(),
+                    name: format!("Kategorie {i} Filme und Unterhaltung"),
+                })
+                .collect();
+            app.library.movies = (0..20000)
+                .map(|i| crate::types::VodMovie {
+                    id: i,
+                    name: format!("Film {i:05}"),
+                    cover: String::new(),
+                    category_id: "1".into(),
+                    rating: String::new(),
+                    added: None,
+                    container_extension: "mp4".into(),
+                    stream_url: String::new(),
+                    plot: String::new(),
+                })
+                .collect();
+            let ctx = egui::Context::default();
+            crate::theme::apply(&ctx, true);
+            let mut times = Vec::new();
+            let mut shapes = 0;
+            for frame in 0..90 {
+                let start = std::time::Instant::now();
+                let output = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1280.0, 800.0),
+                        )),
+                        time: Some(f64::from(frame) / 120.0),
+                        events: vec![
+                            egui::Event::PointerMoved(egui::pos2(600.0, 400.0)),
+                            egui::Event::Scroll(egui::vec2(0.0, -12.0)),
+                        ],
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default()
+                            .show(ctx, |ui| crate::ui::library::show(&mut app, ui, false));
+                    },
+                );
+                shapes = output.shapes.len();
+                assert!(
+                    shapes < 200,
+                    "Offscreen categories generated {shapes} paint shapes"
+                );
+                let _ = ctx.tessellate(output.shapes, output.pixels_per_point);
+                if frame > 15 {
+                    times.push(start.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            times.sort_by(f64::total_cmp);
+            println!("CATALOGUE CPU categories={category_count} movies=20000 shapes={shapes} median_ms={:.2} p95_ms={:.2}",times[times.len()/2],times[times.len()*95/100]);
+        }
+    }
+}
+
+async fn fetch_image(url: &str, timeout_s: u64, max_edge: u32) -> anyhow::Result<egui::ColorImage> {
     const MAX_ENCODED_BYTES: usize = 8 * 1024 * 1024;
-    const MAX_DECODED_BYTES: u64 = 8 * 1024 * 1024;
 
     let c = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_s.max(5)))
@@ -3205,7 +3363,15 @@ async fn fetch_image(url: &str, timeout_s: u64) -> anyhow::Result<(Vec<u8>, u32,
         }
         bytes.extend_from_slice(&chunk);
     }
-    let mut reader = image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format()?;
+    // Decode/resize away from both the UI and asynchronous network workers.
+    // The renderer never needs a full provider-sized poster texture.
+    tokio::task::spawn_blocking(move || decode_image(&bytes, max_edge)).await?
+}
+
+fn decode_image(bytes: &[u8], max_edge: u32) -> anyhow::Result<egui::ColorImage> {
+    const MAX_DECODED_BYTES: u64 = 8 * 1024 * 1024;
+    anyhow::ensure!(max_edge > 0, "image edge must be positive");
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(MAX_DECODED_BYTES);
     reader.limits(limits);
@@ -3214,8 +3380,17 @@ async fn fetch_image(url: &str, timeout_s: u64) -> anyhow::Result<(Vec<u8>, u32,
     if u64::from(w).saturating_mul(u64::from(h)).saturating_mul(4) > MAX_DECODED_BYTES {
         anyhow::bail!("decoded image exceeds size limit");
     }
+    let img = if w.max(h) > max_edge {
+        img.thumbnail(max_edge, max_edge)
+    } else {
+        img
+    };
+    let (w, h) = (img.width(), img.height());
     let rgba = img.to_rgba8();
-    Ok((rgba.into_raw(), w, h))
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        &rgba,
+    ))
 }
 
 fn favorite_key(key: &str) -> String {
@@ -3575,14 +3750,14 @@ mod tests {
         app.handle_event(AppEvent::Image(
             1,
             "logo:1".into(),
-            Ok((vec![255; 4], 1, 1)),
+            Ok(egui::ColorImage::new([1, 1], egui::Color32::WHITE)),
         ));
         assert!(app.images.pending.is_empty());
         assert!(app.images.requested.contains("logo:1"));
         app.handle_event(AppEvent::Image(
             2,
             "logo:1".into(),
-            Ok((vec![255; 4], 1, 1)),
+            Ok(egui::ColorImage::new([1, 1], egui::Color32::WHITE)),
         ));
         assert_eq!(app.images.pending.len(), 1);
         assert!(!app.images.requested.contains("logo:1"));
@@ -4015,9 +4190,10 @@ mod tests {
         let mut app = App::test_app();
         let ctx = egui::Context::default();
         for i in 0..9 {
-            app.images
-                .pending
-                .push((format!("budget-{i}"), vec![255; 16], 2, 2));
+            app.images.pending.push((
+                format!("budget-{i}"),
+                egui::ColorImage::new([2, 2], egui::Color32::WHITE),
+            ));
         }
         let mut total = 0;
         while !app.images.pending.is_empty() {

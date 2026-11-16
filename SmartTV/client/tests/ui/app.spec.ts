@@ -1100,8 +1100,8 @@ test('OK focuses the movie/series play action, including episodes that arrive la
 
 test('remote scrolling progresses through intermediate positions and honors reduced motion',async({page})=>{
   await fixture(page,true,true);await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();
-  await page.locator('.channel[data-channel="1"]').focus();
-  await page.locator('.channel[data-channel="18"]').focus();
+  await page.locator('.channel[data-channel="1"]').evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));
+  await page.locator('.channel[data-channel="18"]').evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));
   const values=await page.locator('.channel-list').evaluate(async el=>{
     const values:number[]=[];for(let i=0;i<32;i++){values.push(el.scrollTop);await new Promise(requestAnimationFrame);}return values;
   });
@@ -1158,4 +1158,79 @@ test('late seek callbacks cannot seek or revive a decoder after leaving playback
   await page.keyboard.press('Escape');await page.evaluate(()=> (window as any).__lateSeek?.());
   await expect(page.locator('.fullscreen')).toHaveCount(0);await expect(page.locator('#video-host')).toBeHidden();
   expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('NONE');
+});
+
+test('poster remote repeat keeps row order and catches up without scrolling backwards',async({page},info)=>{
+  await bigCatalogue(page);await page.goto('/');
+  await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  await expect(page.locator('.catalog-poster').first()).toBeVisible();
+  await page.locator('.catalog-poster').first().focus();
+  await page.waitForTimeout(300);
+  const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+  const result=await page.evaluate(async()=>{
+    const pane=document.querySelector<HTMLElement>('.catalog-title-list')!;
+    const columns=Number(pane.querySelector<HTMLElement>('[data-focus-grid]')!.dataset.focusGrid);
+    const samples:{top:number,index:number,time:number}[]=[];
+    const start=performance.now();let recording=true;
+    const frame=()=>{samples.push({top:pane.scrollTop,index:Number((document.activeElement as HTMLElement)?.dataset.gridIndex??-1),time:performance.now()-start});if(recording)requestAnimationFrame(frame);};
+    requestAnimationFrame(frame);
+    for(let i=0;i<24;i++){
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+      await new Promise(r=>setTimeout(r,80));
+    }
+    const released=performance.now()-start;
+    await new Promise(r=>setTimeout(r,180));recording=false;
+    const rect=document.activeElement!.getBoundingClientRect(),box=pane.getBoundingClientRect();
+    return {columns,samples,released,visible:rect.top>=box.top && rect.bottom<=box.bottom};
+  });
+  await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
+  await info.attach('poster-scroll-trace',{body:JSON.stringify(result),contentType:'application/json'});
+  console.log('Poster repeat trace',JSON.stringify({columns:result.columns,last:result.samples[result.samples.length-1],visible:result.visible,backsteps:result.samples.filter((s,i,a)=>i>0&&s.top<a[i-1].top-2).length}));
+  expect(result.samples[result.samples.length-1]!.index).toBe(24*result.columns);
+  expect(result.visible).toBe(true);
+  expect(result.samples.filter((s,i,a)=>i>0&&s.top<a[i-1].top-2)).toHaveLength(0);
+});
+
+test('first mounted poster at a deep offset is not the beginning of the catalogue',async({page})=>{
+  await bigCatalogue(page);await page.goto('/');
+  await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  const pane=page.locator('.catalog-title-list');
+  await expect(page.locator('.catalog-poster').first()).toBeVisible();
+  await page.locator('.catalog-poster').first().focus();
+  await expect(page.locator('.shell')).toHaveClass(/nav-collapsed/);
+  await page.waitForTimeout(300);
+  await pane.evaluate(e=>{e.scrollTop=12000;e.dispatchEvent(new Event('scroll'));});
+  await expect.poll(()=>page.locator('.catalog-poster').first().getAttribute('data-grid-index')).not.toBe('0');
+  await page.locator('.catalog-poster').first().evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));
+  await page.waitForTimeout(450);
+  expect(await pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(11000);
+  await expect(page.locator('.catalog-poster:focus')).toHaveCount(1);
+});
+
+test('poster navigation does not measure hundreds of unrelated category buttons per repeat',async({page})=>{
+  await bigCatalogue(page);
+  await page.route('https://provider.invalid/player_api.php**',async route=>{
+    if(new URL(route.request().url()).searchParams.get('action')?.endsWith('_categories'))
+      return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'},json:Array.from({length:600},(_,i)=>({category_id:String(i+1),category_name:`Kategorie ${i+1}`}))});
+    return route.fallback();
+  });
+  await page.goto('/');await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  await expect(page.locator('.catalog-poster').first()).toBeVisible();
+  await page.locator('.catalog-poster').first().focus();await page.waitForTimeout(300);
+  const result=await page.evaluate(async()=>{
+    const original=Element.prototype.getBoundingClientRect;let reads=0;
+    Element.prototype.getBoundingClientRect=function(){reads++;return original.call(this);};
+    try{
+      for(let i=0;i<10;i++){
+        document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+        await new Promise(r=>setTimeout(r,80));
+      }
+      await new Promise(r=>setTimeout(r,180));
+      return {reads,index:Number((document.activeElement as HTMLElement).dataset.gridIndex),columns:Number(document.querySelector<HTMLElement>('[data-focus-grid]')!.dataset.focusGrid)};
+    }finally{Element.prototype.getBoundingClientRect=original;}
+  });
+  console.log('Poster layout reads with 600 categories',JSON.stringify(result));
+  expect(result.index).toBe(result.columns*10);
+  expect(result.reads).toBeLessThan(200);
 });

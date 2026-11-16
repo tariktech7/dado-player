@@ -159,3 +159,13 @@ Actual SDK arm64 build and IPA validation passed (0.6.3 build 12). Visibility,
 rotation, touch controls and real frame pacing still require the user's iPhone test.
 Apple treats preferredFrameRateRange as a best-effort hint:
 https://developer.apple.com/documentation/quartzcore/cadisplaylink/preferredframeraterange
+
+### 0.6.4 catalogue scroll work
+
+The shared Rust catalogue virtualizes category painting/focus registration and
+receives ready ColorImage pixels from a blocking background worker. Provider-size
+poster decoding, thumbnail sizing and RGBA conversion no longer run in the UI frame.
+Poster/detail textures preserve aspect ratio and are capped at 640 pixels per edge;
+other artwork at 1280. There is no additional fixed-rate scrolling timer.
+The ProMotion/window layering architecture from 0.6.3 remains. Version 0.6.4 build 13
+is the new device package; actual iPhone frame pacing still needs device verification.

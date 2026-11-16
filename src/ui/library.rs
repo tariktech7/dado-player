@@ -203,20 +203,12 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     let tv = app.tv;
     ui.label(RichText::new("Kategorien").strong().size(15.0));
     ui.add_space(6.0);
-    let mut cats = vec![
-        ("favorites".to_owned(), "Favoriten".to_owned()),
-        ("all".into(), "Alle".into()),
-        ("recent".into(), "Neu hinzugefügt".into()),
-    ];
-    cats.extend(
-        if series {
-            &app.library.series_categories
-        } else {
-            &app.library.vod_categories
-        }
-        .iter()
-        .map(|v| (v.id.clone(), v.name.clone())),
-    );
+    let cats = if series {
+        &app.library.series_categories
+    } else {
+        &app.library.vod_categories
+    };
+    let count = cats.len() + 3;
     let selected = if series {
         app.series_cat.clone()
     } else {
@@ -226,38 +218,65 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     egui::ScrollArea::vertical()
         .id_source("categories")
         .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for (id, name) in cats {
-                let (rect, _) = ui.allocate_exact_size(
-                    vec2(ui.available_width(), if tv { 39.0 } else { 46.0 }),
-                    Sense::hover(),
-                );
-                let r = ui.interact(rect, ui.id().with((&id, "category")), Sense::click());
-                if selected == id {
-                    ui.painter().rect_filled(
-                        rect.shrink(1.0),
-                        9.0,
-                        crate::theme::selection_surface(ui),
+        .show_viewport(ui, |ui, viewport| {
+            let row_height = if tv { 39.0 } else { 46.0 };
+            let stride = row_height + ui.spacing().item_spacing.y;
+            ui.set_height((stride * count as f32 - ui.spacing().item_spacing.y).max(0.0));
+            // Keep neighbours mounted on BOTH sides for remote navigation.
+            // Offscreen provider categories must not create text/paint/focus
+            // work on every animation frame of the independent poster pane.
+            let start = (viewport.min.y / stride).floor().max(0.0) as usize;
+            let start = start.saturating_sub(2).min(count);
+            let end = ((viewport.max.y / stride).ceil() as usize + 2).min(count);
+            let rect = Rect::from_min_max(
+                pos2(
+                    ui.max_rect().left(),
+                    ui.max_rect().top() + start as f32 * stride,
+                ),
+                pos2(
+                    ui.max_rect().right(),
+                    ui.max_rect().top() + end as f32 * stride,
+                ),
+            );
+            ui.allocate_ui_at_rect(rect, |ui| {
+                for index in start..end {
+                    let (id, name) = match index {
+                        0 => ("favorites", "Favoriten"),
+                        1 => ("all", "Alle"),
+                        2 => ("recent", "Neu hinzugefügt"),
+                        _ => (cats[index - 3].id.as_str(), cats[index - 3].name.as_str()),
+                    };
+                    let (rect, _) = ui.allocate_exact_size(
+                        vec2(ui.available_width(), row_height),
+                        Sense::hover(),
                     );
+                    let r = ui.interact(rect, ui.id().with((&id, "category")), Sense::click());
+                    if selected == id {
+                        ui.painter().rect_filled(
+                            rect.shrink(1.0),
+                            9.0,
+                            crate::theme::selection_surface(ui),
+                        );
+                    }
+                    let mut job = egui::text::LayoutJob::simple(
+                        name.to_owned(),
+                        tokens::reg(if tv { 12.0 } else { 13.0 }),
+                        ui.visuals().text_color(),
+                        (rect.width() - 16.0).max(1.0),
+                    );
+                    job.wrap.max_rows = 2;
+                    let galley = ui.fonts(|f| f.layout_job(job));
+                    ui.painter().galley(
+                        pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
+                        galley,
+                        ui.visuals().text_color(),
+                    );
+                    if hit(ui, &r, tv) {
+                        next = Some(id.to_owned());
+                    }
+                    r.on_hover_text(name);
                 }
-                let mut job = egui::text::LayoutJob::simple(
-                    name.clone(),
-                    tokens::reg(if tv { 12.0 } else { 13.0 }),
-                    ui.visuals().text_color(),
-                    (rect.width() - 16.0).max(1.0),
-                );
-                job.wrap.max_rows = 2;
-                let galley = ui.fonts(|f| f.layout_job(job));
-                ui.painter().galley(
-                    pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
-                    galley,
-                    ui.visuals().text_color(),
-                );
-                if hit(ui, &r, tv) {
-                    next = Some(id);
-                }
-                r.on_hover_text(name);
-            }
+            });
         });
     if let Some(id) = next {
         if selected != id {

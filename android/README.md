@@ -159,3 +159,11 @@ refresh rate at the current physical resolution via preferredRefreshRate. It doe
 not force a display mode or resolution. Android power/thermal policy still applies.
 Display callbacks are registered only while resumed. Shared texture uploads are
 limited per UI frame to avoid loading many covers in one burst.
+
+### 0.6.4 catalogue scroll work
+
+The shared catalogue draws only viewport categories plus remote-navigation neighbours.
+Image decoding, downsampling and ColorImage conversion run on a background worker;
+the UI receives upload-ready pixels. Poster/detail textures keep their proportions
+with a 640-pixel maximum edge. Full caches evict older textures instead of permanently
+blocking new covers. The display-rate hint remains unchanged. Current build: 18.

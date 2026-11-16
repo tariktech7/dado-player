@@ -64,7 +64,9 @@ export function rememberFocus(target: HTMLElement) {
     zone.closest<HTMLElement>("[data-focus-scope]")?.dataset.focusScope || "";
   zoneMemory.set(scope + ":" + zone.dataset.focusZone, {
     key: target.dataset.focusKey || target.textContent || "",
-    index: focusables(zone).indexOf(target),
+    // Semantic keys already identify virtual rows. Scanning/measuring every
+    // category here on every focus event made long provider lists expensive.
+    index: target.dataset.focusKey ? 0 : focusables(zone).indexOf(target),
   });
 }
 function zoneTarget(zone: HTMLElement) {
@@ -95,16 +97,11 @@ export function moveFocus(
   direction: string,
   root: ParentNode = document,
 ): void {
-  const all = focusables(root),
-    current = document.activeElement as HTMLElement;
-  if (!all.includes(current)) {
-    all[0]?.focus();
+  const current = document.activeElement as HTMLElement;
+  if (!current || !root.contains(current) || !current.matches(selector)) {
+    focusables(root)[0]?.focus();
     return;
   }
-  rememberFocus(current);
-  const a = current.getBoundingClientRect(),
-    ax = a.x + a.width / 2,
-    ay = a.y + a.height / 2;
   const horizontal = direction === "ArrowLeft" || direction === "ArrowRight",
     sign = direction === "ArrowLeft" || direction === "ArrowUp" ? -1 : 1;
   const rail = horizontal
@@ -120,14 +117,12 @@ export function moveFocus(
       return;
     }
   }
-  const grid = horizontal
-    ? current.closest<HTMLElement>("[data-focus-grid]")
-    : null;
+  const grid = current.closest<HTMLElement>("[data-focus-grid]");
   if (grid) {
     const cols = Number(grid.dataset.focusGrid),
       index = Number(current.dataset.gridIndex),
-      next = index + sign;
-    if (Math.floor(next / cols) === Math.floor(index / cols)) {
+      next = index + sign * (horizontal ? 1 : cols);
+    if (!horizontal || Math.floor(next / cols) === Math.floor(index / cols)) {
       const target = grid.querySelector<HTMLElement>(
         `[data-grid-index="${next}"]`,
       );
@@ -137,8 +132,17 @@ export function moveFocus(
         return;
       }
     }
+    // At the first/last row stay in the grid. Never use animated screen
+    // coordinates to guess the next row while the current row is moving.
+    if(!horizontal)return;
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
+  if(!horizontal && current.parentElement?.matches('.category-list,.episode-list,.channel-list')) {
+    const sibling=sign<0?current.previousElementSibling:current.nextElementSibling;
+    if(sibling instanceof HTMLElement && sibling.matches(selector)) {
+      sibling.focus({preventScroll:true});scrollFocused(sibling);return;
+    }
+  }
   const settingsGrid = zone?.closest<HTMLElement>(".settings-grid");
   if (horizontal && settingsGrid && zone) {
     const box = zone.getBoundingClientRect();
@@ -170,7 +174,8 @@ export function moveFocus(
       return;
     }
   }
-  const candidates = all
+  const a = current.getBoundingClientRect(),ax=a.x+a.width/2,ay=a.y+a.height/2;
+  const candidates = focusables(!horizontal && zone ? zone : root)
     .filter(
       (el) => el !== current && (horizontal || !zone || zone.contains(el)),
     )
@@ -203,7 +208,16 @@ export function moveFocus(
     scrollFocused(target);
   }
 }
+let pendingFocus:HTMLElement|null=null, focusFrame=0;
 export function scrollFocused(target: HTMLElement): void {
+  pendingFocus=target;
+  if(focusFrame)return;
+  focusFrame=requestAnimationFrame(()=>{
+    focusFrame=0;const next=pendingFocus;pendingFocus=null;
+    if(next?.isConnected && document.activeElement===next)revealFocused(next);
+  });
+}
+function revealFocused(target: HTMLElement): void {
   // Native scrollIntoView also scrolls hidden canvas/document ancestors and
   // destroys the TV safe-area placement. Only scroll our actual content panes.
   for (
@@ -234,11 +248,11 @@ export function scrollFocused(target: HTMLElement): void {
     )
       continue;
     const first = parent.querySelector(selector),
-      virtual = parent.classList.contains("channel-list");
+      virtual = parent.classList.contains("channel-list") || parent.classList.contains("catalog-title-list");
     let top = scrollDestination(parent).top;
     const atStart = (
       (virtual &&
-        target.closest("[data-list-index]")?.getAttribute("data-list-index") ===
+        (target.closest("[data-list-index]")?.getAttribute("data-list-index") ?? target.dataset.gridIndex) ===
           "0") ||
       (!virtual && first === target)
     );

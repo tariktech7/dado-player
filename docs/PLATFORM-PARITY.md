@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.6.3
+# Gemeinsamer Produktstand 0.6.4
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-17 und iOS-Buildnummer 12 bleiben eigenständig monoton steigend. Nach Änderungen
+18 und iOS-Buildnummer 13 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -80,3 +80,20 @@ ist kompiliert, ihre Sichtprüfung auf einem iPhone übernimmt der Nutzer.
 Native Bild-Uploads werden pro Frame begrenzt. iOS/Android melden dem Betriebssystem
 den bevorzugten Displaytakt; iOS pausiert den Timing-Hinweis bei ruhender UI.
 Diese Hinweise garantieren keine bestimmte reale Framerate oder Decoderfähigkeit.
+
+## Scroll-Arbeit pro Frame (0.6.4)
+
+Samsung navigiert Posterreihen anhand stabiler Rasterindizes; laufende Scrollbewegungen
+werden mit einem einzigen requestAnimationFrame-Takt weitergeführt und neu ausgerichtet.
+Keine globale Vermessung aller Kategorien pro Richtungstaste. Virtuelle Listen verwalten
+ihre Spacer selbst (overflow-anchor: none); der erste montierte Eintrag ist nicht zwingend
+der Listenanfang. Verminderte Bewegung bleibt sofort, direkte Benutzerbewegung unterbricht
+die automatische Bewegung. Der Takt verwendet verstrichene Zeit statt einer festen Framezahl.
+
+Der gemeinsame native Katalog verarbeitet nur sichtbare Kategorien plus Nachbarn. Bilder
+werden begrenzt dekodiert, auf höchstens 640 Pixel Kantenlänge für Poster/Detail-Miniaturen
+und 1280 für übrige Artwork-Flächen verkleinert und im Hintergrund in ColorImage umgewandelt.
+Der UI-Thread erhält fertige Pixel; vier laufende Bildanforderungen und zusammen acht
+Anforderungen/fertige Bilder begrenzen die Warteschlange. Der volle Cache darf neue Bilder
+nicht blockieren, und fertige Bilder dürfen vor dem GPU-Upload nicht erneut geladen werden.
+Die begrenzten Uploads pro Frame und vorhandene VSync-/Displaytakt-Anbindung bleiben erhalten.

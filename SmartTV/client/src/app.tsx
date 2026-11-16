@@ -672,9 +672,7 @@ function App() {
       if (target.closest(".shell"))
         setNavCollapsed(!target.closest(".navigation"));
       rememberFocus(target);
-      requestAnimationFrame(() => {
-        if (document.activeElement === target) scrollFocused(target);
-      });
+      scrollFocused(target);
     };
     document.addEventListener("focusin", focus);
     document.addEventListener("visibilitychange", visibility);

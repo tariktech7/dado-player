@@ -170,3 +170,22 @@ Die Fehleransicht bleibt schwarz und undurchsichtig. Zurück aus Datei/Folge sto
 Live-TV kann zur Vorschau zurückkehren. Unveränderte Videorechtecke werden nicht
 bei jedem UI-Render erneut an AVPlay gesendet. Die reale UI-Bildrate bestimmt weiterhin
 die Browser-/Betriebssystem-Uhr; Panel-Hertz sind keine garantierte Browser-Framerate.
+
+### 0.6.4: laufende Scrollbewegung statt neu gestarteter Animation
+
+Dieser Stand ersetzt die native Browser-smooth-scroll-Strategie aus 0.6.2.
+Pro bewegtem Pane läuft genau eine requestAnimationFrame-Schleife. Tastenwiederholung
+ändert nur das Ziel, ohne erneut anzufahren; nach Erreichen des Ziels endet die Schleife.
+Zeitbasierte Annäherung berücksichtigt variable Displayintervalle. Eigene Subpixelwerte
+verhindern Endlosschleifen am letzten Pixel auf Engines mit gerundeten Scrolloffsets.
+Manuelles Scrollen, entfernte Panes und reduced-motion brechen die Animation korrekt ab.
+Fokus-Reveal wird einmal pro Frame gebündelt. Up/Down im Poster-Raster verwendet Zeile/
+Spalte statt der während des Scrollens veränderlichen Bildschirmkoordinaten.
+Semantische Fokus-IDs vermeiden Vollscans in rememberFocus. Virtuelle Sender-/Posterlisten
+deaktivieren Browser-Scroll-Anker; nur Index 0 ist der echte Listenanfang.
+Poster fordern asynchrone Bilddekodierung an. Keine Preact-Neuberechnung pro Scrollpixel.
+
+Regression: 20.000 Titel, 24 Abwärtsschritte im 80-ms-Takt mit 4x gedrosselter CPU;
+korrekte Reihe, keine Rücksprünge, fokussiertes Poster nach Loslassen sichtbar.
+Bei 600 Kategorien benötigen zehn Abwärtsschritte nur 20 Rechteckmessungen.
+Dies sind Browser-Belastungstests, keine Messung der physischen TV-Bildrate.

@@ -21,3 +21,8 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
 - Bei iOS-ABI-Änderungen Header, Rust-Bridge und Swift-Host zusammen ändern. Einen erfolgreichen Paketbuild, eine gültige Gerätesignatur und einen Wiedergabetest auf Hardware getrennt protokollieren.
 - Vor Umstrukturierungen den Git-Stand prüfen. Bestehende APKs, portable Pakete, lokale Signierschlüssel und Referenzdaten erhalten. Zugangsdaten, Schlüssel und generierte Pakete nicht committen. Historische Prüfberichte mit ihrem ursprünglichen Stand aufbewahren.
 - Die aktuelle Windows-Portable im Release-Ordner heißt immer Releases/Dado-Player.exe, ohne Versionsnummer im Dateinamen. Vor Ersetzen alte Pakete unter Releases/Archiv erhalten. windows/package.ps1 und packaging/organize_releases.py müssen diese Regel gemeinsam einhalten; bei gesperrter EXE klar abbrechen, keine zusätzliche versionierte aktuelle EXE anlegen.
+
+- Scroll-Änderungen mit großem Katalog und wiederholten Richtungstasten prüfen, nicht
+  nur durch eine einzelne langsame Fokusbewegung. Arbeit pro Frame muss vom sichtbaren
+  Bereich abhängen; native Bilddekodierung/RGBA-Konvertierung außerhalb des UI-Threads.
+  Builds und Browser-Tests allein bestätigen keine physische Hardware-Framerate.
