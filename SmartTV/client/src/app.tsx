@@ -524,7 +524,7 @@ function App() {
       return;
     }
     if (fullRef.current && !document.querySelector(".modal")) {
-      setFull(false);
+      if(previewRef.current?.kind === 'live')setFull(false);else stop();
       return;
     }
     if (previewRef.current) {
@@ -1747,13 +1747,13 @@ function App() {
           {editing && modal("Profil hinzufügen", profileForm())}
           {full && preview && (
             <div
-              class={`fullscreen ${controlsVisible ? "" : "controls-hidden"}`}
+              class={`fullscreen ${status?.state === "error" ? "playback-failed" : ""} ${controlsVisible ? "" : "controls-hidden"}`}
               onMouseMove={showControls}
               onClick={showControls}
             >
               <div ref={surface} class="full-surface" />
               <div class="player-top glass">
-                <button onClick={() => setFull(false)}>← Zurück</button>
+                <button onClick={() => previewRef.current?.kind === "live" ? setFull(false) : stop()}>← Zurück</button>
                 <span>
                   <small>
                     {preview.kind === "live"
@@ -1987,6 +1987,7 @@ function App() {
 }
 
 function PlayerFeedback({ status }: { status: Player["status"] | undefined }) {
+  if(status?.notice)return <p class="muted" role="status">{status.notice}</p>;
   return status?.state === "loading" ? (
     <p class="muted" role="status">
       Stream wird geladen … {status.buffer}%

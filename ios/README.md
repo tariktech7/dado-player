@@ -142,3 +142,20 @@ on attach, visibility/frame changes, native video layout and asynchronous VLC
 state changes. The VLC drawable also rejects touch input so player gestures
 reach Dado. This addresses the reported iPhone video-over-controls regression;
 only compilation/packaging can be checked locally without the user's iPhone.
+
+### 0.6.3: separate background video window (supersedes 0.6.2)
+
+VideoHost now owns a non-key, non-interactive UIWindow in the same UIWindowScene,
+one window level below the original transparent winit/Metal key window. Both AVPlayer
+and the VLC drawable live in that background window; sibling-layer zPosition alone
+was insufficient on the reported iPhone. Stop hides this window. Apple presentation
+hides it too, and the original window retains keyboard/input ownership.
+
+CADisableMinimumFrameDurationOnPhone enables ProMotion hints. A paused-when-idle
+CADisplayLink requests the screen's maximum refresh rate while UI motion is active;
+it does not render a second UI. The dado_host_motion_active ABI is kept aligned in
+the header, Rust caller, Swift export and build-time symbol checks.
+Actual SDK arm64 build and IPA validation passed (0.6.3 build 12). Visibility,
+rotation, touch controls and real frame pacing still require the user's iPhone test.
+Apple treats preferredFrameRateRange as a best-effort hint:
+https://developer.apple.com/documentation/quartzcore/cadisplaylink/preferredframeraterange

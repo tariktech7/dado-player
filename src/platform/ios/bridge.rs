@@ -68,6 +68,7 @@ pub fn layout_seen() -> bool {
 // ---------------------------------------------------------------- host API ---
 
 extern "C" {
+    fn dado_host_motion_active(active: i32);
     fn dado_host_options(json: *const c_char);
     fn dado_host_native_player(enabled: i32);
     fn dado_host_tracks(buffer: *mut c_char, capacity: i32) -> i32;
@@ -378,6 +379,16 @@ mod native_fields {
         }
     }
     pub fn end_frame(ctx: &egui::Context) {
+        let moving = ctx.requested_repaint_last_frame()
+            || ctx.input(|i| {
+                i.pointer.any_down()
+                    || i.smooth_scroll_delta.length_sq() > 0.01
+                    || !i.events.is_empty()
+            });
+        unsafe {
+            super::dado_host_motion_active(i32::from(moving));
+        }
+
         let frame = ctx.frame_nr();
         ctx.data_mut(|d| {
             if let Some((seen, order)) =

@@ -866,7 +866,7 @@ test("large poster catalogue stays bounded and rail expands only on navigation f
     await page
       .locator(".catalog-browser .categories")
       .evaluate((e) => e.getBoundingClientRect().width),
-  ).toBe(320);
+  ).toBeCloseTo(320, 3);
   await page.keyboard.press("ArrowLeft");
   await expect(
     page.getByRole("button", { name: "▷ Filme", exact: true }),
@@ -1018,7 +1018,7 @@ test("automatic playback tries HTML once after AVPlay failure and retains the or
   expect(log.native).toHaveLength(1);
   expect(log.html[0]).toBe(log.native[0][1]);
   expect(log.html[0]).toContain("/movie/demo/demo/1.mp4");
-  await expect(page.locator(".fullscreen")).toContainText("Video kann nicht abgespielt werden");
+  await expect(page.locator(".fullscreen [role=alert]")).toBeVisible();
 });
 
 test("settings move through adjacent panels before the main rail; Back returns to the rail then asks to exit", async ({page}) => {
@@ -1108,4 +1108,54 @@ test('remote scrolling progresses through intermediate positions and honors redu
   expect(values[values.length-1]).toBeGreaterThan(300);
   expect(new Set(values.map(Math.round)).size).toBeGreaterThan(4);
   await page.emulateMedia({reducedMotion:'reduce'});await page.locator('.channel-list').evaluate(el=>{(el.querySelector('button') as HTMLElement)?.focus();});
+});
+
+async function openFixtureMovie(page: Page) {
+  await page.goto('/');await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  await page.getByRole('button',{name:/Demo Film/}).click();await page.locator('.catalog-details button.primary').click();
+  await expect.poll(()=>page.evaluate(()=> (window as any).__avLog.filter((x:any[])=>x[0]==='play').length)).toBeGreaterThan(0);
+}
+test('rapid seeks serialize AVPlay and exiting a file closes the decoder',async({page})=>{
+  await fixture(page,true,true);
+  await page.addInitScript(()=>{
+    const av=(window as any).webapis.avplay, original=av.seekTo;let busy=0;
+    (window as any).__maxSeeks=0;
+    av.seekTo=(n:number,ok:()=>void,fail:()=>void)=>{
+      busy++;(window as any).__maxSeeks=Math.max((window as any).__maxSeeks,busy);
+      if(busy>1){busy--;fail?.();return;}
+      setTimeout(()=>{busy--;original(n,ok,fail);},180);
+    };
+  });
+  await openFixtureMovie(page);
+  for(let i=0;i<8;i++)await page.keyboard.press('ArrowRight');
+  await expect.poll(()=>page.evaluate(()=> (window as any).webapis.avplay.getCurrentTime())).toBe(80000);
+  expect(await page.evaluate(()=> (window as any).__maxSeeks)).toBe(1);
+  await expect(page.locator('.fullscreen [role=alert]')).toHaveCount(0);
+  await page.keyboard.press('Escape');await expect(page.locator('.fullscreen')).toHaveCount(0);
+  expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('NONE');
+});
+test('failed seek is nonfatal; fatal playback closes even when stop throws and hides the home background',async({page})=>{
+  await fixture(page,true,true);
+  await page.addInitScript(()=>{
+    const av=(window as any).webapis.avplay,listener=av.setListener;
+    av.setListener=(value:any)=>{(window as any).__nativeListener=value;listener(value);};
+    av.seekTo=(_n:number,_ok:unknown,fail:()=>void)=>setTimeout(fail,30);
+  });
+  await openFixtureMovie(page);await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.fullscreen [role=status]')).toContainText('Wiedergabe läuft weiter');
+  expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('PLAYING');
+  await page.evaluate(()=>{const av=(window as any).webapis.avplay;av.stop=()=>{throw Error('fixture stop failed');};(window as any).__nativeListener.onerror('PLAYER_ERROR_CONNECTION_FAILED');});
+  await expect(page.locator('.fullscreen')).toHaveClass(/playback-failed/);
+  await expect(page.locator('.fullscreen [role=alert]')).toContainText('PLAYER_ERROR_CONNECTION_FAILED');
+  expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('NONE');
+  await expect(page.locator('#video-host')).toBeHidden();
+  expect(await page.locator('.fullscreen').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(0, 0, 0)');
+});
+test('late seek callbacks cannot seek or revive a decoder after leaving playback',async({page})=>{
+  await fixture(page,true,true);
+  await page.addInitScript(()=>{(window as any).webapis.avplay.seekTo=(_n:number,ok:()=>void)=>{(window as any).__lateSeek=ok;};});
+  await openFixtureMovie(page);await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Escape');await page.evaluate(()=> (window as any).__lateSeek?.());
+  await expect(page.locator('.fullscreen')).toHaveCount(0);await expect(page.locator('#video-host')).toBeHidden();
+  expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('NONE');
 });

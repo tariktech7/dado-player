@@ -25,6 +25,28 @@ final class RootViewController: UIViewController {
 
     private var lastEnv: Env?
     private var keyboardOverlap: CGFloat = 0
+    private var frameClock: CADisplayLink?
+    private var clockRate = 0
+
+    func setMotionActive(_ active: Bool) {
+        guard view.window != nil else { return }
+        if frameClock == nil {
+            let clock = CADisplayLink(target: self, selector: #selector(displayTick(_:)))
+            clock.isPaused = true
+            clock.add(to: .main, forMode: .common)
+            frameClock = clock
+        }
+        let rate = view.window?.screen.maximumFramesPerSecond ?? 60
+        if clockRate != rate {
+            clockRate = rate
+            frameClock?.preferredFrameRateRange = CAFrameRateRange(minimum: Float(min(60, rate)), maximum: Float(rate), preferred: Float(rate))
+        }
+        frameClock?.isPaused = !active || UIApplication.shared.applicationState != .active
+    }
+
+    // This is a timing hint, not a second renderer. egui/wgpu owns presentation.
+    @objc private func displayTick(_ link: CADisplayLink) { }
+
 
     // MARK: - Installation
 
@@ -82,6 +104,7 @@ final class RootViewController: UIViewController {
     }
 
     deinit {
+        frameClock?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 

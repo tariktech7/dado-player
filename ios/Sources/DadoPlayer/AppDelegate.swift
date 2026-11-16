@@ -6,9 +6,9 @@
 //  needs *a* delegate class to be present in the binary. This is it.
 //
 //  IMPORTANT: it does not create a window. winit creates and owns its own
-//  UIWindow + root view controller when the Rust event loop starts; installing
-//  a second window here would leave one of the two off-screen (black app, or a
-//  touch surface that receives nothing). So didFinishLaunching just returns
+//  UIWindow + root view controller when the Rust event loop starts; creating
+//  an extra key window here would steal winit input. VideoHost creates only a
+//  non-key background decoder window after winit has installed its UI. So didFinishLaunching just returns
 //  true and leaves window ownership entirely to Rust.
 //
 

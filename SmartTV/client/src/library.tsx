@@ -137,7 +137,7 @@ function Description({ text }: { text: string }) {
   useLayoutEffect(() => {
     if (open) close.current?.focus();
   }, [open]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.keyCode === 10009) {

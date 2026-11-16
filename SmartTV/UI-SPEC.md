@@ -158,3 +158,15 @@ beim Wechsel einer Reihe statt für jedes Pixel. Die Senderliste behält bei
 schnellen Richtungstasten den logischen nächsten Sender im DOM, ohne zur
 Vorschau abzuspringen. Android TV/Windows nutzen animiertes egui-Scrolling mit
 minimal nötigem Nachscrollen statt ständigem Zentrieren.
+
+### 0.6.3: Spulen und Decoder-Lebenszyklus
+
+Nur ein AVPlay-seekTo läuft gleichzeitig; weitere 10-Sekunden-Schritte werden zu
+einem absoluten Ziel gebündelt. Ein abgelehntes Ziel lässt Video und Ton weiterlaufen.
+Fataler Fehler, Timeout oder Stop entwerten alte Callbacks und versuchen Listener-Abbau,
+Pause, Stop und Close unabhängig voneinander. Ein fehlerndes Stop darf Close nicht verhindern.
+HTML-Fallback ist nur beim Laden erlaubt, nicht mitten in einer laufenden Wiedergabe.
+Die Fehleransicht bleibt schwarz und undurchsichtig. Zurück aus Datei/Folge stoppt;
+Live-TV kann zur Vorschau zurückkehren. Unveränderte Videorechtecke werden nicht
+bei jedem UI-Render erneut an AVPlay gesendet. Die reale UI-Bildrate bestimmt weiterhin
+die Browser-/Betriebssystem-Uhr; Panel-Hertz sind keine garantierte Browser-Framerate.

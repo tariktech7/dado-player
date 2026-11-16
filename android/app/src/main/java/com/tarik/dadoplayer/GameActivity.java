@@ -451,6 +451,43 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
         }
     }
 
+    private android.hardware.display.DisplayManager refreshManager;
+    private final android.hardware.display.DisplayManager.DisplayListener refreshListener =
+            new android.hardware.display.DisplayManager.DisplayListener() {
+        public void onDisplayAdded(int id) { requestNativeRefreshRate(); }
+        public void onDisplayRemoved(int id) { requestNativeRefreshRate(); }
+        public void onDisplayChanged(int id) { requestNativeRefreshRate(); }
+    };
+
+    private void requestNativeRefreshRate() {
+        android.view.Display display = getWindowManager().getDefaultDisplay();
+        if (display == null) return;
+        android.view.Display.Mode current = display.getMode();
+        float rate = current.getRefreshRate();
+        for (android.view.Display.Mode mode : display.getSupportedModes()) {
+            if (mode.getPhysicalWidth() == current.getPhysicalWidth()
+                    && mode.getPhysicalHeight() == current.getPhysicalHeight()) {
+                rate = Math.max(rate, mode.getRefreshRate());
+            }
+        }
+        android.view.WindowManager.LayoutParams params = getWindow().getAttributes();
+        // Hint only: preserve resolution, HDR, and the OS's thermal/power policy.
+        if (Math.abs(params.preferredRefreshRate - rate) > 0.5f) {
+            params.preferredRefreshRate = rate;
+            getWindow().setAttributes(params);
+        }
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        refreshManager = (android.hardware.display.DisplayManager)getSystemService(Context.DISPLAY_SERVICE);
+        if (refreshManager != null) refreshManager.registerDisplayListener(refreshListener, new android.os.Handler(android.os.Looper.getMainLooper()));
+        requestNativeRefreshRate();
+    }
+    @Override protected void onPause() {
+        if (refreshManager != null) refreshManager.unregisterDisplayListener(refreshListener);
+        super.onPause();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         sSelf = this;

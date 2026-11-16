@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.6.2
+# Gemeinsamer Produktstand 0.6.3
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-16 und iOS-Buildnummer 11 bleiben eigenständig monoton steigend. Nach Änderungen
+17 und iOS-Buildnummer 12 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -66,3 +66,17 @@ anschließend zur Hauptnavigation desselben Menüs. Dort öffnet Zurück die
 Beenden-Abfrage. Die schmale Leiste ändert ihr Raster nur einmal pro Wechsel;
 Animationen verwenden transform/opacity und respektieren reduzierte Bewegung.
 Ein Browser-Test der Mechanik ersetzt keine Messung der Framerate auf dem TV.
+
+## Wiedergabe und Bildtakt (0.6.3)
+
+Samsung serialisiert asynchrone Spulvorgänge. Ein abgelehnter Spulpunkt ist eine
+Hinweismeldung; ein fataler Fehler beendet den Decoder vollständig. Zurück aus
+einem Film/einer Folge stoppt die Wiedergabe, Live-TV darf zur Vorschau wechseln.
+Alte Callbacks dürfen nach Stop oder Quellenwechsel keine Wiedergabe reaktivieren.
+
+iOS legt Video in ein eigenes nicht interaktives Hintergrundfenster unter dem
+winit/Metal-Eingabefenster. Apple Player bleibt optional. Die neue Fensteranordnung
+ist kompiliert, ihre Sichtprüfung auf einem iPhone übernimmt der Nutzer.
+Native Bild-Uploads werden pro Frame begrenzt. iOS/Android melden dem Betriebssystem
+den bevorzugten Displaytakt; iOS pausiert den Timing-Hinweis bei ruhender UI.
+Diese Hinweise garantieren keine bestimmte reale Framerate oder Decoderfähigkeit.

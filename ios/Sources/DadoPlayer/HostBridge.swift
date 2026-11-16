@@ -32,6 +32,8 @@ final class VideoHost {
     static let shared = VideoHost()
 
     private(set) var view: VideoView?
+    private weak var uiWindow: UIWindow?
+    private var videoWindow: UIWindow?
 
     /// Rust calls `dado_host_attach` on every frame (`acquire_surface`), so a
     /// naive retry would start a new 50-step chain each frame while no window
@@ -77,14 +79,30 @@ final class VideoHost {
             video.isHidden = true
             // This view owns AVPlayer. AVKit presents its interactive playback surface.
             video.isUserInteractionEnabled = false
+            self.uiWindow = window
+            // Give the native decoder its own non-key window. EAGL/VLC cannot
+            // insert a view or rendering layer above the independent Metal UI.
+            let background: UIWindow
+            if let scene = window.windowScene { background = UIWindow(windowScene: scene) }
+            else { background = UIWindow(frame: window.frame) }
+            background.frame = window.frame
+            background.windowLevel = UIWindow.Level(rawValue: window.windowLevel.rawValue - 1)
+            background.isUserInteractionEnabled = false
+            let container = UIViewController()
+            container.view.frame = background.bounds
+            container.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            container.view.backgroundColor = .black
+            background.rootViewController = container
+            container.view.addSubview(video)
+            self.videoWindow = background
+            window.backgroundColor = .clear
+            window.isOpaque = false
             if let root = window.rootViewController?.view {
                 root.isOpaque = false
                 root.backgroundColor = .clear
                 root.layer.isOpaque = false
+                root.layer.zPosition = 0
                 root.layer.sublayers?.forEach { $0.isOpaque = false }
-                window.insertSubview(video, belowSubview: root)
-            } else {
-                window.insertSubview(video, at: 0)
             }
             self.view = video
             self.keepVideoBehindControls()
@@ -95,18 +113,13 @@ final class VideoHost {
         }
     }
 
-    /// VLC creates its rendering subviews asynchronously. Explicit layer order
-    /// keeps both AVPlayer and VLC underneath the transparent winit/Metal UI.
+    /// Restore the cross-window invariant without touching UIKit modal layers.
     func keepVideoBehindControls() {
-        guard let video = view, let window = video.window,
-              let controls = window.rootViewController?.view, controls !== video else { return }
-        if video.layer.zPosition != 0 { video.layer.zPosition = 0 }
-        if controls.layer.zPosition != 1 { controls.layer.zPosition = 1 }
-        if video.superview === window, controls.superview === window,
-           let videoIndex = window.subviews.firstIndex(of: video),
-           let controlsIndex = window.subviews.firstIndex(of: controls), videoIndex > controlsIndex {
-            window.insertSubview(video, belowSubview: controls)
-        }
+        guard let ui = uiWindow, let background = videoWindow else { return }
+        let level = ui.windowLevel.rawValue - 1
+        if background.windowLevel.rawValue != level { background.windowLevel = UIWindow.Level(rawValue: level) }
+        if background.frame != ui.frame { background.frame = ui.frame }
+        // Never call makeKeyAndVisible: input, IME and winit remain on uiWindow.
     }
 
     /// Runs `body` with the view on the main thread; no-op when the view does
@@ -140,8 +153,9 @@ final class VideoHost {
         withView { [weak self] view in
             guard let self=self else {return}
             self.keepVideoBehindControls()
-            if self.playbackController != nil {view.isHidden=true;return}
+            if self.playbackController != nil {view.isHidden=true;self.videoWindow?.isHidden=true;return}
             if view.isHidden != !visible { view.isHidden = !visible }
+            self.videoWindow?.isHidden = !visible
         }
     }
 
@@ -156,6 +170,7 @@ final class VideoHost {
         }
         playbackController=controller
         video.isHidden=true
+        videoWindow?.isHidden=true
         root.present(controller,animated:true)
     }
 
@@ -201,6 +216,13 @@ final class VideoHost {
         }
         return UIApplication.shared.windows.first(where: { $0.isKeyWindow })
     }
+}
+
+@_cdecl("dado_host_motion_active")
+public func dado_host_motion_active(_ active: Int32) {
+    guard Thread.isMainThread else { DispatchQueue.main.async { dado_host_motion_active(active) }; return }
+    guard let window = UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}).flatMap({$0.windows}).first(where: {$0.isKeyWindow}) else { return }
+    RootViewController.install(in: window).setMotionActive(active != 0)
 }
 
 // MARK: - Lifecycle
@@ -281,6 +303,7 @@ public func dado_host_load(_ url: UnsafePointer<CChar>?) {
 public func dado_host_stop() {
     VideoHost.shared.withView { view in
         view.stop()
+        VideoHost.shared.setVisible(false)
         VideoHost.shared.dismissPlayer()
     }
 }

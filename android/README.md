@@ -151,3 +151,11 @@ MP4/MKV decoding is part of the compatibility smoke checks; individual provider
 codec combinations and Android TV hardware still require device validation.
 The local build entry point is `bash android/build.sh` (SDK/NDK/JDK required),
 which signs updates with the existing project key.
+
+### 0.6.3 refresh-rate hint
+
+The native host listens for display changes and requests the highest supported
+refresh rate at the current physical resolution via preferredRefreshRate. It does
+not force a display mode or resolution. Android power/thermal policy still applies.
+Display callbacks are registered only while resumed. Shared texture uploads are
+limited per UI frame to avoid loading many covers in one burst.

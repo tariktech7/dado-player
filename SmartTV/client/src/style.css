@@ -1452,3 +1452,6 @@ hr {
   font-size: 15px;
   color: var(--muted);
 }
+
+/* Fatal decoder errors must never reveal the still-mounted home screen. */
+.fullscreen.playback-failed { background: #000 !important; z-index: 25; }

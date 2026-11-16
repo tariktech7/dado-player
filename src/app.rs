@@ -900,16 +900,7 @@ impl App {
         }
         self.handle_keys(ctx);
 
-        if !self.images.pending.is_empty() {
-            let pending = std::mem::take(&mut self.images.pending);
-            for (key, rgba, w, h) in pending {
-                let byte_len = rgba.len();
-                let ci = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
-                let tex = ctx.load_texture(key.clone(), ci, egui::TextureOptions::LINEAR);
-                self.images
-                    .insert_texture(key, tex, byte_len, MAX_TEXTURE_CACHE_BYTES);
-            }
-        }
+        self.upload_ready_images(ctx);
 
         if self.autostart_test && (self.main_hwnd != 0 || cfg!(target_os = "ios")) {
             self.autostart_test = false;
@@ -2272,6 +2263,29 @@ impl App {
                 progress_key: key,
             });
         }
+    }
+
+    /// Spread texture creation over display frames instead of blocking one frame
+    /// with a whole catalogue's network replies.
+    fn upload_ready_images(&mut self, ctx: &Context) -> usize {
+        let started = std::time::Instant::now();
+        let mut uploaded = 0;
+        while !self.images.pending.is_empty() && uploaded < 2 {
+            let (key, rgba, w, h) = self.images.pending.remove(0);
+            let bytes = rgba.len();
+            let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+            let texture = ctx.load_texture(key.clone(), image, egui::TextureOptions::LINEAR);
+            self.images
+                .insert_texture(key, texture, bytes, MAX_TEXTURE_CACHE_BYTES);
+            uploaded += 1;
+            if started.elapsed() >= std::time::Duration::from_millis(2) {
+                break;
+            }
+        }
+        if !self.images.pending.is_empty() {
+            ctx.request_repaint();
+        }
+        uploaded
     }
 
     fn handle_keys(&mut self, ctx: &Context) {
@@ -3996,6 +4010,25 @@ mod tests {
         assert!(preferred_track(&tracks, "").is_none());
         assert!(preferred_track(&tracks, "tr").is_none());
     }
+    #[test]
+    fn image_replies_are_uploaded_in_small_frame_batches_without_losing_covers() {
+        let mut app = App::test_app();
+        let ctx = egui::Context::default();
+        for i in 0..9 {
+            app.images
+                .pending
+                .push((format!("budget-{i}"), vec![255; 16], 2, 2));
+        }
+        let mut total = 0;
+        while !app.images.pending.is_empty() {
+            let uploaded = app.upload_ready_images(&ctx);
+            assert!((1..=2).contains(&uploaded));
+            total += uploaded;
+            assert_eq!(app.images.pending.len(), 9 - total);
+        }
+        assert_eq!(app.images.textures.len(), 9);
+    }
+
     #[test]
     fn file_player_arrows_enter_menu_without_changing_volume_and_hide_resets_mode() {
         let mut app = App::test_app();

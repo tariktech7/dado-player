@@ -48,6 +48,11 @@ export class Player {
   private subtitleTimer: ReturnType<typeof setTimeout> | null = null;
   private timer: ReturnType<typeof setInterval>;
   private pendingSeekDelta = 0;
+  private lastNativeRect = "";
+  private lastCssRect = "";
+  private seekTarget: number | null = null;
+  private seekBusy = false;
+  private seekTimer: ReturnType<typeof setTimeout> | null = null;
   private hiddenPlaying = false;
   private suspended = false;
   settings: Settings;
@@ -92,23 +97,27 @@ export class Player {
     if (!this.current) return;
     const canvas = document.getElementById("app")?.getBoundingClientRect(),
       scale = canvas ? canvas.width / 1920 : 1;
-    Object.assign(this.host.style, {
+    const cssKey = [rect.left,rect.top,rect.width,rect.height].join(',');
+    if(cssKey!==this.lastCssRect)Object.assign(this.host.style, {
       left: `${(rect.left - (canvas?.left || 0)) / scale}px`,
       top: `${(rect.top - (canvas?.top || 0)) / scale}px`,
       width: `${rect.width / scale}px`,
       height: `${rect.height / scale}px`,
     });
+    this.lastCssRect=cssKey;
     if (
-      this.av &&
+      !this.seekBusy && this.av &&
       ["IDLE", "READY", "PLAYING", "PAUSED"].includes(this.av.getState())
     ) {
       try {
+        if(this.lastNativeRect===cssKey)return;
         this.av.setDisplayRect(
           Math.round((rect.left * 1920) / innerWidth),
           Math.round((rect.top * 1080) / innerHeight),
           Math.round((rect.width * 1920) / innerWidth),
           Math.round((rect.height * 1080) / innerHeight),
         );
+        this.lastNativeRect=cssKey;
       } catch {
         /* retry at ready */
       }
@@ -133,7 +142,7 @@ export class Player {
     const useNative = !htmlFallback && (automatic || this.settings.player === "avplay");
     const failed = (message: string) => {
       if (gen !== this.generation) return;
-      if (automatic && useNative && (window as any).webapis?.avplay) {
+      if (automatic && useNative && this.status.state === "loading" && (window as any).webapis?.avplay) {
         // One alternate engine, same original URL and resume point. Never rename
         // a provider's file extension or loop through failing engines forever.
         void this.open(item, Math.max(resume, this.status.time), true);
@@ -242,17 +251,15 @@ export class Player {
           );
         });
         if (gen !== this.generation) return;
+        this.lastNativeRect="";
         this.position(this.host.getBoundingClientRect());
         this.setAspect(this.settings.aspect);
         native.play();
         this.status.state = "playing";
         this.status.buffer = 100;
-        if (resume > 0 && item.kind !== "live")
-          native.seekTo(
-            Math.floor(resume * 1000),
-            () => {},
-            () => {},
-          );
+        if (resume > 0 && item.kind !== "live") {
+          this.status.time=0; this.seek(resume);
+        }
         this.refreshTracks();
         this.applyLanguages();
       } else {
@@ -303,13 +310,41 @@ export class Player {
         );
     }
   }
+  private releaseDecoder(): void {
+    // Each cleanup is independent: stop can throw in a broken AVPlay state,
+    // but close must still run so there is never an orphan audio decoder.
+    const av = this.av, video = this.video;
+    this.av = null; this.video = null;
+    try { av?.setListener({}); } catch {}
+    try { av?.pause(); } catch {}
+    try { av?.stop(); } catch {}
+    try { av?.close(); } catch {}
+    if(video) {
+      try { video.pause(); } catch {}
+      try { video.removeAttribute("src"); video.load(); } catch {}
+    }
+    this.replaceSurface();
+    this.host.hidden = true;
+  }
   private fail(message: string): void {
+    this.generation++;
+    this.pending?.(); this.pending=null;
+    this.clearSeek();
+    this.releaseDecoder();
     this.status.state = "error";
     this.status.error = message;
+    this.status.notice = "";
+    this.status.tracks = [];
+    if(this.subtitleTimer)clearTimeout(this.subtitleTimer);
+    this.subtitleTimer=null;
     this.subtitle = "";
-    this.host.hidden = true;
     screensaver(true);
     this.emit();
+  }
+  private clearSeek(): void {
+    if(this.seekTimer) clearTimeout(this.seekTimer);
+    this.seekTimer=null; this.seekBusy=false; this.seekTarget=null;
+    this.pendingSeekDelta=0;
   }
   refreshTracks(): void {
     try {
@@ -416,28 +451,40 @@ export class Player {
     }
   }
   seek(delta: number): void {
-    if(this.current && this.current.kind !== 'live' && this.status.state === 'loading') { this.pendingSeekDelta += delta; return; }
-    if (
-      !this.current ||
-      this.current.kind === "live" ||
-      !["playing", "paused"].includes(this.status.state)
-    )
-      return;
-    const target = Math.max(
-      0,
-      Math.min(this.status.time + delta, (this.status.duration > 0 ? Math.max(0, this.status.duration - 1) : Infinity)),
-    );
+    if(!Number.isFinite(delta) || !this.current || this.current.kind==='live')return;
+    if(this.status.state==='loading'){this.pendingSeekDelta+=delta;return;}
+    if(!['playing','paused'].includes(this.status.state))return;
+    const base=this.seekTarget ?? this.status.time;
+    this.seekTarget=Math.max(0,Math.min(base+delta,this.status.duration>0?Math.max(0,this.status.duration-1):Infinity));
+    if(!this.seekBusy)this.flushSeek();
+  }
+  private flushSeek(): void {
+    if(this.seekTarget===null || this.seekBusy)return;
+    const target=this.seekTarget, gen=this.generation, av=this.av;
+    this.seekBusy=true;
+    const finish=(ok:boolean)=>{
+      if(gen!==this.generation)return;
+      if(this.seekTimer)clearTimeout(this.seekTimer);
+      this.seekTimer=null;this.seekBusy=false;
+      if(!ok){
+        this.seekTarget=null;
+        this.status.notice='Diese Position ist nicht erreichbar. Die Wiedergabe läuft weiter.';
+        this.emit();return;
+      }
+      this.tick();
+      this.position(this.host.getBoundingClientRect());
+      // New presses update a single absolute destination while a seek is busy.
+      if(this.seekTarget!==target){this.flushSeek();return;}
+      this.seekTarget=null;this.status.notice='';
+    };
+    this.seekTimer=setTimeout(()=>{
+      if(gen===this.generation)this.fail('Der Player reagiert nach dem Spulen nicht. Bitte erneut starten.');
+    },this.settings.timeoutSeconds*1000);
     try {
-      if (this.av)
-        this.av.seekTo(
-          Math.floor(target * 1000),
-          () => this.tick(),
-          () => this.fail("Springen ist bei diesem Stream nicht möglich."),
-        );
-      else if (this.video) this.video.currentTime = target;
-    } catch {
-      throw new Error("Springen ist bei diesem Stream nicht möglich.");
-    }
+      if(av) av.seekTo(Math.floor(target*1000),()=>finish(true),()=>finish(false));
+      else if(this.video){this.video.currentTime=target;finish(true);}
+      else finish(false);
+    }catch{finish(false);}
   }
   setAspect(aspect: Settings["aspect"]): void {
     this.settings.aspect = aspect;
@@ -498,28 +545,13 @@ export class Player {
     }
   }
   stop(): void {
-    this.pendingSeekDelta = 0;
+    this.lastNativeRect="";this.lastCssRect="";
+    this.clearSeek();
     if (this.subtitleTimer) clearTimeout(this.subtitleTimer);
     this.subtitleTimer = null;
     this.generation++;
-    this.pending?.();
-    this.pending = null;
-    try {
-      if (this.av) {
-        if (["READY", "PLAYING", "PAUSED"].includes(this.av.getState()))
-          this.av.stop();
-        this.av.close();
-      }
-    } catch {
-      /* close best effort after decoder failure */
-    }
-    if (this.video) {
-      this.video.pause();
-      this.video.removeAttribute("src");
-      this.video.load();
-    }
-    this.av = null;
-    this.video = null;
+    this.pending?.(); this.pending=null;
+    this.releaseDecoder();
     this.current = null;
     this.subtitle = "";
     this.replaceSurface();

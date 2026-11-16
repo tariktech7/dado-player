@@ -85,6 +85,7 @@ export interface PlayerStatus {
   duration: number;
   buffer: number;
   error: string;
+  notice?: string;
   tracks: Track[];
 }
 export const emptyCatalog = (): Catalog => ({
