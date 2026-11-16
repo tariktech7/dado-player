@@ -1,12 +1,19 @@
 # Samsung Store: Vorbereitung für Deutschland/Europa
 
 Ziel bleibt die öffentliche Veröffentlichung von Dado Player. USB ist ein zusätzlicher Testweg.
-Das Onboarding-Ticket 2646069523 ist erfolgreich eingereicht; eine Partnerfreigabe oder
-Store-Zertifizierung liegt dadurch noch nicht vor. Der 0.6.0-Beta-Build bleibt separat verfügbar.
+Das Onboarding-Ticket 2646069523 ist beantwortet: Samsung nennt Christian Eickhoff
+(c.eickhoff@samsung.com) als Kontakt für Deutschland. Eine Partnerfreigabe oder
+Store-Zertifizierung liegt noch nicht vor. Aktueller Beta-Stand ist 0.6.4.
+Für die Veröffentlichung außerhalb der USA ist laut Samsung Partner Seller notwendig;
+USB-Zugang ist ein zusätzliches, vom Store-Ziel getrennt zu behandelndes Werkzeug.
+Partnerantrag am 16.11.2026 mit Nutzerfreigabe abgeschickt:
+PARTNER-REQUEST-2026-11-16.txt. Die öffentliche Store-Veröffentlichung ist Hauptziel;
+Trial-, Kauf- und Freischaltdetails wurden gemäß Nutzerwunsch nicht mitgeschickt.
+Eine Partnerfreigabe liegt noch nicht vor.
 
 ## Paket und Unterlagen
 
-- WGT 0.6.0 vorhanden: Releases/Dado-Player-Tizen-0.6.0.wgt. Aktuelle Signierung ist für
+- WGT 0.6.4 vorhanden: Releases/Dado-Player-Tizen-0.6.4.wgt. Aktuelle Signierung ist für
   den eingerichteten Entwickler-TV; sie ist noch keine bestätigte Store-Paketabnahme.
 - App-Eintrag unter Applications und geeignete Paketprüfung/Signierung vorbereiten.
   Noch kein WGT-Upload oder Zertifizierungsantrag in diesem Onboarding-Schritt.
@@ -27,7 +34,7 @@ Store-Zertifizierung liegt dadurch noch nicht vor. Der 0.6.0-Beta-Build bleibt s
 
 ## Quellen und Zuständigkeit
 
-Stand 15.11.2026, offizielle Samsung-Dokumentation:
+Stand 16.11.2026, offizielle Samsung-Dokumentation:
 
 - https://developer.samsung.com/tv-seller-office/guides/applications/registering-application.html
 - https://developer.samsung.com/tv-seller-office/guides/applications/entering-application-information.html
@@ -35,3 +42,20 @@ Stand 15.11.2026, offizielle Samsung-Dokumentation:
 
 Partneraufnahme, ein eingereichter Supportfall und eine veröffentlichte Store-App sind
 getrennte Zustände. Keinen davon allein aus einem vorhandenen Build oder Supportticket ableiten.
+
+## Vor der Zertifizierung noch zu klären
+
+- Partneraufnahme und gegebenenfalls geforderter Vertrag über den genannten Kontakt.
+- Samsung-Abstimmung des 7-Tage-Trials und der manuellen einmaligen Freischaltung;
+  kein Kaufmodell als bereits von Samsung genehmigt darstellen.
+- Tatsächlich erreichbare, aktuelle Homepage prüfen: Im Portal ist eine andere
+  Netlify-Schreibweise gespeichert als in website/README.md. Nicht ungeprüft als
+  öffentlichen Support-Link übernehmen.
+- Öffentliche, zur tatsächlichen Geräte-/MAC-Lizenzverarbeitung passende
+  Datenschutzerklärung bereitstellen; keine noch nicht vorhandene URL einreichen.
+- Versionsangaben der öffentlichen Homepage vor Einreichung mit dem aktuellen Build
+  abgleichen; die lokale Downloads-Seite enthält noch 0.6.0.
+- Vollständig nutzbarer, rechtmäßig bereitgestellter Prüfinhalt/Testzugang und ein
+  Test-Freischaltweg für Samsung, damit der Trial die Zertifizierung nicht blockiert.
+- Aktuelle Store-Bilder und UI-Beschreibung erzeugen; neue Scroll-/Player-Korrekturen
+  auf Hardware abnehmen. Ein installiertes Entwicklerpaket ist keine Store-Abnahme.

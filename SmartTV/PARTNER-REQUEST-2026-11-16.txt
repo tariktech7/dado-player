@@ -1,0 +1,19 @@
+Status: SUBMITTED through the Seller Office on 2026-11-16 with explicit user approval
+Destination: Samsung TV Seller Office > Membership > Partnership
+Samsung Contents Manager: c.eickhoff@samsung.com
+Group: DadoPlayer
+Reference: support ticket 2646069523, answered 2026-11-16
+
+Request (500-byte form limit):
+Samsung support referred me to Christian Eickhoff (ticket 2646069523). I am a student in Germany developing Dado Player, a media player for user-provided IPTV sources. I would like to become a Partner Seller and publish the app in Germany/EU. Beta 0.6.4 is available for testing. I have no partnership agreement yet; please advise the next steps. USB Demo Packaging would be an optional beta-test route; publishing in the store remains my main goal.
+
+This asks for onboarding guidance, not confirmation of an existing agreement.
+No customer/provider credentials, private keys or home address are included.
+The partnership request is separate from application certification/publication.
+Submitted request length: 449/500 bytes.
+Observed: "The email entered is valid"; Done > confirmation dialog > Confirm,
+then automatic navigation to Membership > Group Information, with no displayed error.
+Reopening Partnership shows an empty request form; no persistent request ID or
+pending-status badge was exposed. No duplicate request was sent.
+Group remains Public Group; no approval, agreement or USB access is claimed.
+The user explicitly removed trial, payment and activation details before sending.

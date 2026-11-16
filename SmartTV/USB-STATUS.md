@@ -1,4 +1,4 @@
-# Samsung USB-Verteilung: Stand 15.11.2026
+# Samsung USB-Verteilung: Stand 16.11.2026
 
 Samsung beschreibt in der offiziellen [Installations-FAQ](https://developer.samsung.com/smarttv/develop/faq/application-installation.html)
 eine Umwandlung über das USB Demo Packaging Tool im TV Seller Office. Eine normale WGT lässt sich
@@ -32,6 +32,31 @@ das Projekt nicht auf private Nutzung. Das Supportformular verlangte keine App-V
 keinen Dateianhang; es wurde keine WGT als Store-Zertifizierung eingereicht.
 Ticket: https://seller.samsungapps.com/tv/qna/detail/2646069523
 Wortlaut: SAMSUNG-REQUEST.txt. Store-Vorbereitung: STORE-READINESS.md.
+
+## Supportantwort und nächster Schritt (16.11.2026)
+
+Ticket 2646069523 steht im tatsächlich geöffneten Seller Office auf **Answered**.
+Samsung verweist für Deutschland an **Christian Eickhoff, c.eickhoff@samsung.com**
+und bestätigt ausdrücklich: USB Demo Packaging ist nur für Samsung-Partner verfügbar.
+Dies ist noch keine Freigabe, kein Vertrag und kein Zugang zum USB-Werkzeug.
+
+Die geöffnete Membership-Seite bestätigt außerdem: Public Groups können Apps nur
+in den USA verteilen. Für das eigentliche Store-Ziel Deutschland/EU ist daher die
+Partneraufnahme erforderlich, unabhängig davon, ob USB später nutzbar ist.
+
+Das Partnerformular ist erreichbar und verlangt Content-Manager-E-Mail,
+„Check Validity“ sowie einen Kommentar mit höchstens 500 Bytes. Der mit ausdrücklicher
+Nutzerfreigabe **abgesendete 449-Byte-Antrag** liegt in PARTNER-REQUEST-2026-11-16.txt.
+Er nennt den Entwickler als Studenten, priorisiert die Store-Veröffentlichung und
+nennt USB nur als optionalen Testweg. Angaben zu Trial, Preis und Freischaltung wurden
+auf ausdrücklichen Nutzerwunsch vor dem Absenden entfernt. Der Antrag erklärt,
+dass noch kein Partnervertrag besteht.
+
+Beobachtet: „The email entered is valid“, anschließend Done → Bestätigungsdialog →
+Confirm und automatische Rückleitung zur Gruppenübersicht ohne angezeigten Fehler.
+Eine erneute Ansicht der Partnership-Seite zeigt ein leeres Formular; eine dauerhafte
+Antragsnummer oder Pending-Anzeige wurde nicht angezeigt. Es wurde kein zweiter Antrag
+gesendet. Die Gruppe bleibt Public Group; Partnerfreigabe und USB-Zugang stehen noch aus.
 
 ## Vorbereiteter Buildweg
 
