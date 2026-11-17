@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {random} from '../protocol.mjs';
 const base='https://dado-connect.dado-licensing.workers.dev',root=fileURLToPath(new URL('../',import.meta.url)),wrangler=fileURLToPath(new URL('../../licensing/node_modules/wrangler/bin/wrangler.js',import.meta.url));
-const email='smoke-'+crypto.randomUUID()+'@example.invalid',password=random(),secret=random();let userId,deviceId;
+const email='smoke-'+crypto.randomUUID()+'@example.invalid',password=random()+'1!',secret=random();let userId,deviceId;
 async function call(path,data,extra={}){const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Origin:base,'Content-Type':'application/json',...extra},...(data===undefined?{}:{body:JSON.stringify(data)})});const value=await r.json();return {status:r.status,value,cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 function sql(command){const r=spawnSync(process.execPath,[wrangler,'d1','execute','dado-connect','--remote','--command',command,'--json'],{cwd:root,encoding:'utf8'});if(r.status!==0)throw Error('Controlled smoke DB operation failed');return JSON.parse(r.stdout)[0].results;}
 try{

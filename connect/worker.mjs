@@ -43,7 +43,8 @@ export function createHandler({clock=()=>Math.floor(Date.now()/1000)}={}){return
     await env.DB.prepare('INSERT INTO accounts(id,email,name,salt,password_hash,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),mail,name,salt,await passwordHash(pw,salt,env.AUTH_PEPPER),now).run();
     response=json({ok:true,message:'Konto angelegt. Der Betreiber muss es freigeben. Es wird keine automatische E-Mail versendet.'},201);
    }else if(path==='/api/auth/login'){
-    const mail=email(input.email),pw=password(input.password);
+    const mail=email(input.email),pw=input.password;
+    if(typeof pw!=='string'||!pw.length||pw.length>256)fail('E-Mail oder Passwort stimmt nicht.',401);
     await limit(env,'login:'+mail,now,10,900);
     const row=await env.DB.prepare('SELECT * FROM accounts WHERE email=?').bind(mail).first();
     const calculated=await passwordHash(pw,row?.salt||'AAAAAAAAAAAAAAAAAAAAAA',env.AUTH_PEPPER);

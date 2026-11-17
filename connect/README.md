@@ -6,7 +6,7 @@ Verwaltung: https://dado-admin.dado-licensing.workers.dev/admin/connect
 
 ## Benutzung
 
-1. Mit Name, E-Mail und Passwort (mindestens zwölf Zeichen) registrieren. Das Konto wartet auf Tariks manuelle Genehmigung. Es gibt keinen automatischen Mailversand; Tarik prüft die Person selbst.
+1. Mit Name, E-Mail und Passwort (mindestens fünf Zeichen, eine Zahl und ein Sonderzeichen) registrieren. Das Konto wartet auf Tariks manuelle Genehmigung. Es gibt keinen automatischen Mailversand; Tarik prüft die Person selbst.
 2. Tarik genehmigt das Konto in der durch Cloudflare Access geschützten Verwaltung. Das ist unabhängig von einer gekauften App-Lizenz.
 3. Am Empfangsgerät in Einstellungen → Dado Connect einen Kopplungscode erzeugen. Ohne Anbieterprofil ist Connect auch auf der Anmeldeseite erreichbar.
 4. Im Portal Geräteadresse (oder unterstützte Hardware-MAC), den zehn Minuten gültigen Code und einen Gerätenamen eingeben. Die Adresse allein berechtigt nicht zum Senden. Ein Gerät gehört jeweils einem Senderkonto.

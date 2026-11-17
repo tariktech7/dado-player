@@ -12,7 +12,7 @@ export async function passwordHash(password,salt,pepper){
  const key=await crypto.subtle.importKey('raw',encoder.encode(material),'PBKDF2',false,['deriveBits']);
  return b64(new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:100000,hash:'SHA-256'},key,256)));
 }
-export function password(value){if(typeof value!=='string'||value.length<12||value.length>256)fail('Das Passwort muss 12 bis 256 Zeichen lang sein.');return value;}
+export function password(value){if(typeof value!=='string'||Array.from(value).length<5||value.length>256||!/[0-9]/.test(value)||! /[^\p{L}\p{N}\s]/u.test(value))fail('Mindestens 5 Zeichen, eine Zahl und ein Sonderzeichen erforderlich (maximal 256 Zeichen).');return value;}
 export function text(value,max=100){if(typeof value!=='string'||!value.trim()||value.length>max||/[\u0000-\u001f]/.test(value))fail('Ungültige Texteingabe.');return value.trim();}
 export function email(value){const v=text(value,254).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))fail('Bitte eine gültige E-Mail-Adresse eingeben.');return v;}
 export function mac(value){const v=String(value||'').toUpperCase().replace(/[:-]/g,'');return /^[0-9A-F]{12}$/.test(v)?v:null;}
