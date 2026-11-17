@@ -52,6 +52,19 @@ fn app_dir() -> PathBuf {
 pub fn license_path() -> PathBuf {
     app_dir().join("device-license.json")
 }
+pub fn load_connect_state() -> serde_json::Value {
+    read_json(&app_dir().join("connect-device.json")).unwrap_or(serde_json::Value::Null)
+}
+pub fn save_connect_state(value: &impl serde::Serialize) -> Result<()> {
+    let path = app_dir().join("connect-device.json");
+    write_json(&path, value)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
 
 /// Print the resolved data directory once, so a failed save can be diagnosed
 /// from logcat instead of guessed at.

@@ -12,7 +12,8 @@
       "database_name": "dado-licenses",
       "database_id": "877fd180-1d83-45c8-9b45-cb243b052205",
       "migrations_dir": "migrations"
-    }
+    },
+    {"binding":"CONNECT_DB","database_name":"dado-connect","database_id":"3db3559f-6da5-4bd4-a59c-6fa1e64abef4","migrations_dir":"../connect/migrations"}
   ],
   "vars": {
     "KEY_ID": "production-2026-11",

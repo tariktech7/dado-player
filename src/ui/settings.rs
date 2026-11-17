@@ -104,6 +104,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 }
 
 fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: &mut bool) {
+    app.cloud_profiles_ui(ui);
     ui.add_space(6.0);
     ui.add(egui::Label::new(
         RichText::new("Einstellungen").size(22.0).strong(),

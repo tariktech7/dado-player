@@ -1,5 +1,6 @@
 import {PRODUCT, TRIAL_SECONDS, deviceCode, macAlias, signLicense} from './shared/protocol.mjs';
 import {adminPage} from './admin.mjs';
+import {handleAdmin as connectAdmin} from '../connect/admin.mjs';
 
 const json = (value, status=200) => new Response(JSON.stringify(value), {status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','X-Content-Type-Options':'nosniff'}});
 async function body(request) {
@@ -34,6 +35,7 @@ export function createHandler({clock=()=>Math.floor(Date.now()/1000), authentica
     if(env.ROLE==='api')return json({error:'Verwaltung nur über den privaten Verwaltungsdienst erreichbar'},403);
     const actor = await authenticate(request, env, context);
     if (!actor) return json({error:'Keine Admin-Berechtigung'},403);
+    if(url.pathname==='/admin/connect'||url.pathname.startsWith('/admin/connect/'))return connectAdmin(request,{DB:env.CONNECT_DB},actor,clock);
     if (url.pathname === '/admin' && request.method==='GET') return new Response(adminPage, {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'X-Frame-Options':'DENY'}});
     if (request.method==='POST' && request.headers.get('Origin') !== url.origin) return json({error:'Ungültiger Ursprung'},403);
     if (url.pathname==='/admin/lookup' && request.method==='POST') {

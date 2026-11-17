@@ -256,6 +256,10 @@ fn action(app: &mut App, ui: &mut Ui, l: &Layout, content: Rect, blocked: bool) 
 }
 
 fn body(app: &mut App, ui: &mut Ui, l: &Layout, blocked: bool, viewport: Rect) {
+    if app.cloud_profiles_entry(ui) {
+        return;
+    }
+    ui.add_space(10.0);
     let mut gained: Option<Rect> = None;
     // Rect of the field that actually owns focus THIS frame, in current screen
     // coordinates. Never cache this across frames: see `follow_focus`.

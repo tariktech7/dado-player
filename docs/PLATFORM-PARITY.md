@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.6.4
+# Gemeinsamer Produktstand 0.7.0
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-18 und iOS-Buildnummer 13 bleiben eigenständig monoton steigend. Nach Änderungen
+19 und iOS-Buildnummer 14 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -81,7 +81,7 @@ Native Bild-Uploads werden pro Frame begrenzt. iOS/Android melden dem Betriebssy
 den bevorzugten Displaytakt; iOS pausiert den Timing-Hinweis bei ruhender UI.
 Diese Hinweise garantieren keine bestimmte reale Framerate oder Decoderfähigkeit.
 
-## Scroll-Arbeit pro Frame (0.6.4)
+## Scroll-Arbeit pro Frame (0.7.0)
 
 Samsung navigiert Posterreihen anhand stabiler Rasterindizes; laufende Scrollbewegungen
 werden mit einem einzigen requestAnimationFrame-Takt weitergeführt und neu ausgerichtet.
@@ -97,3 +97,7 @@ Der UI-Thread erhält fertige Pixel; vier laufende Bildanforderungen und zusamme
 Anforderungen/fertige Bilder begrenzen die Warteschlange. Der volle Cache darf neue Bilder
 nicht blockieren, und fertige Bilder dürfen vor dem GPU-Upload nicht erneut geladen werden.
 Die begrenzten Uploads pro Frame und vorhandene VSync-/Displaytakt-Anbindung bleiben erhalten.
+
+## Dado Connect ab 0.7.0
+
+Alle aktuellen Clients: genehmigte Senderkonten, Geräteadresse plus einmaliger Code, M3U-URL/Xtream und manueller Aktualisieren-Abruf. Dauerhaft speichern vor Bestätigung; stabile Nachrichten-IDs verhindern Duplikate. Kein automatisches Login oder Überschreiben bestehender Profile. Mobile zeigt private Geräteadresse statt Hardware-MAC. LG muss diesen Vertrag künftig übernehmen, ist noch nicht gebaut. Siehe connect/README.md.

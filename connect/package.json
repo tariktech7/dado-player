@@ -1,0 +1,1 @@
+{"name":"dado-connect","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","dev":"node ../licensing/node_modules/wrangler/bin/wrangler.js dev","deploy":"node ../licensing/node_modules/wrangler/bin/wrangler.js deploy"}}

@@ -1,0 +1,28 @@
+import {body,json,fail,random,hash,text,safeError} from './protocol.mjs';
+export const adminPage=`<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Dado Connect · Kontofreigaben</title><style>body{font:17px/1.5 system-ui;background:#101b23;color:#ecf8f6;max-width:900px;margin:40px auto;padding:24px}a{color:#71dfd1}input,select,button{font:inherit;border:1px solid #658d9455;border-radius:12px;padding:12px;background:#1b303a;color:inherit;margin:5px}article{border:1px solid #719e9630;border-radius:20px;padding:20px;margin:16px 0}button{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere}#message{color:#71dfd1}</style><h1>Dado Connect · Kontofreigaben</h1><p><a href="/admin">Gerätelizenzen</a> · <a href="https://dado-connect.dado-licensing.workers.dev" target="_blank" rel="noopener">Kundenportal</a></p><p>Registrierungen werden nicht automatisch per E-Mail verifiziert. Identität vor Freigabe selbst bestätigen. Neue Konten können erst nach deiner Freigabe Geräte koppeln und Zugangsdaten senden.</p><form id="search"><input id="query" placeholder="E-Mail oder Name"><select id="status"><option value="pending">Wartet auf Freigabe</option><option value="approved">Freigegeben</option><option value="suspended">Gesperrt</option><option value="all">Alle</option></select><button>Anzeigen</button></form><p id="message" role="status"></p><div id="results"></div><script>
+const el=id=>document.getElementById(id);
+async function api(path,data){const r=await fetch('/admin/connect/api/'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json'}:{},...(data?{body:JSON.stringify(data)}:{})});const v=await r.json();if(!r.ok)throw Error(v.error||'Fehler');return v;}
+async function load(){try{const {users}=await api('users?status='+encodeURIComponent(el('status').value)+'&q='+encodeURIComponent(el('query').value));el('results').replaceChildren();el('message').textContent=users.length+' Konto/Konten';for(const u of users){const a=document.createElement('article'),info=document.createElement('pre');info.textContent=u.name+'\\n'+u.email+'\\nStatus: '+u.status+'\\nAngelegt: '+new Date(u.created_at*1000).toLocaleString();a.append(info);for(const [label,status] of [['Freigeben','approved'],['Sperren','suspended']]){const b=document.createElement('button');b.textContent=label;b.disabled=u.status===status;b.onclick=async()=>{if(!confirm(u.email+' → '+label+'?'))return;try{await api('status',{id:u.id,status});await load();}catch(e){el('message').textContent=e.message;}};a.append(b);}const reset=document.createElement('button');reset.textContent='Einmaligen Passwort-Reset-Link erzeugen';reset.onclick=async()=>{if(!confirm('Reset-Link für '+u.email+' erzeugen? Nur persönlich an diese Person weitergeben.'))return;try{const r=await api('reset',{id:u.id});const output=document.createElement('pre');output.textContent='Eine Stunde gültig, einmal verwendbar:\\n'+r.url;a.append(output);}catch(e){el('message').textContent=e.message;}};a.append(reset);el('results').append(a);}}catch(e){el('message').textContent=e.message;}}
+el('search').onsubmit=e=>{e.preventDefault();load();};load();</script></html>`;
+export async function handleAdmin(request,env,actor,clock=()=>Math.floor(Date.now()/1000)){
+ try{
+  if(!env.DB)fail('Connect-Datenbank noch nicht eingerichtet.',503);
+  const u=new URL(request.url),path=u.pathname,now=clock();
+  if((path==='/admin/connect'||path==='/admin/connect/')&&request.method==='GET')return new Response(adminPage,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'}});
+  if(path==='/admin/connect/api/users'&&request.method==='GET'){
+   const status=u.searchParams.get('status')||'pending',q=(u.searchParams.get('q')||'').slice(0,100);if(!['pending','approved','suspended','all'].includes(status))fail('Ungültiger Status.');
+   const rows=await env.DB.prepare('SELECT id,email,name,status,created_at,approved_at FROM accounts WHERE (?=? OR status=?) AND (email LIKE ? OR name LIKE ?) ORDER BY created_at DESC LIMIT 100').bind(status,'all',status,'%'+q+'%','%'+q+'%').all();return json({users:rows.results});
+  }
+  if(request.method!=='POST')fail('Nicht gefunden.',404);
+  if(request.headers.get('Origin')!==u.origin)fail('Ungültiger Ursprung.',403);
+  const input=await body(request),id=text(input.id,80),user=await env.DB.prepare('SELECT id FROM accounts WHERE id=?').bind(id).first();if(!user)fail('Konto nicht gefunden.',404);
+  if(path==='/admin/connect/api/status'){
+   if(!['approved','suspended'].includes(input.status))fail('Ungültiger Status.');
+   await env.DB.batch([env.DB.prepare('UPDATE accounts SET status=?,approved_at=CASE WHEN ?=? THEN COALESCE(approved_at,?) ELSE approved_at END WHERE id=?').bind(input.status,input.status,'approved',now,id),env.DB.prepare('INSERT INTO audit(at,actor,action,subject) VALUES(?,?,?,?)').bind(now,actor,input.status,id)]);return json({ok:true});
+  }
+  if(path==='/admin/connect/api/reset'){
+   const token=random();await env.DB.batch([env.DB.prepare('UPDATE accounts SET reset_hash=?,reset_expires=? WHERE id=?').bind(await hash(token),now+3600,id),env.DB.prepare('INSERT INTO audit(at,actor,action,subject) VALUES(?,?,?,?)').bind(now,actor,'password-reset-link',id)]);
+   return json({url:'https://dado-connect.dado-licensing.workers.dev/#reset='+token});
+  }fail('Nicht gefunden.',404);
+ }catch(error){return safeError(error);}
+}

@@ -169,3 +169,7 @@ Poster/detail textures preserve aspect ratio and are capped at 640 pixels per ed
 other artwork at 1280. There is no additional fixed-rate scrolling timer.
 The ProMotion/window layering architecture from 0.6.3 remains. Version 0.6.4 build 13
 is the new device package; actual iPhone frame pacing still needs device verification.
+
+## 0.7.0 · Dado Connect
+
+Build 14: manueller Cloud-Profilimport in Einstellungen und Anmeldung. Private Geräteadresse, keine iPhone-Hardware-MAC. Einmal koppeln, dann Aktualisieren. Dauerhaft speichern vor Bestätigung; keine automatische Anmeldung. IPA mit eigener Apple-ID signieren. Physischer iPhone-Test bleibt erforderlich. Siehe ../connect/README.md.

@@ -1,5 +1,11 @@
 # Samsung Store: Vorbereitung für Deutschland/Europa
 
+**Stand 17.11.2026:** Partnerantrag abgelehnt. Christian Eickhoff verweist in der
+vom Nutzer übermittelten Antwort auf die aktuelle EU-Vorgabe gegen weitere generische
+IPTV-Player ohne eigenes Inhaltsangebot. Store-/USB-Zulassung sind daher nicht
+erreicht. Das Thema ist auf Nutzerwunsch zurückgestellt. Die bisherige Checkliste
+bleibt als technische Vorbereitung erhalten; kein automatischer erneuter Antrag.
+
 Ziel bleibt die öffentliche Veröffentlichung von Dado Player. USB ist ein zusätzlicher Testweg.
 Das Onboarding-Ticket 2646069523 ist beantwortet: Samsung nennt Christian Eickhoff
 (c.eickhoff@samsung.com) als Kontakt für Deutschland. Eine Partnerfreigabe oder

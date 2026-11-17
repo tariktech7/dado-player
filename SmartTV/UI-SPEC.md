@@ -189,3 +189,7 @@ Regression: 20.000 Titel, 24 Abwärtsschritte im 80-ms-Takt mit 4x gedrosselter 
 korrekte Reihe, keine Rücksprünge, fokussiertes Poster nach Loslassen sichtbar.
 Bei 600 Kategorien benötigen zehn Abwärtsschritte nur 20 Rechteckmessungen.
 Dies sind Browser-Belastungstests, keine Messung der physischen TV-Bildrate.
+
+## Dado Connect · 0.7.0
+
+Eigene Einstellungskarte mit Geräteadresse, Kopplungscode und Aktualisieren. Der Connect-Einstieg auf der Anmeldeseite öffnet einen fokussierbaren Dialog; Zurück schließt und stellt Fokus wieder her. Import führt nicht automatisch zur Anmeldung. Code gilt zehn Minuten. Kein Polling. Gleicher Vertrag für zukünftiges LG-Web-TV.

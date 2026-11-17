@@ -26,3 +26,5 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
   nur durch eine einzelne langsame Fokusbewegung. Arbeit pro Frame muss vom sichtbaren
   Bereich abhängen; native Bilddekodierung/RGBA-Konvertierung außerhalb des UI-Threads.
   Builds und Browser-Tests allein bestätigen keine physische Hardware-Framerate.
+
+- Dado Connect: Vertrag in connect/README.md auf Rust und Web-TV synchron halten. Dauerhaft speichern vor Empfangsbestätigung, stabile Nachrichten-IDs, ausschließlich manuell abrufen. Keine Zugangsdaten protokollieren. Senderkontogenehmigung nicht mit Kauflizenz vermischen. Private Geräteadresse auf Mobile klar benennen.

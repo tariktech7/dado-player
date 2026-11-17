@@ -60,3 +60,7 @@ Für technische Nutzung: `node admin-cli.mjs lookup <Geräte-ID>`; zum Genehmige
 `npm test` prüft mit SQLite und separaten Testschlüsseln Trial, Gerätebindung, manuelle Genehmigung, Rollen, Zeitgrenzen, Origin-Prüfung und Limits. `npx wrangler deploy --config wrangler.jsonc` und danach `npx wrangler deploy --config wrangler.admin.jsonc` stellen beide Dienste bereit. Vor einer Neuinstallation Datenbank und bestehende Schlüssel erhalten; keine neue Signieridentität über eine vorhandene schreiben.
 
 Samsung: `npm run check`, `npm run test:ui`, Paket signieren und `verify:package` mit dem tatsächlichen Paketpfad aufrufen. UI-Tests erzeugen eigene Testschlüssel; Testbundles dürfen nicht verteilt werden. Paketprüfung ersetzt keinen Installationstest auf dem TV.
+
+## Separates Dado Connect ab 0.7.0
+
+Senderkonten und Profilversand verwenden getrennten Worker und Datenbank. Kontogenehmigung verleiht KEINE Unlimited-Lizenz. Zusätzliche geschützte Kontoverwaltung unter /admin/connect. Siehe ../connect/README.md.

@@ -1,0 +1,6 @@
+{
+ "name":"dado-connect","main":"worker.mjs","compatibility_date":"2026-11-17","workers_dev":true,
+ "observability":{"enabled":false},
+ "d1_databases":[{"binding":"DB","database_name":"dado-connect","database_id":"3db3559f-6da5-4bd4-a59c-6fa1e64abef4","migrations_dir":"migrations"}],
+ "triggers":{"crons":["17 * * * *"]}
+}

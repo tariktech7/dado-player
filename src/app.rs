@@ -258,6 +258,7 @@ pub struct App {
     pub settings: Settings,
 
     pub images: ImageState,
+    pub connect: crate::connect::DeviceClient,
     pub epg: HashMap<u32, Vec<EpgEntry>>,
     epg_order: VecDeque<u32>,
     epg_requested: HashSet<u32>,
@@ -385,6 +386,27 @@ fn parse_tracks(json: &str, cur_a: i64, cur_s: i64) -> Option<(Vec<Track>, Vec<T
 }
 
 impl App {
+    pub fn cloud_profiles_ui(&mut self, ui: &mut egui::Ui) {
+        crate::connect::show(
+            ui,
+            &mut self.connect,
+            self.rt.handle(),
+            &mut self.profiles,
+            self.tv,
+            false,
+        );
+    }
+    pub fn cloud_profiles_entry(&mut self, ui: &mut egui::Ui) -> bool {
+        crate::connect::show(
+            ui,
+            &mut self.connect,
+            self.rt.handle(),
+            &mut self.profiles,
+            self.tv,
+            true,
+        );
+        self.connect.expanded()
+    }
     pub fn new(rt: Runtime) -> Self {
         let (tx, rx) = unbounded_channel();
         let tx = EventSender {
@@ -448,6 +470,7 @@ impl App {
             continue_tab: ContinueTab::Movies,
             settings: store::load_settings(),
             images: ImageState::default(),
+            connect: crate::connect::DeviceClient::default(),
             epg: HashMap::new(),
             epg_order: VecDeque::new(),
             epg_requested: HashSet::new(),

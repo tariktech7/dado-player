@@ -167,3 +167,7 @@ Image decoding, downsampling and ColorImage conversion run on a background worke
 the UI receives upload-ready pixels. Poster/detail textures keep their proportions
 with a 640-pixel maximum edge. Full caches evict older textures instead of permanently
 blocking new covers. The display-rate hint remains unchanged. Current build: 18.
+
+## 0.7.0 · Dado Connect
+
+Build 19: M3U-/Xtream-Profilimport in Touch- und TV-Modus. Private Geräteadresse, einmaliger Kopplungscode, danach Aktualisieren. Keine Hintergrundabrufe oder automatische Anmeldung. Siehe ../connect/README.md.

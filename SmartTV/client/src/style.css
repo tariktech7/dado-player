@@ -1310,6 +1310,12 @@ hr {
   gap: 0 14px;
 }
 .channel-list { overflow-anchor: none; }
+.connect-panel { font-size:22px; }
+.connect-panel p { font-size:22px; margin:12px 0; }
+.connect-panel small { font-size:18px; }
+.connect-panel button { font-size:22px; margin:6px; }
+.connect-url { overflow-wrap:anywhere; color:var(--accent); }
+.welcome-panel .connect-panel { padding:18px; margin:0 0 20px; }
 .catalog-poster {
   height: 248px;
   padding: 5px 5px 12px;

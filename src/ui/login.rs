@@ -41,6 +41,10 @@ pub fn show(app: &mut App, ctx: &Context) {
 }
 
 fn form(app: &mut App, ui: &mut Ui) {
+    if app.cloud_profiles_entry(ui) {
+        return;
+    }
+    ui.add_space(12.0);
     ui.horizontal(|ui| {
         ui::brand_mark(ui, 40.0);
         ui.add_space(10.0);

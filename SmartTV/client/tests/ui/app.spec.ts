@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { fresh } from "../../src/store";
 import {readFileSync} from 'node:fs';
+import {page as connectPage,script as connectScript,css as connectCss} from '../../../../connect/web.mjs';
 import {fingerprint,signLicense} from '../../../../licensing/shared/protocol.mjs';
 const profile = {
   id: "qa",
@@ -1233,4 +1234,65 @@ test('poster navigation does not measure hundreds of unrelated category buttons 
   console.log('Poster layout reads with 600 categories',JSON.stringify(result));
   expect(result.index).toBe(result.columns*10);
   expect(result.reads).toBeLessThan(200);
+});
+
+test('cloud inbox persists before ack and retry never duplicates profiles',async({page})=>{
+ await fixture(page,true,true);let ack=0;const calls:string[]=[];
+ const cloudId='11111111-1111-4111-8111-111111111111';
+ await page.route('https://dado-connect.dado-licensing.workers.dev/v1/device/**',async route=>{
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'}});
+  const action=new URL(route.request().url()).pathname.split('/').pop()!;calls.push(action);
+  const state={deviceId:'D7C-test',address:'02:11:22:33:44:55',owner:action==='pairing'?null:'father@example.invalid'};
+  if(action==='ack'){const exists=await page.evaluate(id=>JSON.parse(localStorage.getItem('dado.tv.v1')!).profiles.some((p:any)=>p.id==='cloud-'+id),cloudId);expect(exists).toBe(true);ack++;}
+  await route.fulfill({headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'},json:action==='pairing'?{...state,pairingCode:'TEST123456',pairingExpires:Date.now()/1000+600}:action==='pull'?{...state,messages:[{id:cloudId,profile:{name:'Familienzugang',kind:'Xtream',host:'https://provider.invalid',username:'demo',password:'demo'}}]}:state});
+ });
+ await page.goto('/');await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+ const panel=page.locator('.connect-panel');expect(calls).toHaveLength(0);
+ await panel.getByRole('button',{name:'Gerät verbinden',exact:true}).click();await expect(panel).toContainText('TEST123456');
+ expect(calls).toEqual(['register','pairing']);
+ await page.evaluate(()=>{const old=Storage.prototype.setItem;(window as any).__restoreStorage=()=>{Storage.prototype.setItem=old;};Storage.prototype.setItem=function(k,v){if(k==='dado.tv.v1')throw Error('fixture full storage');return old.call(this,k,v);};});
+ await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Speicher voll');expect(ack).toBe(0);
+ await page.evaluate(()=>(window as any).__restoreStorage());
+ await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('1 neue Profile gespeichert');expect(ack).toBe(1);
+ await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('0 neue Profile gespeichert');expect(ack).toBe(2);
+ const count=await page.evaluate(()=>JSON.parse(localStorage.getItem('dado.tv.v1')!).profiles.filter((p:any)=>p.name==='Familienzugang').length);expect(count).toBe(1);
+});
+
+test('cloud setup on login opens separately and Back restores the profile form',async({page})=>{
+ await fixture(page,false,false);await page.goto('/');
+ await page.getByRole('button',{name:'Profile vom Handy/PC',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Dado Connect',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Dado Connect',exact:true})).toHaveCount(0);
+ await expect(page.getByLabel('Profilname',{exact:true})).toBeVisible();
+});
+
+test('Connect portal registration, manual approval, pairing and M3U send work on a phone',async({page})=>{
+ await page.setViewportSize({width:390,height:844});let logged=false,approved=false;const devices:any[]=[],messages:any[]=[];
+ await page.route('https://connect-ui.invalid/**',async route=>{
+  const path=new URL(route.request().url()).pathname;let value:any={ok:true};
+  if(path==='/')return route.fulfill({contentType:'text/html',body:connectPage});
+  if(path==='/portal.js')return route.fulfill({contentType:'text/javascript',body:connectScript});
+  if(path==='/style.css')return route.fulfill({contentType:'text/css',body:connectCss});
+  const input=route.request().method()==='POST'?route.request().postDataJSON():{};
+  const user={name:'Papa',email:'father@example.invalid',status:approved?'approved':'pending'};
+  if(path==='/api/session'&&!logged)return route.fulfill({status:401,json:{error:'Bitte anmelden.'}});
+  if(path==='/api/auth/register')value={message:'Konto angelegt. Betreiber muss freigeben.'};
+  if(path==='/api/auth/login'){logged=true;value={user};}
+  if(path==='/api/session')value={user};
+  if(path==='/api/devices')value={devices};
+  if(path==='/api/pair'){devices.push({id:'tv1',label:input.label,address:input.address,platform:'samsung'});}
+  if(path==='/api/messages'&&route.request().method()==='POST'){expect(input.profile.kind).toBe('M3u');expect(input.profile.m3uUrl).toBe('https://provider.invalid/family.m3u');messages.push({id:input.id,device_id:'tv1',name:input.profile.name,kind:'M3u',state:'queued',created_at:Date.now()/1000});}
+  if(path==='/api/messages'&&route.request().method()==='GET')value={messages};
+  return route.fulfill({json:value});
+ });
+ await page.goto('https://connect-ui.invalid/');await page.getByRole('button',{name:'Konto erstellen',exact:true}).click();
+ await page.locator('#register input[name=name]').fill('Papa');await page.locator('#register input[name=email]').fill('father@example.invalid');await page.locator('#register input[name=password]').fill('a long test password 123');
+ await page.getByRole('button',{name:'Konto zur Freigabe anlegen'}).click();await expect(page.locator('#message')).toContainText('Konto angelegt');
+ await page.locator('#login input[name=email]').fill('father@example.invalid');await page.locator('#login input[name=password]').fill('a long test password 123');await page.locator('#login button').click();
+ await expect(page.locator('#pending')).toBeVisible();approved=true;await page.getByRole('button',{name:'Freigabe aktualisieren'}).click();await expect(page.locator('#dashboard')).toBeVisible();
+ await page.locator('#pair input[name=address]').fill('02:11:22:33:44:55');await page.locator('#pair input[name=code]').fill('TEST123456');await page.locator('#pair input[name=label]').fill('Wohnzimmer');await page.locator('#pair button').click();
+ await expect(page.locator('#deviceSelect')).toContainText('Wohnzimmer');await page.locator('#send input[name=name]').fill('Familienliste');await page.locator('#kind').selectOption('M3u');await page.locator('#send input[name=m3uUrl]').fill('https://provider.invalid/family.m3u');await page.locator('#sendButton').click();
+ await expect(page.locator('#history')).toContainText('Familienliste');expect(messages).toHaveLength(1);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/dado-connect-phone.png',fullPage:true});
 });

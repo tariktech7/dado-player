@@ -1,5 +1,15 @@
 # Samsung USB-Verteilung: Stand 16.11.2026
 
+## Aktualisierung 17.11.2026: Partnerantrag abgelehnt
+
+Laut vom Nutzer bereitgestellter Antwort von Christian Eickhoff wurde die
+Partneranfrage für den generischen IPTV-Player abgelehnt. Die Antwort nennt eine
+Vorgabe der EU-Zentrale gegen weitere generische Player ohne eigenes Inhaltsangebot.
+Damit sind der deutsche Store-Weg und das partnergebundene USB-Werkzeug aktuell
+nicht freigegeben. Keine neue Anfrage oder Umgehung wird automatisch gestartet.
+Entwicklerinstallation über Netzwerk bleibt der vorhandene Testweg. Die folgenden
+Einträge dokumentieren den vorangegangenen Ablauf, keine aktuelle Partnerfreigabe.
+
 Samsung beschreibt in der offiziellen [Installations-FAQ](https://developer.samsung.com/smarttv/develop/faq/application-installation.html)
 eine Umwandlung über das USB Demo Packaging Tool im TV Seller Office. Eine normale WGT lässt sich
 auf Consumer-TVs nicht direkt vom USB-Stick installieren. Die erzeugten Samsung-Dateien wären

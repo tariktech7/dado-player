@@ -9,6 +9,7 @@
 
 pub mod app;
 pub mod client;
+pub mod connect;
 pub mod demo;
 pub mod fonts;
 #[cfg(target_os = "windows")]

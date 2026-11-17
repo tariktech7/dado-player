@@ -1,6 +1,6 @@
 [package]
 name = "dado-player"
-version = "0.6.4"
+version = "0.7.0"
 edition = "2021"
 
 [[bin]]
@@ -36,6 +36,7 @@ anyhow = "1"
 log = "0.4"
 chrono = "0.4"
 base64 = "0.22"
+getrandom = "0.2"
 libloading = "0.8"
 raw-window-handle = "0.6"
 

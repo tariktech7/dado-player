@@ -26,6 +26,7 @@ import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 import { Home } from "./home";
 import {licenseClient} from './licensing';
+import {ConnectPanel} from './connect';
 import packageInfo from "../package.json";
 const APP_VERSION = packageInfo.version;
 import {
@@ -505,6 +506,13 @@ function App() {
     setEpg({});
     setEditing(false);
     changed({ ...savedRef.current, signedOut: true });
+  };
+  const importCloudProfiles = (profiles:Profile[]) => {
+    const added=profiles.filter(p=>!savedRef.current.profiles.some(old=>old.id===p.id));
+    const next={...savedRef.current,profiles:[...savedRef.current.profiles,...added]};
+    save(next);
+    savedRef.current=next;setSaved(next);
+    return added.length;
   };
   const back = () => {
     if (tracksRef.current) {
@@ -1130,6 +1138,7 @@ function App() {
           )}
           <p class="muted">{APP_VERSION} · Tizen 6.5+ · D7</p>
         </section>
+        <ConnectPanel importProfiles={importCloudProfiles} />
       </div>
     </div>
   );
@@ -1365,6 +1374,7 @@ function App() {
                 </button>
               </>
             )}
+            <ConnectPanel compact importProfiles={importCloudProfiles} />
           </div>
         </div>
       ) : busy ? (

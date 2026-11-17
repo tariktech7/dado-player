@@ -1,9 +1,9 @@
 # Dado Player
 
-Gemeinsamer Beta-Quellstand: **0.6.4** für Windows, Android (Build 18), iOS (Build 13) und Samsung Tizen.
-[Alle 0.6.4-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.6.4-beta).
+Gemeinsamer Beta-Quellstand: **0.7.0** für Windows, Android (Build 19), iOS (Build 14) und Samsung Tizen.
+[Alle 0.7.0-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.0-beta).
 Diese Vorabversion wird direkt über den Release-Link geladen; die bisherigen stabilen
-Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.6.4-scroll-performance-2026-11-16.md).
+Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.7.0-connect-2026-11-17.md).
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
 [Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
@@ -24,7 +24,7 @@ und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Fa
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der iOS-Stand **0.6.4 / Build 13** wird lokal unter Windows/WSL mit
+Der iOS-Stand **0.7.0 / Build 14** wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
 mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
 Der lokale Buildweg steht in [ios/README.md](ios/README.md).
@@ -102,4 +102,8 @@ Die TV-Navigation ist schmaler, Schrift, Logos und Karten sind kleiner. Der Kate
 
 Die Liste verwendet die restliche Höhe für mindestens sieben vollständige Zeilen mit geöffneter Vorschau. Die Zeilenhöhe wird aus `(Listenhöhe - 6 × 4 dp Abstand) / 7` berechnet und auf 48–58 dp begrenzt. Die drei Textzeilen werden nach den tatsächlichen Schriftmetriken platziert. Auf größeren logischen Arbeitsflächen bleiben zusätzliche Zeilen sichtbar. Menü und Kategorien verwenden kompakte Zeilen und einen dezenteren Fernbedienungsfokus.
 
-Der Layouttest prüft mindestens sieben Sender sowie die Ausrichtung von Marken-/Kategorientitel und Kategorien-/Suchzeile. Full-HD- und 4K-Aufnahmen mit Vorschau und Demodaten bestätigen sieben vollständige Zeilen im Emulator. Android-Version 0.2.5, Build 13; Windows und iOS wurden für diesen TV-Änderungssatz nicht neu paketiert.
+Der Layouttest prüft mindestens sieben Sender sowie die Ausrichtung von Marken-/Kategorientitel und Kategorien-/Suchzeile. Full-HD- und 4K-Aufnahmen mit Vorschau und Demodaten bestätigen sieben vollständige Zeilen im Emulator. Android-Version 0.2.5, Build 14; Windows und iOS wurden für diesen TV-Änderungssatz nicht neu paketiert.
+
+## Dado Connect
+
+M3U-URLs und Xtream-Zugänge nach manueller Kontogenehmigung und einmaliger Geräte-Kopplung an Windows, Android, iOS und Samsung senden. Am Gerät mit Aktualisieren speichern. [Portal](https://dado-connect.dado-licensing.workers.dev), [Verwaltung](https://dado-admin.dado-licensing.workers.dev/admin/connect), [Anleitung](connect/README.md). Keine Hintergrundabrufe; Kontogenehmigung und Kauflizenz sind unabhängig.
