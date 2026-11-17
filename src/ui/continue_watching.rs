@@ -39,11 +39,7 @@ fn resume_dialog(app: &mut App, ui: &mut Ui) {
             ui.painter()
                 .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(170));
             let w = 420.0f32.min(screen.width() - 32.0).max(280.0);
-            let fill = if ui.visuals().dark_mode {
-                crate::theme::PANEL_DARK
-            } else {
-                crate::theme::PANEL_LIGHT
-            };
+            let fill = ui.visuals().window_fill;
 
             // Position centered
             let card_rect = egui::Rect::from_center_size(screen.center(), Vec2::new(w, 220.0));

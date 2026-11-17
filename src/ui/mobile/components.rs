@@ -676,7 +676,7 @@ pub fn list_row(app: &mut App, ui: &mut Ui, row: Row<'_>, pad: f32) -> Response 
             c,
             18.0,
             if playing_now {
-                accent_fill()
+                accent_fill(ui)
             } else {
                 ui.visuals().widgets.inactive.bg_fill
             },
@@ -899,7 +899,11 @@ pub fn chip(ui: &mut Ui, label: &str, selected: bool) -> Response {
     // the row keeps its visual height without shrinking the hit area.
     let (rect, resp) = ui.allocate_exact_size(vec2(w, TOUCH), Sense::click());
     let pill = Rect::from_center_size(rect.center(), vec2(w, 36.0));
-    let bg = if selected { accent_fill() } else { surface(ui) };
+    let bg = if selected {
+        accent_fill(ui)
+    } else {
+        surface(ui)
+    };
     ui.painter().rect_filled(pill, Rounding::same(18.0), bg);
     let color = if selected { Color32::WHITE } else { text(ui) };
     let g = fit(ui, label, font, color, w - 20.0);
@@ -937,7 +941,7 @@ pub fn segmented(ui: &mut Ui, labels: &[&str], selected: usize) -> Option<usize>
         let on = i == selected;
         if on {
             ui.painter()
-                .rect_filled(seg, Rounding::same(9.0), accent_fill());
+                .rect_filled(seg, Rounding::same(9.0), accent_fill(ui));
         } else if r.is_pointer_button_down_on() {
             ui.painter()
                 .rect_filled(seg, Rounding::same(9.0), pressed(ui));
@@ -982,13 +986,13 @@ pub fn button_at(ui: &mut Ui, rect: Rect, label: &str, primary: bool, enabled: b
     let (bg, fg) = if !enabled {
         (surface(ui), muted(ui))
     } else if primary {
-        (accent_fill(), Color32::WHITE)
+        (accent_fill(ui), Color32::WHITE)
     } else {
         (surface(ui), text(ui))
     };
     let bg = if enabled && resp.is_pointer_button_down_on() {
         if primary {
-            accent_fill().gamma_multiply(0.82)
+            accent_fill(ui).gamma_multiply(0.82)
         } else {
             pressed(ui)
         }
@@ -1014,7 +1018,8 @@ pub fn icon_button(ui: &mut Ui, ic: Icon, size: f32, filled: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
     let r = size * 0.5;
     if filled {
-        ui.painter().circle_filled(rect.center(), r, accent_fill());
+        ui.painter()
+            .circle_filled(rect.center(), r, accent_fill(ui));
     } else if resp.is_pointer_button_down_on() {
         ui.painter()
             .circle_filled(rect.center(), r, Color32::from_white_alpha(28));
@@ -1214,7 +1219,7 @@ pub fn switch_row(ui: &mut Ui, label: &str, value: bool) -> Option<bool> {
         track,
         Rounding::same(13.0),
         if value {
-            accent_fill()
+            accent_fill(ui)
         } else {
             ui.visuals().widgets.inactive.bg_fill
         },
@@ -1381,7 +1386,7 @@ pub fn progress_bar(ui: &Ui, rect: Rect, frac: f32) {
         ui.painter().rect_filled(
             Rect::from_min_size(rect.min, vec2(w, rect.height())),
             Rounding::same(rect.height() * 0.5),
-            accent_fill(),
+            accent_fill(ui),
         );
     }
 }

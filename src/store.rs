@@ -215,6 +215,18 @@ pub fn load_settings() -> Settings {
         }
         s.settings_version = 5;
     }
+    if s.settings_version < 6 {
+        if s.theme == crate::types::Theme::System {
+            s.theme = crate::types::Theme::Warm;
+        }
+        if s.player_backend == crate::types::PlayerBackend::MxPlayerIntegrated {
+            s.player_backend = crate::types::PlayerBackend::Mpv;
+        }
+        if s.player_backend == crate::types::PlayerBackend::MxPlayerFallback {
+            s.player_backend = crate::types::PlayerBackend::MxPlayer;
+        }
+        s.settings_version = 6;
+    }
     s
 }
 

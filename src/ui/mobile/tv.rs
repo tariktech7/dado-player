@@ -1090,7 +1090,7 @@ fn settings_rail(app: &mut App) -> Vec<Rail> {
     vec![
         #[cfg(target_os = "android")]
         Rail {
-            title: "Player (Standard: MX Player)".to_string(),
+            title: "Player · integriert oder installierte Android-App".to_string(),
             wide: true,
             cards: player_opts,
         },
@@ -1155,6 +1155,7 @@ fn apply_action(app: &mut App, act: Act) {
         #[cfg(target_os = "android")]
         Act::Player(p) => {
             app.settings.player_backend = p;
+            app.settings.settings_mode = crate::types::SettingsMode::Expert;
             app.save_settings_now();
         }
         Act::LiveFmt(f) => {

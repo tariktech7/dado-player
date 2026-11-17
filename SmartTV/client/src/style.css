@@ -26,7 +26,7 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f0f4f2;
+  --bg: #f7f8fa;
   --card: #fff;
   --panel: #e8efed;
   --text: #181d26;
@@ -35,6 +35,26 @@
   --select: #c8e9e3;
   --line: #c6d4d0;
 }
+:root[data-theme="warm"] {
+  color-scheme: light;
+  --bg: #ebe3d8;
+  --panel: #f9f4ec;
+  --card: #f4ece0;
+  --text: #322d28;
+  --muted: #6c5b4c;
+  --accent: #88512d;
+  --select: #e2ccb0;
+  --line: #cdbda9;
+  --shadow: 0 12px 32px #57412a14;
+}
+:root[data-theme="warm"] .primary { background: #88512d; }
+:root[data-theme="warm"] .shell {
+  background: radial-gradient(ellipse at 10% 0%, #f6dfc1, transparent 65%), var(--bg);
+}
+:root[data-theme="warm"] .player-top,
+:root[data-theme="warm"] .player-controls,
+:root[data-theme="light"] .player-top,
+:root[data-theme="light"] .player-controls { background: var(--panel); }
 * {
   box-sizing: border-box;
 }

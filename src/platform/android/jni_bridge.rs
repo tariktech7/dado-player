@@ -418,65 +418,6 @@ pub fn open_external(
     key: &str,
     position: u64,
 ) -> Result<(), String> {
-    // MX Player integrated capability - use embedded player without app installation
-    if backend == crate::types::PlayerBackend::MxPlayerIntegrated {
-        return if let Some(app) = super::entry::app_handle() {
-            let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) };
-            match vm {
-                Ok(vm) => {
-                    let mut env = match vm.get_env() {
-                        Ok(env) => env,
-                        Err(_) => return Err("JNI-Umgebung nicht verfügbar.".to_string()),
-                    };
-                    let Some(class) = ACTIVITY_CLASS.get() else {
-                        return Err("App noch nicht initialisiert.".to_string());
-                    };
-                    let j_url = match env.new_string(url) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            let _ = env.exception_clear();
-                            return Err("Stream-URL konnte nicht übergeben werden.".to_string());
-                        }
-                    };
-                    let j_title = match env.new_string(title) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            let _ = env.exception_clear();
-                            return Err("Titel konnte nicht übergeben werden.".to_string());
-                        }
-                    };
-                    let url_obj: jni::objects::JObject = j_url.into();
-                    let title_obj: jni::objects::JObject = j_title.into();
-                    let status = env.call_static_method(
-                        class,
-                        "playWithMXPlayerIntegrated",
-                        "(Ljava/lang/String;Ljava/lang/String;)I",
-                        &[
-                            jni::objects::JValue::Object(&url_obj),
-                            jni::objects::JValue::Object(&title_obj),
-                        ],
-                    );
-                    match status {
-                        Ok(v) => {
-                            let code = v.i().unwrap_or(2);
-                            match code {
-                                0 => Ok(()),
-                                1 => Err("MX Player-Integrierte Player-Fähigkeit nicht verfügbar - integrierter Player läuft.".to_string()),
-                                _ => Err("MX Player-Integrierte Player-Fähigkeit konnte nicht gestartet werden - integrierter Player läuft.".to_string()),
-                            }
-                        }
-                        Err(_) => {
-                            let _ = env.exception_clear();
-                            Err("MX Player-Integrierte Player-Fähigkeit JNI-Aufruf fehlgeschlagen - integrierter Player läuft.".to_string())
-                        }
-                    }
-                }
-                Err(_) => Err("Java-VM nicht verfügbar.".to_string()),
-            }
-        } else {
-            Err("Android-App noch nicht bereit.".to_string())
-        };
-    }
     if url.trim().is_empty() {
         return Err("Keine Stream-URL vorhanden.".to_string());
     }
@@ -486,7 +427,7 @@ pub fn open_external(
     let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }
         .map_err(|_| "Java-VM nicht verfügbar.".to_string())?;
     let mut env = vm
-        .get_env()
+        .attach_current_thread()
         .map_err(|_| "JNI-Umgebung nicht verfügbar.".to_string())?;
     let Some(class) = ACTIVITY_CLASS.get() else {
         return Err("App noch nicht initialisiert.".to_string());
@@ -528,6 +469,9 @@ pub fn open_external(
             2
         }
     };
+    if code != 0 {
+        *EXTERNAL_KEY.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
     // Log the decision, never the URL: provider URLs carry credentials in the
     // path and logcat is readable by anyone with adb access to the device.
     eprintln!(

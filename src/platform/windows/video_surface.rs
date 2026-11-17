@@ -6,6 +6,7 @@
 use crate::platform::VideoSurface;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
+use std::sync::OnceLock;
 
 use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
@@ -203,6 +204,10 @@ impl Drop for VideoSurface {
 }
 
 static VIDEO_CLICKED: AtomicBool = AtomicBool::new(false);
+static REPAINT: OnceLock<egui::Context> = OnceLock::new();
+pub fn register_repaint(ctx: &egui::Context) {
+    let _ = REPAINT.set(ctx.clone());
+}
 pub fn take_click() -> bool {
     VIDEO_CLICKED.swap(false, Ordering::Relaxed)
 }
@@ -214,6 +219,18 @@ unsafe extern "system" fn video_window_proc(
 ) -> isize {
     if message == windows_sys::Win32::UI::WindowsAndMessaging::WM_LBUTTONUP {
         VIDEO_CLICKED.store(true, Ordering::Relaxed);
+        // The child video HWND receives this instead of winit. Wake egui now,
+        // rather than waiting for a later click on the parent window.
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus(
+            windows_sys::Win32::UI::WindowsAndMessaging::GetParent(hwnd),
+        );
+        if let Some(ctx) = REPAINT.get() {
+            ctx.request_repaint();
+        }
+    } else if message == windows_sys::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE {
+        if let Some(ctx) = REPAINT.get() {
+            ctx.request_repaint();
+        }
     }
     DefWindowProcW(hwnd, message, wparam, lparam)
 }

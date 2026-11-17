@@ -1,7 +1,8 @@
 import { Saved, Settings, Item, Watched, itemKey } from "./types";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 export const defaults: Settings = {
-  theme: "system",
+  theme: "warm",
+  appearanceVersion: 1,
   autoplayLast: policy.autoplayLast,
   liveFormat: "m3u8",
   player: "auto",
@@ -33,10 +34,13 @@ export function load(storage: Pick<Storage, "getItem"> = localStorage): Saved {
   try {
     const s = JSON.parse(storage.getItem(KEY) || "null");
     if (s?.version !== 1 || !Array.isArray(s.profiles)) return fresh();
+    const settings = { ...defaults, ...s.settings };
+    if (!s.settings?.appearanceVersion && settings.theme === "system") settings.theme = "warm";
+    settings.appearanceVersion = 1;
     return {
       ...fresh(),
       ...s,
-      settings: { ...defaults, ...s.settings },
+      settings,
       favorites: s.favorites || {},
       history: s.history || {},
     };

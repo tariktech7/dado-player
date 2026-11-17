@@ -49,6 +49,49 @@ pub const CARD_LIGHT: Color32 = Color32::from_rgb(0xF2, 0xF4, 0xF7);
 pub const BORDER_LIGHT: Color32 = Color32::from_rgb(0xDF, 0xE3, 0xEA);
 pub const TEXT_LIGHT: Color32 = Color32::from_rgb(0x18, 0x1D, 0x26);
 pub const MUTED_LIGHT: Color32 = Color32::from_rgb(0x5F, 0x6B, 0x7D);
+pub const BG_WARM: Color32 = Color32::from_rgb(0xEB, 0xE3, 0xD8);
+const INK_WARM: Color32 = Color32::from_rgb(0x32, 0x2D, 0x28);
+const BRONZE: Color32 = Color32::from_rgb(0x88, 0x51, 0x2D);
+
+/// Daylight material: warm stone, ivory cards and restrained bronze accents.
+/// Reuses light-mode geometry and contrast rules; explicit dark remains intact.
+pub fn apply_warm(ctx: &Context) {
+    ctx.style_mut(|s| {
+        let v = &mut s.visuals;
+        v.panel_fill = BG_WARM;
+        v.window_fill = Color32::from_rgb(249, 244, 236);
+        v.extreme_bg_color = Color32::from_rgb(255, 251, 245);
+        v.faint_bg_color = Color32::from_rgb(244, 236, 224);
+        v.code_bg_color = v.faint_bg_color;
+        v.hyperlink_color = BRONZE;
+        v.selection.bg_fill = BRONZE;
+        v.window_stroke.color = Color32::from_rgb(205, 189, 169);
+        for w in [
+            &mut v.widgets.noninteractive,
+            &mut v.widgets.inactive,
+            &mut v.widgets.hovered,
+            &mut v.widgets.active,
+            &mut v.widgets.open,
+        ] {
+            w.fg_stroke.color = INK_WARM;
+            w.bg_stroke.color = Color32::from_rgb(205, 189, 169);
+        }
+        v.widgets.noninteractive.bg_fill = v.window_fill;
+        v.widgets.noninteractive.weak_bg_fill = v.window_fill;
+        v.widgets.inactive.bg_fill = Color32::from_rgb(239, 229, 215);
+        v.widgets.inactive.weak_bg_fill = v.widgets.inactive.bg_fill;
+        v.widgets.hovered.bg_fill = Color32::from_rgb(229, 211, 187);
+        v.widgets.hovered.weak_bg_fill = v.widgets.hovered.bg_fill;
+        v.widgets.hovered.bg_stroke.color = BRONZE;
+        v.widgets.active.bg_fill = Color32::from_rgb(224, 201, 171);
+        v.widgets.active.weak_bg_fill = v.widgets.active.bg_fill;
+        v.widgets.open.bg_fill = v.window_fill;
+        v.widgets.open.weak_bg_fill = v.window_fill;
+    });
+}
+fn warm(ui: &egui::Ui) -> bool {
+    ui.visuals().panel_fill == BG_WARM
+}
 
 pub fn apply(ctx: &Context, dark: bool) {
     // Real system UI font (Segoe UI / Roboto) instead of egui's Ubuntu-Light.
@@ -71,6 +114,9 @@ pub fn apply(ctx: &Context, dark: bool) {
 }
 
 pub fn muted(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        return Color32::from_rgb(108, 91, 76);
+    }
     if ui.visuals().dark_mode {
         MUTED_DARK
     } else {
@@ -80,6 +126,9 @@ pub fn muted(ui: &egui::Ui) -> Color32 {
 
 /// Accent as ink: bright azure on dark, the deeper fill blue on light.
 pub fn accent(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        return BRONZE;
+    }
     if ui.visuals().dark_mode {
         ACCENT
     } else {
@@ -88,12 +137,19 @@ pub fn accent(ui: &egui::Ui) -> Color32 {
 }
 
 /// Accent as a fill behind white text. Same value in both themes.
-pub fn accent_fill(_ui: &egui::Ui) -> Color32 {
-    ACCENT_FILL
+pub fn accent_fill(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        BRONZE
+    } else {
+        ACCENT_FILL
+    }
 }
 
 /// Accent as text. Lighter than [`ACCENT`] on dark for 4.5:1 on the rail.
 pub fn accent_text(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        return BRONZE;
+    }
     if ui.visuals().dark_mode {
         Color32::from_rgb(0xAE, 0xEC, 0xDF)
     } else {
@@ -103,6 +159,9 @@ pub fn accent_text(ui: &egui::Ui) -> Color32 {
 
 /// Tinted selection surface (the rail's selected row, playing row).
 pub fn selection_surface(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        return Color32::from_rgb(226, 204, 176);
+    }
     if ui.visuals().dark_mode {
         ACCENT_DIM
     } else {
@@ -112,6 +171,9 @@ pub fn selection_surface(ui: &egui::Ui) -> Color32 {
 
 /// Raised / hovered row surface.
 pub fn card_hover(ui: &egui::Ui) -> Color32 {
+    if warm(ui) {
+        return ui.visuals().widgets.hovered.bg_fill;
+    }
     if ui.visuals().dark_mode {
         CARD_HOVER_DARK
     } else {
@@ -245,7 +307,9 @@ fn light_visuals() -> Visuals {
 /// Lightweight translucent chrome, with an edge highlight in both appearances.
 pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
     let dark = ui.visuals().dark_mode;
-    let base = if dark {
+    let base = if warm(ui) {
+        Color32::from_rgba_unmultiplied(255, 248, 235, 232)
+    } else if dark {
         Color32::from_rgba_unmultiplied(31, 43, 51, 185)
     } else {
         Color32::from_rgba_unmultiplied(247, 252, 253, 225)
@@ -304,7 +368,14 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
     let base = ui.visuals().panel_fill;
     ui.painter().rect_filled(rect, 0.0, base);
     let mut mesh = egui::Mesh::default();
-    let colors = if dark {
+    let colors = if warm(ui) {
+        [
+            Color32::from_rgb(246, 223, 193),
+            Color32::from_rgb(234, 225, 211),
+            base,
+            base,
+        ]
+    } else if dark {
         [
             Color32::from_rgb(19, 42, 52),
             Color32::from_rgb(29, 28, 47),
@@ -333,4 +404,34 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn daylight_material_keeps_readable_text_and_does_not_replace_dark_mode() {
+        fn luminance(c: egui::Color32) -> f32 {
+            let f = |v: u8| {
+                let v = f32::from(v) / 255.0;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
+        }
+        let ctx = egui::Context::default();
+        super::apply(&ctx, false);
+        super::apply_warm(&ctx);
+        let v = ctx.style().visuals.clone();
+        assert!(!v.dark_mode);
+        assert!((luminance(v.panel_fill) + 0.05) / (luminance(v.text_color()) + 0.05) > 7.0);
+        assert!(
+            (luminance(egui::Color32::WHITE) + 0.05) / (luminance(v.hyperlink_color) + 0.05) > 4.5
+        );
+        super::apply(&ctx, true);
+        assert!(ctx.style().visuals.dark_mode);
+        assert_eq!(ctx.style().visuals.panel_fill, super::BG_DARK);
+    }
 }

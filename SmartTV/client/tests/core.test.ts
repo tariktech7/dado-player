@@ -3,7 +3,30 @@ import assert from "node:assert/strict";
 import { Provider, parseM3u, hostUrl, decode, streamExtension } from "../src/api";
 import { fresh, load, save, favorite, remember } from "../src/store";
 import { Profile, Item } from "../src/types";
+test('warm default migrates automatic appearance once and preserves explicit dark/white choices',()=>{
+  assert.equal(fresh().settings.theme,'warm');
+  for(const theme of ['system','dark','light'] as const){
+    const s=fresh();s.settings.theme=theme;delete s.settings.appearanceVersion;
+    assert.equal(load({getItem:()=>JSON.stringify(s)}).settings.theme,theme==='system'?'warm':theme);
+  }
+  const s=fresh();s.settings.theme='system';
+  assert.equal(load({getItem:()=>JSON.stringify(s)}).settings.theme,'system');
+});
 import { xmltvTime } from "../src/xmltv";
+test('provider movie and series catalogues reject the opposite identifier and stream type',async()=>{
+  const fetcher: typeof fetch = async(input)=>{
+    const action=new URL(String(input)).searchParams.get('action');
+    if(!action) return Response.json({user_info:{auth:1},server_info:{}});
+    const rows=action==='get_vod_streams'?
+      [{stream_id:7,name:'Film',stream_type:'movie'},{series_id:8,name:'Wrong show'},{stream_id:9,name:'Tagged show',stream_type:'series'}]:
+      action==='get_series'?
+      [{series_id:7,name:'Show',stream_type:'series'},{stream_id:8,name:'Wrong movie'},{series_id:9,name:'Tagged movie',stream_type:'movie'}]:[];
+    return Response.json(rows);
+  };
+  const catalogue=await new Provider(profile,fresh().settings,fetcher).catalog();
+  assert.deepEqual(catalogue.vod.map(v=>v.name),['Film']);
+  assert.deepEqual(catalogue.series.map(v=>v.name),['Show']);
+});
 import { resolvePackagedMedia } from "../src/player";
 const profile: Profile = {
   id: "p1",

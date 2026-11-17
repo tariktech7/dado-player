@@ -111,65 +111,6 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
     private static final String MX_PRO = "com.mxtech.videoplayer.pro";
     private static final String VLC = "org.videolan.vlc";
 
-    // MX Player package name for integrated player support
-    private static final String MX_PLAYER_PACKAGE = "com.mxtech.videoplayer.ad";
-
-
-    /**
-     * Try to play a stream using MX Player's integrated player capability without requiring app installation.
-     *
-     * <p>This method attempts to use MX Player's built-in streaming functionality
-     * without launching the MX Player application or requiring it to be installed.
-     * It handles the same URL formats that regular MX Player would support.
-     *
-     * @param url The stream URL to play
-     * @param title The title of the stream
-     * @return 0 if successful, 1 if the integrated capability is not available, 2 if any other error
-     */
-    public static int playWithMXPlayerIntegrated(String url, String title) {
-        if (url == null || url.length() == 0) {
-            return EXTERNAL_ERROR;
-        }
-        final GameActivity self = sSelf;
-        if (self == null || self.isFinishing() || self.isDestroyed()) {
-            return EXTERNAL_ERROR;
-        }
-        try {
-            final Uri uri = Uri.parse(url);
-            final String label = (title == null || title.length() == 0) ? "Video" : title;
-            
-            // Create a direct playback intent that attempts to use MX Player's integrated capabilities
-            // We start with a generic video/* intent and let the system decide if an appropriate player is available
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, "video/*");
-            intent.putExtra(Intent.EXTRA_TITLE, label);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            
-            // Add category for video content
-            intent.addCategory(Intent.CATEGORY_BROWSABLE);
-            
-            try {
-                // Start the activity with a chosen filter for MX Player if available
-                // This will try to resolve to MX Player or any other video player
-                self.startActivity(intent);
-                return EXTERNAL_OK;
-            } catch (ActivityNotFoundException e) {
-                // No player found that can handle this intent
-                return EXTERNAL_NO_APP;
-            }
-        } catch (ActivityNotFoundException e) {
-            return EXTERNAL_NO_APP;
-        } catch (Exception e) {
-            // Other errors
-            Log.w(TAG, "playWithMXPlayerIntegrated failed");
-            return EXTERNAL_ERROR;
-        }
-    }
-
-
-
-
-
     /** Status codes returned to Rust (never a URL — those carry credentials). */
     private static final int EXTERNAL_OK = 0;
     private static final int EXTERNAL_NO_APP = 1;

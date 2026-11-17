@@ -173,3 +173,7 @@ is the new device package; actual iPhone frame pacing still needs device verific
 ## 0.7.0 · Dado Connect
 
 Build 14: manueller Cloud-Profilimport in Einstellungen und Anmeldung. Private Geräteadresse, keine iPhone-Hardware-MAC. Einmal koppeln, dann Aktualisieren. Dauerhaft speichern vor Bestätigung; keine automatische Anmeldung. IPA mit eigener Apple-ID signieren. Physischer iPhone-Test bleibt erforderlich. Siehe ../connect/README.md.
+
+## 0.7.1
+
+Gemeinsame warme Tageslichtdarstellung mit Dunkel/Hell/System, strengere Film-/Serien-Zuordnung und kompatible Einstellungen. Android-Build 20, iOS-Build 15. MX als externe installierte App nur auf Android/Android TV; kein plattformübergreifendes MX-SDK vorhanden.

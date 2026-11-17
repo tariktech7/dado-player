@@ -39,7 +39,7 @@ fn draw_radio_card(ui: &Ui, rect: Rect, title: &str) {
     ui.painter()
         .rect_filled(rect, 0.0, Color32::from_rgb(0x0D, 0x0F, 0x12));
     let center = pos2(rect.center().x, rect.center().y - 28.0);
-    ui.painter().circle_filled(center, 52.0, accent_fill());
+    ui.painter().circle_filled(center, 52.0, accent_fill(ui));
     ui.painter()
         .circle_stroke(center, 52.0, Stroke::new(2.0_f32, accent()));
     ui.painter().text(
@@ -387,7 +387,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     let play_rect = Rect::from_center_size(pos2(cx, cy), vec2(play_size, play_size));
     let pr = ui.interact(play_rect, ui.id().with("p-play"), Sense::click());
     ui.painter()
-        .circle_filled(play_rect.center(), play_size * 0.5, accent_fill());
+        .circle_filled(play_rect.center(), play_size * 0.5, accent_fill(ui));
     components::icon(
         ui,
         Rect::from_center_size(play_rect.center(), vec2(30.0, 30.0)),
@@ -809,7 +809,7 @@ fn mobile_track_popover(
 /// Row background for the track popover (selected / hovered / plain).
 fn draw_row_bg(ui: &mut Ui, rect: Rect, selected: bool, hovered: bool) {
     let fill = if selected {
-        accent_fill().gamma_multiply(0.38)
+        accent_fill(ui).gamma_multiply(0.38)
     } else if hovered {
         Color32::from_white_alpha(30)
     } else {
@@ -849,7 +849,7 @@ fn scrub(ui: &mut Ui, bar: Rect, frac: f32) -> Option<f32> {
         .rect_filled(bar, Rounding::same(3.0), Color32::from_white_alpha(48));
     let filled = Rect::from_min_size(bar.min, vec2(bar.width() * f, bar.height()));
     ui.painter()
-        .rect_filled(filled, Rounding::same(3.0), accent_fill());
+        .rect_filled(filled, Rounding::same(3.0), accent_fill(ui));
     ui.painter().circle_filled(
         pos2(bar.left() + bar.width() * f, bar.center().y),
         8.0,

@@ -171,3 +171,7 @@ blocking new covers. The display-rate hint remains unchanged. Current build: 18.
 ## 0.7.0 · Dado Connect
 
 Build 19: M3U-/Xtream-Profilimport in Touch- und TV-Modus. Private Geräteadresse, einmaliger Kopplungscode, danach Aktualisieren. Keine Hintergrundabrufe oder automatische Anmeldung. Siehe ../connect/README.md.
+
+## 0.7.1
+
+Gemeinsame warme Tageslichtdarstellung mit Dunkel/Hell/System, strengere Film-/Serien-Zuordnung und kompatible Einstellungen. Android-Build 20, iOS-Build 15. MX als externe installierte App nur auf Android/Android TV; kein plattformübergreifendes MX-SDK vorhanden.

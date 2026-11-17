@@ -84,8 +84,8 @@ pub fn reg(size: f32) -> FontId {
 }
 
 /// Filled-button background. `#2F7BFF` keeps white labels at ≥4.3:1.
-pub fn accent_fill() -> Color32 {
-    crate::theme::ACCENT_FILL
+pub fn accent_fill(ui: &Ui) -> Color32 {
+    crate::theme::accent_fill(ui)
 }
 
 /// Accent used as *text* on a light background.

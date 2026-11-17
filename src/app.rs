@@ -286,7 +286,7 @@ pub struct App {
     /// Ask the Live list to scroll this channel into view.
     pub scroll_to: Option<u32>,
     pending_fullscreen: Option<bool>,
-    applied_dark: Option<(bool, bool, bool)>,
+    applied_dark: Option<(crate::types::Theme, bool, bool, bool)>,
     system_dark: bool,
     last_theme_poll: f64,
     preview_placed: bool,
@@ -689,8 +689,17 @@ impl App {
             self.stop_play();
         }
         #[cfg(target_os = "windows")]
-        if crate::platform::windows::video_surface::take_click() && self.preview.is_some() {
-            self.promote_preview(false);
+        {
+            crate::platform::windows::video_surface::register_repaint(ctx);
+            if crate::platform::windows::video_surface::take_click() {
+                if self.preview.is_some() {
+                    self.promote_preview(false);
+                } else if self.view == View::Player {
+                    self.ui_activity = ctx.input(|i| i.time);
+                    self.player_reveal = false;
+                    ctx.request_repaint();
+                }
+            }
         }
         let now = ctx.input(|i| i.time);
 
@@ -724,10 +733,19 @@ impl App {
         let want_dark = self
             .dark_mode_override
             .unwrap_or_else(|| self.settings.theme.resolve(self.system_dark));
-        let appearance = (want_dark, ui::mobile::active(ctx), self.tv);
+        let appearance = (
+            self.settings.theme,
+            want_dark,
+            ui::mobile::active(ctx),
+            self.tv,
+        );
         if self.applied_dark != Some(appearance) {
             self.applied_dark = Some(appearance);
             crate::theme::apply(ctx, want_dark);
+            if self.settings.theme == crate::types::Theme::Warm && self.dark_mode_override.is_none()
+            {
+                crate::theme::apply_warm(ctx);
+            }
             ctx.request_repaint();
         }
 
@@ -2043,35 +2061,23 @@ impl App {
         #[cfg(target_os = "android")]
         {
             let backend = self.settings.effective_player_backend();
-            // For MX Player integrated capability, use it directly without app installation
-            if !self.tv && backend == crate::types::PlayerBackend::MxPlayerIntegrated {
-                if crate::platform::open_external(
+            if backend.is_external() {
+                match crate::platform::open_external(
                     &item.url,
                     &item.title,
                     backend,
                     &item.progress_key,
                     self.get_progress(&item.progress_key),
-                )
-                .is_ok()
-                {
-                    self.preview = None;
-                    self.record_history(&item);
-                    return;
+                ) {
+                    Ok(()) => {
+                        self.preview = None;
+                        self.record_history(&item);
+                        return;
+                    }
+                    Err(e) => {
+                        self.player_note = Some((e, std::time::Instant::now()));
+                    }
                 }
-            } else if !self.tv
-                && backend.is_external()
-                && crate::platform::open_external(
-                    &item.url,
-                    &item.title,
-                    backend,
-                    &item.progress_key,
-                    self.get_progress(&item.progress_key),
-                )
-                .is_ok()
-            {
-                self.preview = None;
-                self.record_history(&item);
-                return;
             }
         }
 
@@ -3448,6 +3454,71 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn phone_tabs_keep_movies_and_series_separate_with_overlapping_provider_ids() {
+        fn text(shape: &egui::epaint::Shape, out: &mut String) {
+            match shape {
+                egui::epaint::Shape::Text(t) => {
+                    out.push_str(&t.galley.job.text);
+                    out.push('\n');
+                }
+                egui::epaint::Shape::Vec(v) => v.iter().for_each(|s| text(s, out)),
+                _ => {}
+            }
+        }
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("Fixture", ProfileKind::M3u));
+        app.library.loaded = true;
+        app.library.movies = vec![crate::types::VodMovie {
+            id: 42,
+            name: "ONLY_MOVIE".into(),
+            category_id: "1".into(),
+            cover: String::new(),
+            rating: String::new(),
+            added: None,
+            container_extension: "mp4".into(),
+            stream_url: String::new(),
+            plot: String::new(),
+        }];
+        app.library.series = vec![crate::types::Series {
+            id: 42,
+            name: "ONLY_SERIES".into(),
+            category_id: "1".into(),
+            cover: String::new(),
+            added: None,
+            plot: String::new(),
+        }];
+        app.vod_cat = "all".into();
+        app.series_cat = "all".into();
+        let ctx = egui::Context::default();
+        crate::theme::apply(&ctx, false);
+        crate::theme::apply_warm(&ctx);
+        for (view, expected, absent) in [
+            (View::Movies, "ONLY_MOVIE", "ONLY_SERIES"),
+            (View::Series, "ONLY_SERIES", "ONLY_MOVIE"),
+            (View::Movies, "ONLY_MOVIE", "ONLY_SERIES"),
+        ] {
+            app.view = view;
+            for _ in 0..3 {
+                let output = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(393.0, 852.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| crate::ui::mobile::show(&mut app, ctx),
+                );
+                let mut labels = String::new();
+                for shape in &output.shapes {
+                    text(&shape.shape, &mut labels);
+                }
+                assert!(labels.contains(expected), "{labels}");
+                assert!(!labels.contains(absent), "{labels}");
+            }
+        }
+    }
     #[test]
     fn phone_catalogue_has_full_page_details_and_edge_back() {
         use egui::{epaint::Shape, pos2, vec2, Event, PointerButton, RawInput, Rect};

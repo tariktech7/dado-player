@@ -900,6 +900,7 @@ function App() {
               saved.settings.theme,
               (v) => setting("theme", v as Settings["theme"]),
               [
+                ["warm", "Warm"],
                 ["dark", "Dunkel"],
                 ["light", "Hell"],
                 ["system", "System"],

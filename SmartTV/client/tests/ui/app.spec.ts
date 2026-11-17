@@ -211,6 +211,27 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
     });
   }
 }
+test('warm, dark and white appearances switch immediately and persist', async({page})=>{
+  await fixture(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  for(const [name,value,color] of [['Warm','warm','rgb(235, 227, 216)'],['Dunkel','dark','rgb(13, 21, 24)'],['Hell','light','rgb(247, 248, 250)']] as const){
+    await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
+    await page.getByRole('option',{name,exact:true}).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme',value);
+    await expect(page.locator('body')).toHaveCSS('background-color',color);
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme',value);
+    await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  }
+  await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
+  await page.getByRole('option',{name:'Warm',exact:true}).click();
+  await page.getByRole('button',{name:'⌂ Startseite',exact:true}).click();
+  await page.mouse.move(1880,1040);
+  await page.waitForTimeout(500);
+  await page.screenshot({path:'test-results/dado-warm-071.png'});
+});
+
 test('license settings show real MAC and Unlimited, and paid restarts never query the license server',async({page})=>{
   await fixture(page,true,true);
   let requests=0;page.on('request',r=>{if(r.url().startsWith('https://license-fixture.invalid'))requests++;});
@@ -1286,9 +1307,9 @@ test('Connect portal registration, manual approval, pairing and M3U send work on
   return route.fulfill({json:value});
  });
  await page.goto('https://connect-ui.invalid/');await page.getByRole('button',{name:'Konto erstellen',exact:true}).click();
- await page.locator('#register input[name=name]').fill('Papa');await page.locator('#register input[name=email]').fill('father@example.invalid');await page.locator('#register input[name=password]').fill('a long test password 123');
+ await page.locator('#register input[name=name]').fill('Papa');await page.locator('#register input[name=email]').fill('father@example.invalid');await page.locator('#register input[name=password]').fill('a long test password 123!');
  await page.getByRole('button',{name:'Konto zur Freigabe anlegen'}).click();await expect(page.locator('#message')).toContainText('Konto angelegt');
- await page.locator('#login input[name=email]').fill('father@example.invalid');await page.locator('#login input[name=password]').fill('a long test password 123');await page.locator('#login button').click();
+ await page.locator('#login input[name=email]').fill('father@example.invalid');await page.locator('#login input[name=password]').fill('a long test password 123!');await page.locator('#login button').click();
  await expect(page.locator('#pending')).toBeVisible();approved=true;await page.getByRole('button',{name:'Freigabe aktualisieren'}).click();await expect(page.locator('#dashboard')).toBeVisible();
  await page.locator('#pair input[name=address]').fill('02:11:22:33:44:55');await page.locator('#pair input[name=code]').fill('TEST123456');await page.locator('#pair input[name=label]').fill('Wohnzimmer');await page.locator('#pair button').click();
  await expect(page.locator('#deviceSelect')).toContainText('Wohnzimmer');await page.locator('#send input[name=name]').fill('Familienliste');await page.locator('#kind').selectOption('M3u');await page.locator('#send input[name=m3uUrl]').fill('https://provider.invalid/family.m3u');await page.locator('#sendButton').click();

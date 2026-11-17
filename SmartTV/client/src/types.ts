@@ -46,7 +46,8 @@ export interface Watched {
   at: number;
 }
 export interface Settings {
-  theme: "dark" | "light" | "system";
+  theme: "warm" | "dark" | "light" | "system";
+  appearanceVersion?: number;
   autoplayLast: boolean;
   liveFormat: "m3u8" | "ts";
   player: "auto" | "avplay" | "html";

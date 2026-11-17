@@ -125,8 +125,14 @@ export class Provider {
                     : "get_series";
               const rows = await this.request(this.endpoint(action));
               if (!Array.isArray(rows)) throw 0;
-              result[kind] = rows.map((row) => ({
-                id: String(row.stream_id ?? row.series_id),
+              result[kind] = rows.filter((row) => {
+                const id = kind === "series" ? row.series_id : row.stream_id;
+                const type = String(row.stream_type || "").toLowerCase();
+                return id != null && String(id) !== "0" &&
+                  !(kind === "vod" && ["series", "live"].includes(type)) &&
+                  !(kind === "series" && ["movie", "vod", "live"].includes(type));
+              }).map((row) => ({
+                id: String(kind === "series" ? row.series_id : row.stream_id),
                 kind,
                 name: String(row.name || "Ohne Titel"),
                 category: String(row.category_id ?? ""),

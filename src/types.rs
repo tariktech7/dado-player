@@ -64,9 +64,11 @@ impl Profile {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Theme {
-    /// Follow the Windows setting (default).
-    #[default]
+    /// Follow the operating system setting.
     System,
+    /// Warm daylight surfaces, independent of the OS appearance.
+    #[default]
+    Warm,
     Dark,
     Light,
 }
@@ -75,12 +77,13 @@ impl Theme {
     pub fn label(self) -> &'static str {
         match self {
             Theme::System => "System",
+            Theme::Warm => "Warm",
             Theme::Dark => "Dunkel",
             Theme::Light => "Hell",
         }
     }
-    pub fn all() -> [Theme; 3] {
-        [Theme::System, Theme::Dark, Theme::Light]
+    pub fn all() -> [Theme; 4] {
+        [Theme::Warm, Theme::Dark, Theme::Light, Theme::System]
     }
     /// Resolve to "is dark" using the current Windows setting.
     pub fn resolve(self, system_dark: bool) -> bool {
@@ -88,6 +91,7 @@ impl Theme {
             Theme::System => system_dark,
             Theme::Dark => true,
             Theme::Light => false,
+            Theme::Warm => false,
         }
     }
 }
@@ -186,9 +190,9 @@ pub enum PlayerBackend {
     /// Built-in libmpv. Also the only backend available on desktop.
     #[default]
     Mpv,
-    /// MX Player integrated capability - embedded player without needing to install MX Player app.
+    /// Legacy value; normalized to the actual integrated backend.
     MxPlayerIntegrated,
-    /// MX Player native integration capability - fallback for MX Player when not installed.
+    /// Legacy value; normalized to the external MX app with built-in fallback.
     MxPlayerFallback,
 }
 
@@ -199,18 +203,16 @@ impl PlayerBackend {
             PlayerBackend::Vlc => "VLC",
             PlayerBackend::System => "Systemauswahl",
             PlayerBackend::Mpv => "Integriert",
-            PlayerBackend::MxPlayerIntegrated => "MX Player (integriert)",
-            PlayerBackend::MxPlayerFallback => "MX Player (Fallback)",
+            PlayerBackend::MxPlayerIntegrated => "Integriert (ältere Einstellung)",
+            PlayerBackend::MxPlayerFallback => "MX Player (ältere Einstellung)",
         }
     }
-    pub fn all() -> [PlayerBackend; 6] {
+    pub fn all() -> [PlayerBackend; 4] {
         [
             PlayerBackend::MxPlayer,
             PlayerBackend::Vlc,
             PlayerBackend::System,
             PlayerBackend::Mpv,
-            PlayerBackend::MxPlayerIntegrated,
-            PlayerBackend::MxPlayerFallback,
         ]
     }
     pub fn is_external(self) -> bool {
@@ -228,8 +230,8 @@ impl PlayerBackend {
             PlayerBackend::Vlc => 1,
             PlayerBackend::System => 2,
             PlayerBackend::Mpv => 3,
-            PlayerBackend::MxPlayerIntegrated => 4,
-            PlayerBackend::MxPlayerFallback => 5,
+            PlayerBackend::MxPlayerIntegrated => 3,
+            PlayerBackend::MxPlayerFallback => 0,
         }
     }
 }
@@ -399,13 +401,8 @@ pub struct Settings {
     /// simply get the tolerant behaviour.
     #[serde(default)]
     pub tls_verify: bool,
-    /// Which player backend to use for playback. MX Player is the default on
-    /// Android; the internal libmpv stays available as a fallback and is the
-    /// only backend on desktop. See `PlayerBackend` for why the default matters.
-    /// MX Player now supports multiple modes:
-    /// - MxPlayer: Standard MX Player app (requires installation)
-    /// - MxPlayerIntegrated: Embedded player capabilities (no app installation required)
-    /// - MxPlayerFallback: System fallback when MX Player is not available
+    /// Integrated playback is the default. Android experts can choose installed
+    /// external apps; historical fake "integrated MX" values remain readable.
     #[serde(default)]
     pub player_backend: PlayerBackend,
     /// Container used to build Xtream live URLs. M3U playlists keep whatever
@@ -443,7 +440,7 @@ impl Default for Settings {
             ios_playback_engine: IosPlaybackEngine::Auto,
             cache_secs: default_cache(),
             network_timeout_s: default_timeout(),
-            theme: Theme::System,
+            theme: Theme::Warm,
             settings_mode: SettingsMode::Easy,
             auto_play_last: default_auto_play_last(),
             default_profile: None,
@@ -466,7 +463,7 @@ impl Default for Settings {
                 LiveFormat::Ts
             },
             tv_mode: TvMode::Auto,
-            settings_version: 5,
+            settings_version: 6,
         }
     }
 }
@@ -490,7 +487,11 @@ impl Settings {
         if self.settings_mode == SettingsMode::Easy {
             PlayerBackend::Mpv
         } else {
-            self.player_backend
+            match self.player_backend {
+                PlayerBackend::MxPlayerIntegrated => PlayerBackend::Mpv,
+                PlayerBackend::MxPlayerFallback => PlayerBackend::MxPlayer,
+                other => other,
+            }
         }
     }
     pub fn startup_profile<'a>(&self, profiles: &'a [Profile]) -> Option<&'a Profile> {

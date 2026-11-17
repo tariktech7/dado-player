@@ -329,6 +329,8 @@ struct ChanX {
 #[derive(Deserialize)]
 struct MovieX {
     #[serde(default, deserialize_with = "as_string")]
+    stream_type: String,
+    #[serde(default, deserialize_with = "as_string")]
     name: String,
     #[serde(default, deserialize_with = "as_u32")]
     stream_id: u32,
@@ -349,6 +351,8 @@ struct MovieX {
 }
 #[derive(Deserialize)]
 struct SeriesX {
+    #[serde(default, deserialize_with = "as_string")]
+    stream_type: String,
     #[serde(default, deserialize_with = "as_string")]
     name: String,
     #[serde(default, deserialize_with = "as_u32")]
@@ -483,6 +487,7 @@ pub async fn xtream_load_library(
 
     lib.movies = movies_x
         .into_iter()
+        .filter(|x| x.stream_id != 0 && !matches!(x.stream_type.as_str(), "series" | "live"))
         .map(|x| VodMovie {
             id: x.stream_id,
             name: x.name,
@@ -509,6 +514,7 @@ pub async fn xtream_load_library(
 
     lib.series = series_x
         .into_iter()
+        .filter(|x| x.series_id != 0 && !matches!(x.stream_type.as_str(), "movie" | "vod" | "live"))
         .map(|x| Series {
             id: x.series_id,
             name: x.name,
@@ -1071,6 +1077,51 @@ mod tests {
             VOD_STREAMS,
             SER_STREAMS,
         ]
+    }
+
+    #[tokio::test]
+    async fn movie_and_series_endpoints_never_accept_each_others_records() {
+        let mut routes = all_ok_routes();
+        routes.retain(|r| !matches!(r.0, "get_vod_streams" | "get_series"));
+        routes.push((
+            "get_vod_streams",
+            200,
+            r#"[
+            {"stream_id":22,"name":"Film","stream_type":"movie"},
+            {"series_id":33,"name":"Wrong series"},
+            {"stream_id":44,"name":"Wrong tagged series","stream_type":"series"}]
+        "#,
+        ));
+        routes.push((
+            "get_series",
+            200,
+            r#"[
+            {"series_id":22,"name":"Show","stream_type":"series"},
+            {"stream_id":33,"name":"Wrong film"},
+            {"series_id":44,"name":"Wrong tagged film","stream_type":"movie"}]
+        "#,
+        ));
+        let (host, server) = mock_xtream_server(routes, 6);
+        let library = xtream_load_library(&host, "", "user", "pass", 5, "ts")
+            .await
+            .unwrap();
+        server.join().unwrap();
+        assert_eq!(
+            library
+                .movies
+                .iter()
+                .map(|v| v.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Film"]
+        );
+        assert_eq!(
+            library
+                .series
+                .iter()
+                .map(|v| v.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Show"]
+        );
     }
 
     #[tokio::test]

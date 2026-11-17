@@ -13,7 +13,7 @@
 #  2. native -> Java. `src/platform/android/jni_bridge.rs` calls static
 #     methods on GameActivity by string:
 #       setImeFields, seedIme, openExternalPlayer,
-#       playWithMXPlayerIntegrated, playWithMXPlayerFallback
+#       openExternalPlayer
 #     A renamed method makes those calls fail with NoSuchMethodError at
 #     runtime - the app would compile, install and then crash on the first
 #     keystroke or the first playback.
