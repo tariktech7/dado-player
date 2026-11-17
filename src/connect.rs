@@ -28,6 +28,8 @@ struct Device {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Transfer {
+    #[serde(default)]
+    source_id: Option<String>,
     name: String,
     kind: String,
     #[serde(default)]
@@ -60,8 +62,7 @@ pub struct DeviceClient {
     saved: Saved,
     busy: bool,
     message: String,
-    confirm_reset: bool,
-    expanded: bool,
+    registration_attempted: bool,
     tx: Sender<Event>,
     rx: Receiver<Event>,
 }
@@ -72,8 +73,7 @@ impl Default for DeviceClient {
             saved: serde_json::from_value(store::load_connect_state()).unwrap_or_default(),
             busy: false,
             message: String::new(),
-            confirm_reset: false,
-            expanded: false,
+            registration_attempted: false,
             tx,
             rx,
         }
@@ -84,12 +84,6 @@ fn config() -> &'static serde_json::Value {
     CONFIG.get_or_init(|| {
         serde_json::from_str(include_str!("../connect/public-config.json")).expect("Connect config")
     })
-}
-fn utc() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }
 fn valid_url(value: &str) -> bool {
     reqwest::Url::parse(value).is_ok_and(|u| {
@@ -122,7 +116,22 @@ fn convert(m: &Message) -> Result<Profile, String> {
         return Err("Ungültige Anbieteradresse oder fehlende Zugangsdaten.".into());
     }
     let mut out = Profile::new(&p.name, kind);
-    out.id = format!("cloud-{}", m.id);
+    out.id = if let Some(id) = &p.source_id {
+        if id.len() != 36
+            || id.chars().enumerate().any(|(i, c)| {
+                if [8, 13, 18, 23].contains(&i) {
+                    c != '-'
+                } else {
+                    !c.is_ascii_hexdigit()
+                }
+            })
+        {
+            return Err("Ungültige Cloud-Vorlage.".into());
+        }
+        format!("cloud-profile-{id}")
+    } else {
+        format!("cloud-{}", m.id)
+    };
     out.host = p.host.clone();
     out.username = p.username.clone();
     out.password = p.password.clone();
@@ -187,7 +196,7 @@ fn hardware_mac() -> Option<String> {
 }
 impl DeviceClient {
     pub fn expanded(&self) -> bool {
-        self.expanded
+        false
     }
     fn persist(&self) -> Result<(), String> {
         store::save_connect_state(&self.saved)
@@ -205,6 +214,18 @@ impl DeviceClient {
             self.saved.pairing_expires = d.pairing_expires.unwrap_or(0);
         }
         self.persist()
+    }
+    pub fn prepare(
+        &mut self,
+        ctx: &egui::Context,
+        rt: &tokio::runtime::Handle,
+        profiles: &mut Vec<Profile>,
+    ) {
+        self.poll(ctx, rt, profiles);
+        if !cfg!(test) && !self.registration_attempted && self.saved.device_id.is_empty() {
+            self.registration_attempted = true;
+            self.start(ctx, rt, true, false);
+        }
     }
     fn start(&mut self, ctx: &egui::Context, rt: &tokio::runtime::Handle, pair: bool, reset: bool) {
         if self.busy {
@@ -224,8 +245,7 @@ impl DeviceClient {
             }
         }
         self.busy = true;
-        self.message = "Cloud-Verbindung wird hergestellt …".into();
-        self.confirm_reset = false;
+        self.message = "Profile werden vorbereitet …".into();
         let token = self.saved.token.clone();
         let tx = self.tx.clone();
         let ctx = ctx.clone();
@@ -236,7 +256,7 @@ impl DeviceClient {
                     .timeout(std::time::Duration::from_secs(25))
                     .build()
                     .map_err(|_| "Cloud-Verbindung nicht verfügbar.".to_owned())?;
-                let _: Device = post(
+                let registered: Device = post(
                     &client,
                     &token,
                     "register",
@@ -244,15 +264,11 @@ impl DeviceClient {
                 )
                 .await?;
                 if pair {
-                    Ok(Event::Device(
-                        post(
-                            &client,
-                            &token,
-                            "pairing",
-                            serde_json::json!({"reset":reset}),
-                        )
-                        .await?,
-                    ))
+                    Ok(Event::Device(if reset {
+                        post(&client, &token, "disconnect", serde_json::json!({})).await?
+                    } else {
+                        registered
+                    }))
                 } else {
                     Ok(Event::Inbox(
                         post(&client, &token, "pull", serde_json::json!({})).await?,
@@ -274,7 +290,10 @@ impl DeviceClient {
             match event {
                 Event::Device(d) => {
                     self.busy = false;
-                    self.message=match self.apply(d){Ok(())=>"Im Portal Adresse und Kopplungscode eintragen. Code ist zehn Minuten gültig.".into(),Err(e)=>e};
+                    self.message = match self.apply(d) {
+                        Ok(()) => "Geräteadresse bereit.".into(),
+                        Err(e) => e,
+                    };
                 }
                 Event::Error(e) => {
                     self.busy = false;
@@ -296,8 +315,13 @@ impl DeviceClient {
                     let mut error = None;
                     for m in inbox.messages {
                         match convert(&m) {
-                            Ok(p) => {
-                                if !next.iter().any(|v| v.id == p.id) {
+                            Ok(mut p) => {
+                                if let Some(old) = next.iter_mut().find(|v| v.id == p.id) {
+                                    if p.id.starts_with("cloud-profile-") {
+                                        p.last_channel = old.last_channel.clone();
+                                        *old = p;
+                                    }
+                                } else {
                                     next.push(p);
                                     added += 1;
                                 }
@@ -316,12 +340,7 @@ impl DeviceClient {
                     }
                     if ids.is_empty() {
                         self.busy = false;
-                        self.message = if self.saved.owner.is_some() {
-                            "Keine neuen Profile vorhanden.".into()
-                        } else {
-                            "Noch nicht gekoppelt. Zuerst Gerät verbinden und im Portal zuordnen."
-                                .into()
-                        };
+                        self.message = "Keine neuen Profile vorhanden.".into();
                         continue;
                     }
                     if store::save_profiles(&next).is_err() {
@@ -372,29 +391,30 @@ pub fn show(
     tv: bool,
     compact: bool,
 ) {
-    state.poll(ui.ctx(), rt, profiles);
-    let ctx = ui.ctx().clone();
-    if compact && !state.expanded {
-        if clicked(ui, "Profile vom Handy/PC", true, tv) {
-            state.expanded = true;
+    state.prepare(ui.ctx(), rt, profiles);
+    if clicked(
+        ui,
+        if state.busy {
+            "Profile werden aktualisiert …"
+        } else {
+            "Profile aktualisieren"
+        },
+        !state.busy,
+        tv,
+    ) {
+        state.start(&ui.ctx().clone(), rt, false, false);
+    }
+    if !state.message.is_empty() && state.message != "Geräteadresse bereit." {
+        ui.small(&state.message);
+    }
+    if !compact && cfg!(any(target_os = "android", target_os = "ios")) {
+        if !state.saved.address.is_empty() {
+            ui.label(format!("Geräteadresse: {}", state.saved.address));
         }
-        return;
+        if !state.saved.device_id.is_empty() {
+            ui.small(format!("Geräte-ID: {}", state.saved.device_id));
+        }
     }
-    if compact && clicked(ui, "Zurück zur Anmeldung", true, tv) {
-        state.expanded = false;
-    }
-    ui.group(|ui|{
-  ui.strong("Profile vom Handy/PC");ui.small("Dado Connect · Konto im Portal anlegen und vom Betreiber freigeben lassen.");ui.hyperlink(config()["portalUrl"].as_str().unwrap_or_default());
-  if !state.saved.address.is_empty(){ui.label(format!("Geräteadresse: {}",state.saved.address));ui.small("Private Geräteadresse im MAC-Format; auf iOS/Android keine Hardware-MAC.");}
-  if let Some(owner)=&state.saved.owner{ui.label(format!("Verbunden mit: {owner}"));}
-  if let Some(code)=&state.saved.pairing_code{if state.saved.pairing_expires>utc(){ui.label(egui::RichText::new(format!("Kopplungscode: {code}")).strong());ui.small("Zehn Minuten gültig. Nur an die Person geben, die Profile senden darf.");}else{ui.small("Kopplungscode abgelaufen. Bitte neu erzeugen.");}}
-  ui.horizontal_wrapped(|ui|{if state.saved.owner.is_none()&&clicked(ui,"Gerät verbinden",!state.busy,tv){state.start(&ctx,rt,true,false);}
-if clicked(ui,if state.busy{"Wird abgerufen …"}else{"Aktualisieren"},!state.busy,tv){state.start(&ctx,rt,false,false);}
-if state.saved.owner.is_some()&&clicked(ui,"Verbindung trennen",!state.busy,tv){state.confirm_reset=true;}});
-  if state.confirm_reset{ui.small("Cloud-Zuordnung und ungelesene Sendungen entfernen? Gespeicherte Profile bleiben erhalten.");if clicked(ui,"Trennen bestätigen",!state.busy,tv){state.start(&ctx,rt,true,true);}
-if clicked(ui,"Abbrechen",true,tv){state.confirm_reset=false;}}
-  if !state.message.is_empty(){ui.label(&state.message);}ui.small("Abruf nur auf Knopfdruck. Keine automatische Anmeldung oder Wiedergabe.");
- });
 }
 #[cfg(test)]
 mod tests {
@@ -451,6 +471,7 @@ mod tests {
                 messages: vec![Message {
                     id: "11111111-1111-4111-8111-111111111111".into(),
                     profile: Transfer {
+                        source_id: None,
                         name: "Remote".into(),
                         kind: "M3u".into(),
                         host: String::new(),
@@ -475,9 +496,10 @@ mod tests {
     }
     #[test]
     fn cloud_profiles_are_stable_and_reject_unsafe_urls() {
-        let m = Message {
+        let mut m = Message {
             id: "11111111-1111-4111-8111-111111111111".into(),
             profile: Transfer {
+                source_id: None,
                 name: "Papa".into(),
                 kind: "Xtream".into(),
                 host: "https://provider.invalid".into(),
@@ -489,6 +511,13 @@ mod tests {
         let p = convert(&m).unwrap();
         assert_eq!(p.id, convert(&m).unwrap().id);
         assert_eq!(p.password, "secret");
+        m.profile.source_id = Some("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into());
+        let template_id = convert(&m).unwrap().id;
+        m.id = "22222222-2222-4222-8222-222222222222".into();
+        assert_eq!(convert(&m).unwrap().id, template_id);
+        assert!(template_id.starts_with("cloud-profile-"));
+        m.profile.source_id = Some("invalid".into());
+        assert!(convert(&m).is_err());
         assert!(!valid_url("file:///private"));
         assert!(!valid_url("javascript:alert(1)"));
         assert!(!valid_url("https://user:pass@provider.invalid"));

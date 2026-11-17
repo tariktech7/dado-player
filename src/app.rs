@@ -682,6 +682,8 @@ impl App {
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         let _ = self.tx.context.set(ctx.clone());
+        self.connect
+            .prepare(ctx, self.rt.handle(), &mut self.profiles);
         #[cfg(target_os = "windows")]
         crate::licensing::tick(ctx);
         #[cfg(target_os = "ios")]

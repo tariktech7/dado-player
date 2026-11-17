@@ -216,7 +216,8 @@ fn column(app: &mut App, ui: &mut Ui, player_changed: &mut bool, theme_changed: 
                 .iter()
                 .position(|t| *t == app.settings.theme)
                 .unwrap_or(0);
-            if let Some(i) = ui::segmented(ui, "theme", &["Warm", "Dunkel", "Hell", "System"], cur)
+            if let Some(i) =
+                ui::segmented(ui, "theme", &["Lavendel", "Dunkel", "Hell", "System"], cur)
             {
                 app.settings.theme = Theme::all()[i];
                 *theme_changed = true;

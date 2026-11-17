@@ -11,13 +11,23 @@ try{
  sql(`UPDATE accounts SET status='approved',approved_at=unixepoch() WHERE id='${userId}' AND email='${email}'`);
  const auth={Authorization:'Bearer '+secret};const register=await call('/v1/device/register',{platform:'samsung',mac:'AA:BB:CC:DD:EE:91'},auth);assert.equal(register.status,200,register.value.error);deviceId=register.value.deviceId;
  const pair=await call('/v1/device/pairing',{},auth);assert.equal(pair.status,200,pair.value.error);
- assert.equal((await call('/api/pair',{address:register.value.address,code:pair.value.pairingCode,label:'Disposable QA TV'},cookie)).status,200);console.log('Device pairing OK');
+ assert.equal((await call('/api/pair',{address:register.value.address,label:'Disposable QA TV'},cookie)).status,200);console.log('Device pairing OK');
  const id=crypto.randomUUID(),profile={name:'Disposable QA Profile',kind:'Xtream',host:'https://provider.invalid',username:'qa',password:'smoke-not-real-provider-secret'};
  const sent=await call('/api/messages',{id,deviceId,profile},cookie);assert.equal(sent.status,201,sent.value.error);
  const db=sql(`SELECT cipher FROM messages WHERE id='${id}'`)[0];assert.ok(db.cipher&&!db.cipher.includes(profile.password));console.log('Encrypted queue OK');
  const pull=await call('/v1/device/pull',{},auth);assert.equal(pull.status,200,pull.value.error);assert.equal(pull.value.messages[0].profile.password,profile.password);
  assert.equal((await call('/v1/device/ack',{ids:[id]},auth)).status,200);assert.equal(sql(`SELECT cipher FROM messages WHERE id='${id}'`)[0].cipher,null);console.log('Pull + acknowledgement + credential deletion OK');
  assert.equal((await call('/v1/device/pull',{},auth)).value.messages.length,0);
+ const saved=await call('/api/profiles/save',{profile},cookie);assert.equal(saved.status,201,saved.value.error);const profileId=saved.value.id;
+ assert.equal((await call('/api/profiles')).status,401);
+ const stored=sql(`SELECT cipher FROM saved_profiles WHERE id='${profileId}'`)[0];assert.ok(stored.cipher&&!stored.cipher.includes(profile.password));
+ assert.equal((await call('/api/profiles/load',{id:profileId},cookie)).value.profile.password,profile.password);
+ const resendId=crypto.randomUUID();assert.equal((await call('/api/messages',{id:resendId,deviceId,profileId},cookie)).status,201);
+ const resend=await call('/v1/device/pull',{},auth);assert.equal(resend.value.messages[0].profile.sourceId,profileId);
+ await call('/v1/device/ack',{ids:[resendId]},auth);
+ assert.equal((await call('/api/profiles',undefined,cookie)).value.profiles.length,1);
+ assert.equal((await call('/api/profiles/delete',{id:profileId},cookie)).status,200);
+ console.log('Saved template encryption, authenticated load, resend identity and deletion OK');
  const admin=await fetch('https://dado-admin.dado-licensing.workers.dev/admin/connect',{redirect:'manual'});assert.ok([302,303,403].includes(admin.status));console.log('Protected admin does not admit anonymous users OK');
  console.log('Production smoke passed. No real provider or customer data used.');
 }finally{

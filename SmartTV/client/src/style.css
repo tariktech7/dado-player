@@ -14,13 +14,13 @@
 }
 :root {
   color-scheme: dark;
-  --bg: #0d1518;
-  --card: #1b2528;
-  --panel: #152023;
+  --bg: #17141e;
+  --card: #2a2437;
+  --panel: #211c2c;
   --text: #eff5f3;
   --muted: #a1aabd;
-  --accent: #71dfd1;
-  --select: #203939;
+  --accent: #c6a6f2;
+  --select: #40344f;
   --line: rgba(228, 250, 247, 0.14);
   --shadow: 0 12px 32px #0002;
 }
@@ -28,28 +28,28 @@
   color-scheme: light;
   --bg: #f7f8fa;
   --card: #fff;
-  --panel: #e8efed;
+  --panel: #ece8f2;
   --text: #181d26;
   --muted: #5f6b7d;
-  --accent: #097470;
-  --select: #c8e9e3;
+  --accent: #63428f;
+  --select: #e2d8ef;
   --line: #c6d4d0;
 }
 :root[data-theme="warm"] {
   color-scheme: light;
-  --bg: #ebe3d8;
-  --panel: #f9f4ec;
-  --card: #f4ece0;
-  --text: #322d28;
-  --muted: #6c5b4c;
-  --accent: #88512d;
-  --select: #e2ccb0;
-  --line: #cdbda9;
-  --shadow: 0 12px 32px #57412a14;
+  --bg: #bcb4d1;
+  --panel: #d3cbe3;
+  --card: #c9c0db;
+  --text: #282138;
+  --muted: #554967;
+  --accent: #63428f;
+  --select: #b8a3d5;
+  --line: #a99cbd;
+  --shadow: 0 12px 32px #30214214;
 }
-:root[data-theme="warm"] .primary { background: #88512d; }
+:root[data-theme="warm"] .primary { background: #63428f; }
 :root[data-theme="warm"] .shell {
-  background: radial-gradient(ellipse at 10% 0%, #f6dfc1, transparent 65%), var(--bg);
+  background: radial-gradient(ellipse at 10% 0%, #cfc1e6, transparent 65%), var(--bg);
 }
 :root[data-theme="warm"] .player-top,
 :root[data-theme="warm"] .player-controls,
@@ -127,7 +127,7 @@ input::placeholder {
   color: var(--muted);
 }
 .primary {
-  background: #097470;
+  background: #63428f;
   color: white;
   border-color: transparent;
 }
@@ -692,7 +692,7 @@ hr {
   gap: 100px;
   align-items: center;
   background:
-    radial-gradient(ellipse at 10% 25%, #1d474442, transparent 55%),
+    radial-gradient(ellipse at 10% 25%, #b59cd542, transparent 55%),
     radial-gradient(ellipse at 90% 90%, #38405c35, transparent 60%), var(--bg);
 }
 .welcome-brand {
@@ -876,7 +876,7 @@ hr {
   gap: 32px;
   align-items: center;
   z-index: 30;
-  background-color: #152023d9;
+  background-color: #211c2cd9;
 }
 .player-top > span {
   display: flex;
@@ -897,7 +897,7 @@ hr {
   bottom: 54px;
   padding: 24px;
   z-index: 30;
-  background-color: #152023e8;
+  background-color: #211c2ce8;
 }
 .transport {
   display: flex;
@@ -1189,7 +1189,7 @@ hr {
   width: 37%;
   flex-shrink: 0;
   position: relative;
-  background: radial-gradient(ellipse at center, #6de4d529, transparent 75%);
+  background: radial-gradient(ellipse at center, #c6a6f229, transparent 75%);
 }
 .home-hero-art img {
   width: 100%;
@@ -1355,7 +1355,7 @@ hr {
   justify-content: center;
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(145deg, #6de4d519, #0004);
+  background: linear-gradient(145deg, #c6a6f219, #0004);
   flex-shrink: 0;
 }
 .poster-art img {

@@ -11,6 +11,6 @@ const run=(args,env=process.env)=>{const p=spawnSync(process.execPath,args,{stdi
 let code=1;
 try{
  if(run(['scripts/build.mjs'],{...process.env,DADO_LICENSE_TEST_CONFIG:fileURLToPath(config)})!==0)throw Error('UI fixture build failed');
- code=run(['node_modules/@playwright/test/cli.js','test'],{...process.env,DADO_LICENSE_TEST_KEYS:fileURLToPath(keys)});
+ code=run(['node_modules/@playwright/test/cli.js','test',...process.argv.slice(2)],{...process.env,DADO_LICENSE_TEST_KEYS:fileURLToPath(keys)});
 }finally{if(run(['scripts/build.mjs'])!==0)throw Error('Production build restoration failed');}
 process.exitCode=code;

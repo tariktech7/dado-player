@@ -177,3 +177,7 @@ Build 14: manueller Cloud-Profilimport in Einstellungen und Anmeldung. Private G
 ## 0.7.1
 
 Gemeinsame warme Tageslichtdarstellung mit Dunkel/Hell/System, strengere Film-/Serien-Zuordnung und kompatible Einstellungen. Android-Build 20, iOS-Build 15. MX als externe installierte App nur auf Android/Android TV; kein plattformübergreifendes MX-SDK vorhanden.
+
+## 0.7.2
+
+Lavendel-Design und neue Logos. Geräteadresse wird einmalig registriert; Profile nur mit „Profile aktualisieren“ abrufen. Keine Portal-/Kontodetails oder Kopplungscodes im App-UI. MAC-Zuordnung und gespeicherte Vorlagen werden im Portal verwaltet. iOS Build 16, Android Build 21.

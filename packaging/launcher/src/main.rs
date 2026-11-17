@@ -165,8 +165,8 @@ const LOGO_DX: f32 = (CARD_X + (CARD_W - 140) / 2) as f32; // centred horizontal
 const LOGO_DY: f32 = (CARD_Y + (CARD_H - 140) / 2 - 22) as f32;
 const SPIN_CX: f32 = (CARD_X + CARD_W / 2) as f32;
 const SPIN_CY: f32 = (CARD_Y + CARD_H / 2 + 78) as f32;
-const CARD_ARGB: u32 = 0xFF_2022_25; // dark charcoal, Discord-like
-const ACCENT_ARGB: u32 = 0xFF_4D_A3_F0; // bright blue spinner on dark card
+const CARD_ARGB: u32 = 0xFF_2821_36; // dark charcoal, Discord-like
+const ACCENT_ARGB: u32 = 0xFF_C6_A6_F2; // bright blue spinner on dark card
 
 // Layered-window / alpha-blend plumbing.
 const WS_EX_LAYERED: u32 = 0x0008_0000;

@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import { Provider, parseM3u, hostUrl, decode, streamExtension } from "../src/api";
 import { fresh, load, save, favorite, remember } from "../src/store";
 import { Profile, Item } from "../src/types";
+import {cloudProfile,mergeCloudProfiles} from '../src/connect';
+test('saved cloud templates retain identity across sends and update only their own imported profile',()=>{
+ const sourceId='11111111-1111-4111-8111-111111111111';
+ const first=cloudProfile({...profile,sourceId},'22222222-2222-4222-8222-222222222222');
+ const second=cloudProfile({...profile,sourceId,password:'new-secret'},'33333333-3333-4333-8333-333333333333');
+ assert.equal(first.id,second.id);
+ const result=mergeCloudProfiles([profile,first],[second,second]);
+ assert.equal(result.profiles.length,2);assert.equal(result.added,0);
+ assert.equal(result.profiles[0],profile);assert.equal(result.profiles[1].password,'new-secret');
+});
 test('warm default migrates automatic appearance once and preserves explicit dark/white choices',()=>{
   assert.equal(fresh().settings.theme,'warm');
   for(const theme of ['system','dark','light'] as const){

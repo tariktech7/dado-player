@@ -1,6 +1,6 @@
 //! Visual identity for Dado-Player.
 //!
-//! Shared graphite palette, translucent chrome and restrained ambient light.
+//! Shared lavender identity with separate dark and white appearances.
 //!
 //! Palette reference: the "graphite" dark theme of IPTVnator (see
 //! `references/iptvnator/apps/web/src/_theme-palettes.scss`): distinct surface
@@ -12,14 +12,14 @@ use egui::{Color32, Context, FontFamily, FontId, Rounding, Stroke, TextStyle, Vi
 
 /// Primary accent used as *ink* (rings, strokes, progress, selected text) on a
 /// dark surface. On light surfaces use [`accent`] instead.
-pub const ACCENT: Color32 = Color32::from_rgb(0x71, 0xDF, 0xD1);
+pub const ACCENT: Color32 = Color32::from_rgb(0xC6, 0xA6, 0xF2);
 /// Accent used as a *fill* behind white text (buttons, segments, brand mark).
 /// A step darker than [`ACCENT`] so white labels keep ≥4.3:1 contrast.
-pub const ACCENT_FILL: Color32 = Color32::from_rgb(0x09, 0x74, 0x70);
+pub const ACCENT_FILL: Color32 = Color32::from_rgb(0x63, 0x42, 0x8F);
 /// Soft accent surface (selected row / playing row) in the dark theme.
-pub const ACCENT_DIM: Color32 = Color32::from_rgb(0x20, 0x39, 0x39);
+pub const ACCENT_DIM: Color32 = Color32::from_rgb(0x40, 0x34, 0x4F);
 /// Keyboard focus ring (brighter than the accent for visibility).
-pub const FOCUS: Color32 = Color32::from_rgb(0xA1, 0xEE, 0xE0);
+pub const FOCUS: Color32 = Color32::from_rgb(0xE0, 0xC9, 0xFF);
 
 pub const DANGER: Color32 = Color32::from_rgb(0xFF, 0x8D, 0x9B);
 pub const OK: Color32 = Color32::from_rgb(0x4A, 0xDE, 0x80);
@@ -29,43 +29,43 @@ pub const LIVE: Color32 = Color32::from_rgb(0xFF, 0x8F, 0x8F);
 pub const RATING: Color32 = Color32::from_rgb(0xFF, 0xCF, 0x5C);
 
 /// Provider accents (brighter variants for dark surfaces).
-pub const PROVIDER_XTREAM: Color32 = Color32::from_rgb(0x71, 0xDF, 0xD1);
+pub const PROVIDER_XTREAM: Color32 = Color32::from_rgb(0xC6, 0xA6, 0xF2);
 pub const PROVIDER_M3U: Color32 = Color32::from_rgb(0xFB, 0xBF, 0x24);
 
 // ---- dark palette (graphite steps) ----
-pub const BG_DARK: Color32 = Color32::from_rgb(0x0D, 0x13, 0x16);
-pub const PANEL_DARK: Color32 = Color32::from_rgb(0x15, 0x1D, 0x20);
-pub const CARD_DARK: Color32 = Color32::from_rgb(0x1B, 0x25, 0x28);
-pub const WIDGET_DARK: Color32 = Color32::from_rgb(0x21, 0x2D, 0x30);
+pub const BG_DARK: Color32 = Color32::from_rgb(0x17, 0x14, 0x1E);
+pub const PANEL_DARK: Color32 = Color32::from_rgb(0x21, 0x1C, 0x2C);
+pub const CARD_DARK: Color32 = Color32::from_rgb(0x2A, 0x24, 0x37);
+pub const WIDGET_DARK: Color32 = Color32::from_rgb(0x33, 0x2B, 0x42);
 pub const CARD_HOVER_DARK: Color32 = Color32::from_rgb(0x25, 0x2B, 0x3A);
 pub const BORDER_DARK: Color32 = Color32::from_rgb(0x26, 0x2E, 0x3A);
-pub const TEXT_DARK: Color32 = Color32::from_rgb(0xEF, 0xF5, 0xF3);
+pub const TEXT_DARK: Color32 = Color32::from_rgb(0xF5, 0xEF, 0xFF);
 pub const MUTED_DARK: Color32 = Color32::from_rgb(0xA1, 0xAA, 0xBD);
 
 // ---- light palette (flat, near-white cards) ----
-pub const BG_LIGHT: Color32 = Color32::from_rgb(0xF0, 0xF4, 0xF2);
+pub const BG_LIGHT: Color32 = Color32::from_rgb(0xF7, 0xF6, 0xFA);
 pub const PANEL_LIGHT: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
 pub const CARD_LIGHT: Color32 = Color32::from_rgb(0xF2, 0xF4, 0xF7);
 pub const BORDER_LIGHT: Color32 = Color32::from_rgb(0xDF, 0xE3, 0xEA);
 pub const TEXT_LIGHT: Color32 = Color32::from_rgb(0x18, 0x1D, 0x26);
 pub const MUTED_LIGHT: Color32 = Color32::from_rgb(0x5F, 0x6B, 0x7D);
-pub const BG_WARM: Color32 = Color32::from_rgb(0xEB, 0xE3, 0xD8);
-const INK_WARM: Color32 = Color32::from_rgb(0x32, 0x2D, 0x28);
-const BRONZE: Color32 = Color32::from_rgb(0x88, 0x51, 0x2D);
+pub const BG_WARM: Color32 = Color32::from_rgb(0xBC, 0xB4, 0xD1);
+const INK_WARM: Color32 = Color32::from_rgb(0x28, 0x21, 0x38);
+const LAVENDER_ACCENT: Color32 = Color32::from_rgb(0x63, 0x42, 0x8F);
 
-/// Daylight material: warm stone, ivory cards and restrained bronze accents.
+/// Lavender material. Warm remains the serialized name for compatibility.
 /// Reuses light-mode geometry and contrast rules; explicit dark remains intact.
 pub fn apply_warm(ctx: &Context) {
     ctx.style_mut(|s| {
         let v = &mut s.visuals;
         v.panel_fill = BG_WARM;
-        v.window_fill = Color32::from_rgb(249, 244, 236);
-        v.extreme_bg_color = Color32::from_rgb(255, 251, 245);
-        v.faint_bg_color = Color32::from_rgb(244, 236, 224);
+        v.window_fill = Color32::from_rgb(211, 203, 227);
+        v.extreme_bg_color = Color32::from_rgb(224, 216, 236);
+        v.faint_bg_color = Color32::from_rgb(201, 192, 219);
         v.code_bg_color = v.faint_bg_color;
-        v.hyperlink_color = BRONZE;
-        v.selection.bg_fill = BRONZE;
-        v.window_stroke.color = Color32::from_rgb(205, 189, 169);
+        v.hyperlink_color = LAVENDER_ACCENT;
+        v.selection.bg_fill = LAVENDER_ACCENT;
+        v.window_stroke.color = Color32::from_rgb(169, 156, 189);
         for w in [
             &mut v.widgets.noninteractive,
             &mut v.widgets.inactive,
@@ -74,16 +74,16 @@ pub fn apply_warm(ctx: &Context) {
             &mut v.widgets.open,
         ] {
             w.fg_stroke.color = INK_WARM;
-            w.bg_stroke.color = Color32::from_rgb(205, 189, 169);
+            w.bg_stroke.color = Color32::from_rgb(169, 156, 189);
         }
         v.widgets.noninteractive.bg_fill = v.window_fill;
         v.widgets.noninteractive.weak_bg_fill = v.window_fill;
-        v.widgets.inactive.bg_fill = Color32::from_rgb(239, 229, 215);
+        v.widgets.inactive.bg_fill = Color32::from_rgb(203, 193, 221);
         v.widgets.inactive.weak_bg_fill = v.widgets.inactive.bg_fill;
-        v.widgets.hovered.bg_fill = Color32::from_rgb(229, 211, 187);
+        v.widgets.hovered.bg_fill = Color32::from_rgb(187, 169, 212);
         v.widgets.hovered.weak_bg_fill = v.widgets.hovered.bg_fill;
-        v.widgets.hovered.bg_stroke.color = BRONZE;
-        v.widgets.active.bg_fill = Color32::from_rgb(224, 201, 171);
+        v.widgets.hovered.bg_stroke.color = LAVENDER_ACCENT;
+        v.widgets.active.bg_fill = Color32::from_rgb(184, 163, 213);
         v.widgets.active.weak_bg_fill = v.widgets.active.bg_fill;
         v.widgets.open.bg_fill = v.window_fill;
         v.widgets.open.weak_bg_fill = v.window_fill;
@@ -115,7 +115,7 @@ pub fn apply(ctx: &Context, dark: bool) {
 
 pub fn muted(ui: &egui::Ui) -> Color32 {
     if warm(ui) {
-        return Color32::from_rgb(108, 91, 76);
+        return Color32::from_rgb(85, 73, 103);
     }
     if ui.visuals().dark_mode {
         MUTED_DARK
@@ -127,7 +127,7 @@ pub fn muted(ui: &egui::Ui) -> Color32 {
 /// Accent as ink: bright azure on dark, the deeper fill blue on light.
 pub fn accent(ui: &egui::Ui) -> Color32 {
     if warm(ui) {
-        return BRONZE;
+        return LAVENDER_ACCENT;
     }
     if ui.visuals().dark_mode {
         ACCENT
@@ -139,7 +139,7 @@ pub fn accent(ui: &egui::Ui) -> Color32 {
 /// Accent as a fill behind white text. Same value in both themes.
 pub fn accent_fill(ui: &egui::Ui) -> Color32 {
     if warm(ui) {
-        BRONZE
+        LAVENDER_ACCENT
     } else {
         ACCENT_FILL
     }
@@ -148,10 +148,10 @@ pub fn accent_fill(ui: &egui::Ui) -> Color32 {
 /// Accent as text. Lighter than [`ACCENT`] on dark for 4.5:1 on the rail.
 pub fn accent_text(ui: &egui::Ui) -> Color32 {
     if warm(ui) {
-        return BRONZE;
+        return LAVENDER_ACCENT;
     }
     if ui.visuals().dark_mode {
-        Color32::from_rgb(0xAE, 0xEC, 0xDF)
+        Color32::from_rgb(0xDF, 0xC9, 0xFF)
     } else {
         ACCENT_FILL
     }
@@ -160,12 +160,12 @@ pub fn accent_text(ui: &egui::Ui) -> Color32 {
 /// Tinted selection surface (the rail's selected row, playing row).
 pub fn selection_surface(ui: &egui::Ui) -> Color32 {
     if warm(ui) {
-        return Color32::from_rgb(226, 204, 176);
+        return Color32::from_rgb(184, 163, 213);
     }
     if ui.visuals().dark_mode {
         ACCENT_DIM
     } else {
-        Color32::from_rgb(0xDB, 0xEF, 0xE9)
+        Color32::from_rgb(0xE2, 0xD8, 0xEF)
     }
 }
 
@@ -308,7 +308,7 @@ fn light_visuals() -> Visuals {
 pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
     let dark = ui.visuals().dark_mode;
     let base = if warm(ui) {
-        Color32::from_rgba_unmultiplied(255, 248, 235, 232)
+        Color32::from_rgba_unmultiplied(221, 212, 238, 232)
     } else if dark {
         Color32::from_rgba_unmultiplied(31, 43, 51, 185)
     } else {
@@ -370,8 +370,8 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
     let mut mesh = egui::Mesh::default();
     let colors = if warm(ui) {
         [
-            Color32::from_rgb(246, 223, 193),
-            Color32::from_rgb(234, 225, 211),
+            Color32::from_rgb(207, 193, 230),
+            Color32::from_rgb(183, 177, 206),
             base,
             base,
         ]

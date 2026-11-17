@@ -197,3 +197,7 @@ Eigene Einstellungskarte mit Geräteadresse, Kopplungscode und Aktualisieren. De
 ## Farbschemata ab 0.7.1
 
 Warm als Tageslichtstandard (#ebe3d8, Elfenbeinflächen, Bronze #88512d); Dunkel und weißes Hell separat wählbar, System folgt dem Betriebssystem. Explizite Dunkel-/Hell-Präferenzen erhalten. Player bleibt vor schwarzer Videofläche, Bedienelemente verwenden das gewählte Material. Keine Änderung der TV-Spaltengeometrie oder der Fokusverträge.
+
+## Aktueller Stand 0.7.2
+
+Lavendel ersetzt das bisherige Warm-Material (gespeicherter Schlüssel warm bleibt kompatibel): #bcb4d1, Flächen #d3cbe3, Akzent #63428f. Logos aus assets/d7.svg. Endnutzer sehen keine Connect-Kontoinformationen oder Codes, ausschließlich Profile aktualisieren und bestehende Geräteangaben. Adresse einmalig registrieren, keine Hintergrundabrufe. MAC-Zuordnung, Geräteauswahl und Vorlagenverwaltung finden im Portal statt. Aktueller Vertrag ersetzt die älteren Connect-/Warm-Abschnitte oben.

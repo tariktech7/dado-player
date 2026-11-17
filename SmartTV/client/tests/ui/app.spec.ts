@@ -14,6 +14,10 @@ const profile = {
   epgUrl: "",
 };
 async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent') {
+  await page.route('https://dado-connect.dado-licensing.workers.dev/v1/device/**',async route=>{
+    if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'}});
+    return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'},json:{deviceId:'D7C-fixture',address:'02:11:22:33:44:55',owner:null,messages:[]}});
+  });
   const subject=await fingerprint('samsung','tv-ui-fixture'),now=Math.floor(Date.now()/1000);
   const key=JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!,'utf8'));
   const token=await signLicense({v:1,product:'dado-player',subject,platform:'samsung',license_id:'ui-only',kind:licenseKind==='expired'?'trial':'permanent',started_at:licenseKind==='expired'?now-604801:now,issued_at:now,expires_at:licenseKind==='expired'?now-1:null},key,'ui-test');
@@ -215,7 +219,7 @@ test('warm, dark and white appearances switch immediately and persist', async({p
   await fixture(page);
   await page.goto('/');
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
-  for(const [name,value,color] of [['Warm','warm','rgb(235, 227, 216)'],['Dunkel','dark','rgb(13, 21, 24)'],['Hell','light','rgb(247, 248, 250)']] as const){
+  for(const [name,value,color] of [['Lavendel','warm','rgb(188, 180, 209)'],['Dunkel','dark','rgb(23, 20, 30)'],['Hell','light','rgb(247, 248, 250)']] as const){
     await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme',value);
@@ -225,7 +229,7 @@ test('warm, dark and white appearances switch immediately and persist', async({p
     await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
   }
   await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
-  await page.getByRole('option',{name:'Warm',exact:true}).click();
+  await page.getByRole('option',{name:'Lavendel',exact:true}).click();
   await page.getByRole('button',{name:'⌂ Startseite',exact:true}).click();
   await page.mouse.move(1880,1040);
   await page.waitForTimeout(500);
@@ -1268,23 +1272,23 @@ test('cloud inbox persists before ack and retry never duplicates profiles',async
   await route.fulfill({headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'},json:action==='pairing'?{...state,pairingCode:'TEST123456',pairingExpires:Date.now()/1000+600}:action==='pull'?{...state,messages:[{id:cloudId,profile:{name:'Familienzugang',kind:'Xtream',host:'https://provider.invalid',username:'demo',password:'demo'}}]}:state});
  });
  await page.goto('/');await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
- const panel=page.locator('.connect-panel');expect(calls).toHaveLength(0);
- await panel.getByRole('button',{name:'Gerät verbinden',exact:true}).click();await expect(panel).toContainText('TEST123456');
- expect(calls).toEqual(['register','pairing']);
+ const panel=page.locator('.connect-panel');await expect.poll(()=>calls.filter(c=>c==='register').length).toBe(1);expect(calls).toEqual(['register']);
+ await expect(page.getByText('Kopplungscode:',{exact:false})).toHaveCount(0);await expect(page.getByText('Verbunden mit:',{exact:false})).toHaveCount(0);
  await page.evaluate(()=>{const old=Storage.prototype.setItem;(window as any).__restoreStorage=()=>{Storage.prototype.setItem=old;};Storage.prototype.setItem=function(k,v){if(k==='dado.tv.v1')throw Error('fixture full storage');return old.call(this,k,v);};});
- await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Speicher voll');expect(ack).toBe(0);
+ await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Speicher voll');expect(ack).toBe(0);
  await page.evaluate(()=>(window as any).__restoreStorage());
- await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('1 neue Profile gespeichert');expect(ack).toBe(1);
- await panel.getByRole('button',{name:'Aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('0 neue Profile gespeichert');expect(ack).toBe(2);
+ await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profile gespeichert');expect(ack).toBe(1);
+ await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profile gespeichert');expect(ack).toBe(2);
  const count=await page.evaluate(()=>JSON.parse(localStorage.getItem('dado.tv.v1')!).profiles.filter((p:any)=>p.name==='Familienzugang').length);expect(count).toBe(1);
 });
 
-test('cloud setup on login opens separately and Back restores the profile form',async({page})=>{
- await fixture(page,false,false);await page.goto('/');
- await page.getByRole('button',{name:'Profile vom Handy/PC',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'Dado Connect',exact:true})).toBeVisible();
- await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Dado Connect',exact:true})).toHaveCount(0);
- await expect(page.getByLabel('Profilname',{exact:true})).toBeVisible();
+test('login offers only profile refresh without cloud account or pairing details',async({page})=>{
+ await fixture(page,false,true);await page.goto('/');
+ await expect(page.getByRole('button',{name:'Profile aktualisieren',exact:true})).toBeVisible();
+ await expect(page.getByText('Kopplungscode:',{exact:false})).toHaveCount(0);
+ await expect(page.getByText('Verbunden mit:',{exact:false})).toHaveCount(0);
+ await expect(page.locator('a[href*="dado-connect"]')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Gerät verbinden',exact:true})).toHaveCount(0);
 });
 
 test('Connect portal registration, manual approval, pairing and M3U send work on a phone',async({page})=>{
@@ -1300,6 +1304,7 @@ test('Connect portal registration, manual approval, pairing and M3U send work on
   if(path==='/api/auth/register')value={message:'Konto angelegt. Betreiber muss freigeben.'};
   if(path==='/api/auth/login'){logged=true;value={user};}
   if(path==='/api/session')value={user};
+  if(path==='/api/profiles')value={profiles:[]};
   if(path==='/api/devices')value={devices};
   if(path==='/api/pair'){devices.push({id:'tv1',label:input.label,address:input.address,platform:'samsung'});}
   if(path==='/api/messages'&&route.request().method()==='POST'){expect(input.profile.kind).toBe('M3u');expect(input.profile.m3uUrl).toBe('https://provider.invalid/family.m3u');messages.push({id:input.id,device_id:'tv1',name:input.profile.name,kind:'M3u',state:'queued',created_at:Date.now()/1000});}
@@ -1311,9 +1316,56 @@ test('Connect portal registration, manual approval, pairing and M3U send work on
  await page.getByRole('button',{name:'Konto zur Freigabe anlegen'}).click();await expect(page.locator('#message')).toContainText('Konto angelegt');
  await page.locator('#login input[name=email]').fill('father@example.invalid');await page.locator('#login input[name=password]').fill('a long test password 123!');await page.locator('#login button').click();
  await expect(page.locator('#pending')).toBeVisible();approved=true;await page.getByRole('button',{name:'Freigabe aktualisieren'}).click();await expect(page.locator('#dashboard')).toBeVisible();
- await page.locator('#pair input[name=address]').fill('02:11:22:33:44:55');await page.locator('#pair input[name=code]').fill('TEST123456');await page.locator('#pair input[name=label]').fill('Wohnzimmer');await page.locator('#pair button').click();
- await expect(page.locator('#deviceSelect')).toContainText('Wohnzimmer');await page.locator('#send input[name=name]').fill('Familienliste');await page.locator('#kind').selectOption('M3u');await page.locator('#send input[name=m3uUrl]').fill('https://provider.invalid/family.m3u');await page.locator('#sendButton').click();
+ await page.locator('#pair input[name=address]').fill('02:11:22:33:44:55');await page.locator('#pair input[name=label]').fill('Wohnzimmer');await page.locator('#pair button').click();
+ await expect(page.locator('#deviceSelect')).toContainText('Wohnzimmer');await page.locator('#send input[name=providerLabel]').fill('Familienliste');await page.locator('#kind').selectOption('M3u');await page.locator('#send input[name=playlistUrl]').fill('https://provider.invalid/family.m3u');await page.locator('#sendButton').click();
  await expect(page.locator('#history')).toContainText('Familienliste');expect(messages).toHaveLength(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/dado-connect-phone.png',fullPage:true});
+});
+
+for(const width of [390,1280])test('Connect saved provider profiles, password visibility and named device picker at '+width,async({page})=>{
+ await page.setViewportSize({width,height:950});
+ let logged=false,saved:any=null;const sends:any[]=[];
+ const devices=[{id:'tv-papa',label:'Wohnzimmer Papa',address:'02:11:22:33:44:55',platform:'samsung'},{id:'tv-bruder',label:'Fernseher Bruder',address:'02:AA:BB:CC:DD:EE',platform:'android-tv'}];
+ await page.route('https://connect-vault.invalid/**',async route=>{
+  const path=new URL(route.request().url()).pathname,input=route.request().method()==='POST'?route.request().postDataJSON():{};
+  if(path==='/')return route.fulfill({contentType:'text/html',body:connectPage});
+  if(path==='/portal.js')return route.fulfill({contentType:'text/javascript',body:connectScript});
+  if(path==='/style.css')return route.fulfill({contentType:'text/css',body:connectCss});
+  if(path==='/api/auth/login'){expect(input.email).toBe('portal@example.invalid');logged=true;return route.fulfill({json:{ok:true}});}
+  if(path==='/api/auth/logout'){logged=false;return route.fulfill({json:{ok:true}});}
+  if(path==='/api/session')return route.fulfill(logged?{json:{user:{id:'owner',name:'Papa',email:'portal@example.invalid',status:'approved'}}}:{status:401,json:{error:'Bitte anmelden.'}});
+  if(path==='/api/devices')return route.fulfill({json:{devices}});
+  if(path==='/api/profiles')return route.fulfill({json:{profiles:saved?[{id:saved.id,name:saved.profile.name,kind:saved.profile.kind}]:[]}});
+  if(path==='/api/profiles/save'){expect(input.profile.username).toBe('anbieter-user');expect(input.profile.password).toBe('ANBIETER-SECRET');saved={id:'11111111-1111-4111-8111-111111111111',profile:input.profile};return route.fulfill({json:{ok:true,id:saved.id}});}
+  if(path==='/api/profiles/load')return route.fulfill({json:saved});
+  if(path==='/api/messages'&&route.request().method()==='POST'){sends.push(input);return route.fulfill({json:{ok:true}});}
+  if(path==='/api/messages')return route.fulfill({json:{messages:[]}});
+  return route.fulfill({status:404,json:{error:'Unknown fixture endpoint'}});
+ });
+ await page.goto('https://connect-vault.invalid/');
+ await page.locator('#login input[name=email]').fill('portal@example.invalid');
+ await page.locator('#login input[name=password]').fill('WEBSEITEN-SECRET1!');
+ await page.locator('#login button').click();await expect(page.locator('#dashboard')).toBeVisible();
+ const providerUser=page.locator('[name=providerUser]'),secret=page.locator('#providerSecret');
+ await expect(providerUser).toHaveValue('');await expect(secret).toHaveValue('');
+ await expect(page.locator('#login input[name=password]')).toBeDisabled();
+ await expect(secret).toHaveAttribute('autocomplete','section-provider new-password');
+ await page.locator('[name=providerLabel]').fill('Familienanbieter');await page.locator('[name=providerHost]').fill('https://provider.invalid');
+ await providerUser.click();await providerUser.fill('anbieter-user');await secret.click();await secret.fill('ANBIETER-SECRET');
+ await page.getByRole('button',{name:'Anbieter-Passwort anzeigen',exact:true}).click();await expect(secret).toHaveAttribute('type','text');
+ await page.getByRole('button',{name:'Anbieter-Passwort verbergen',exact:true}).click();await expect(secret).toHaveAttribute('type','password');
+ await page.locator('#saveProfile').click();await expect(page.locator('#message')).toContainText('verschlüsselt');
+ await page.reload();await expect(page.locator('#savedProfile option')).toHaveCount(2);
+ await expect(secret).toHaveValue('');await page.locator('#savedProfile').selectOption(saved.id);await expect(providerUser).toHaveValue('anbieter-user');
+ await expect(page.locator('.pairing #deviceTrigger')).toHaveCount(1);await expect(page.locator('.pairing #newDevice')).not.toHaveAttribute('open','');
+ await page.getByRole('combobox',{name:/Gespeicherte Geräte/}).click();
+ await page.getByRole('option',{name:/Fernseher Bruder/}).click();
+ await expect(page.locator('#deviceCaption strong')).toHaveText('Fernseher Bruder');await expect(page.locator('#deviceCaption small')).toHaveText('02:AA:BB:CC:DD:EE');
+ for(let i=0;i<2;i++){await page.locator('#sendButton').click();await expect(page.locator('#message')).toContainText('Gesendet');}
+ expect(sends).toHaveLength(2);expect(sends[0].deviceId).toBe('tv-bruder');expect(sends[0].profileId).toBe(saved.id);expect(sends[0].profile).toBeUndefined();expect(sends[0].id).not.toBe(sends[1].id);
+ expect(await page.evaluate(()=>JSON.stringify(localStorage))).not.toContain('ANBIETER-SECRET');
+ await page.reload();await expect(page.locator('#deviceCaption strong')).toHaveText('Fernseher Bruder');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/connect-lavender-'+width+'.png',fullPage:true});
 });

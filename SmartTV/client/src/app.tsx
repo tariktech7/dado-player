@@ -26,7 +26,7 @@ import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 import { Home } from "./home";
 import {licenseClient} from './licensing';
-import {ConnectPanel} from './connect';
+import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
 import packageInfo from "../package.json";
 const APP_VERSION = packageInfo.version;
 import {
@@ -117,6 +117,7 @@ function Field({
 }
 function App() {
   const [license,setLicense]=useState(licenseClient.state);
+  useEffect(()=>{void prepareCloudDevice().catch(()=>{});},[]);
   useEffect(()=>{const unsubscribe=licenseClient.subscribe(()=>setLicense(licenseClient.state));void licenseClient.init();return unsubscribe;},[]);
   useEffect(()=>{if(license.ready && !license.allowed){playerRef.current?.stop();setFull(false);}},[license.ready,license.allowed]);
   const [saved, setSaved] = useState<Saved>(load),
@@ -508,11 +509,11 @@ function App() {
     changed({ ...savedRef.current, signedOut: true });
   };
   const importCloudProfiles = (profiles:Profile[]) => {
-    const added=profiles.filter(p=>!savedRef.current.profiles.some(old=>old.id===p.id));
-    const next={...savedRef.current,profiles:[...savedRef.current.profiles,...added]};
+    const merged=mergeCloudProfiles(savedRef.current.profiles,profiles);
+    const next={...savedRef.current,profiles:merged.profiles};
     save(next);
     savedRef.current=next;setSaved(next);
-    return added.length;
+    return merged.added;
   };
   const back = () => {
     if (tracksRef.current) {
@@ -900,7 +901,7 @@ function App() {
               saved.settings.theme,
               (v) => setting("theme", v as Settings["theme"]),
               [
-                ["warm", "Warm"],
+                ["warm", "Lavendel"],
                 ["dark", "Dunkel"],
                 ["light", "Hell"],
                 ["system", "System"],

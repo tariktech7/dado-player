@@ -1,40 +1,38 @@
-# Dado Connect · 0.7.0
+# Dado Connect · 0.7.2
 
 Portal: https://dado-connect.dado-licensing.workers.dev
 
 Verwaltung: https://dado-admin.dado-licensing.workers.dev/admin/connect
 
-## Benutzung
+## Ablauf
 
-1. Mit Name, E-Mail und Passwort (mindestens fünf Zeichen, eine Zahl und ein Sonderzeichen) registrieren. Das Konto wartet auf Tariks manuelle Genehmigung. Es gibt keinen automatischen Mailversand; Tarik prüft die Person selbst.
-2. Tarik genehmigt das Konto in der durch Cloudflare Access geschützten Verwaltung. Das ist unabhängig von einer gekauften App-Lizenz.
-3. Am Empfangsgerät in Einstellungen → Dado Connect einen Kopplungscode erzeugen. Ohne Anbieterprofil ist Connect auch auf der Anmeldeseite erreichbar.
-4. Im Portal Geräteadresse (oder unterstützte Hardware-MAC), den zehn Minuten gültigen Code und einen Gerätenamen eingeben. Die Adresse allein berechtigt nicht zum Senden. Ein Gerät gehört jeweils einem Senderkonto.
-5. M3U-URL oder Xtream-Codes-Server, Benutzername und Passwort senden. M3U-Dateiuploads sind nicht enthalten.
-6. Am Gerät ausdrücklich Aktualisieren drücken. Die Profile werden lokal gespeichert und können anschließend in der Profilwahl ausgewählt werden. Bestehende Profile bleiben erhalten; keine automatische Anmeldung oder Wiedergabe.
+1. Sender registriert ein Konto (mindestens fünf Zeichen, eine Ziffer und ein Sonderzeichen im Passwort). Tarik prüft die Person und genehmigt das Konto. Keine automatische E-Mail-Verifikation oder Mailzustellung. Kontofreigabe ist unabhängig von einer Kauflizenz.
+2. Dado Player einmal online öffnen. Die App registriert einmalig ihre Adresse und einen eigenen zufälligen Gerätetoken. Kein automatischer Profilabruf und kein regelmäßiger Heartbeat. Bei fehlgeschlagener Registrierung versucht ein manueller Abruf es erneut.
+3. Links unter „1 · Gerät auswählen“ ein gespeichertes Gerät wählen. Name und blassere Adresse stehen nebeneinander. Unter „Neues Gerät verbinden“ nur MAC-/Geräteadresse und Gerätenamen eingeben. Kein Kopplungscode. Noch nicht registrierte Geräte müssen zuerst Dado Player online öffnen. Bereits anders zugeordnete Geräte werden nicht übernommen.
+4. Rechts M3U-URL oder Xtream-Server, Benutzername und Anbieterpasswort eingeben. Webseitenlogin und Anbieterzugang sind getrennt. Die Anbieterfelder haben eigene Namen/Autofill-Sektionen und Passwortmanager-Hinweise; das Auge zeigt nur das Anbieterpasswort. Browsererweiterungen können Autofill-Hinweise übergehen.
+5. „Profil im Konto speichern“ legt ausdrücklich eine wiederverwendbare verschlüsselte Vorlage an. Später auswählen, bearbeiten, erneut speichern, an ein anderes gespeichertes Gerät senden oder löschen. Bis zu 50 Vorlagen und 50 Geräte pro Konto. Einfaches Senden allein speichert keine dauerhafte Vorlage.
+6. Am Gerät „Profile aktualisieren“ drücken. Die App zeigt keinen Portal-Link, Kontonamen, Kopplungscode oder technischen Connect-Infoblock. Windows/Samsung behalten ihre bisherigen Geräteangaben; Android/iOS zeigen die private Geräteadresse und Geräte-ID. Keine automatische Anbieteranmeldung.
 
-Windows, Android einschließlich TV-Modus, iOS und Samsung unterstützen denselben Ablauf. LG ist über das Protokoll vorbereitet, noch kein ausgelieferter Client. Auf iOS/Android erscheint eine dauerhafte private Geräteadresse im MAC-Format, keine Hardware-MAC.
+## Sicherheit und Speicherung
 
-## Betrieb und Grenzen
+MAC-Adressen sind keine Geheimnisse. Die bewusst gewählte MAC-Zuordnung setzt Vertrauen in die manuell genehmigten Senderkonten voraus. Nur genehmigte Konten dürfen Geräte zuordnen und Profile senden. Bestehende fremde Zuordnungen bleiben gesperrt. Der Abruf von Profilen erfordert weiterhin den zufälligen Gerätetoken, niemals nur die MAC. Portaländerungen und vertrauliches Laden gespeicherter Vorlagen prüfen zusätzlich Origin.
 
-Separater Worker dado-connect mit separater EU-D1-Datenbank. Der Lizenzbestand bleibt unverändert. Der bestehende dado-admin bindet zusätzlich CONNECT_DB ein. Admin-Routen bleiben hinter derselben verifizierten Cloudflare-Access-Identität.
+Separater öffentlicher Worker dado-connect mit eigener EU-D1-Datenbank, getrennt von Lizenzdaten. Verwaltung in dado-admin unter bestehendem Cloudflare-Access-Schutz. Passwörter mit PBKDF2-SHA256, individuellem Salt und geheimem Pepper; gehashte Sitzungen und Secure/HttpOnly/SameSite-Strict-Cookie. Raten-, Körpergrößen- und Warteschlangenlimits bleiben aktiv.
 
-Konten: pending / approved / suspended. Passwörter: PBKDF2-SHA256 mit individuellem Salt und geheimem Pepper. Sitzungen: zufällige Tokens, serverseitig gehasht, Secure/HttpOnly/SameSite-Strict-Cookie. Portaländerungen prüfen Origin. Geräte verwenden eigene zufällige Bearer-Tokens; MAC ist kein Passwort. Raten-, Körpergrößen- und Warteschlangenlimits gelten serverseitig.
+Vorlagen sind mit AES-GCM und zusätzlicher Bindung an Profil-ID/Konto verschlüsselt. Nur das angemeldete Besitzerkonto kann sie laden, ändern, senden oder löschen. Die Listenantwort enthält nur Metadaten. Vorlagen bleiben bis zur Löschung oder Kontolöschung erhalten. Es gibt keine Klartext-Ablage der Anbieterzugänge im Browser-LocalStorage. Der Dienst kann sie beim autorisierten Laden/Senden entschlüsseln: keine Ende-zu-Ende-Verschlüsselung.
 
-Zugangsdaten werden in der Warteschlange mit AES-GCM verschlüsselt. Der Dienst entschlüsselt beim Abruf; keine Ende-zu-Ende-Verschlüsselung. Sender können gespeicherte Zugangsdaten nicht wieder auslesen. Die App speichert dauerhaft vor der Empfangsbestätigung. Stabile Nachrichten-IDs verhindern Duplikate bei Wiederholungsabruf. Die Bestätigung löscht den verschlüsselten Inhalt. Unabgeholte Sendungen verfallen nach sieben Tagen, stündliche Bereinigung entfernt den Inhalt. Metadaten bleiben 30 Tage, Auditdaten 90 Tage.
+Die Versandwarteschlange ist davon getrennt und ebenfalls verschlüsselt. Nach dauerhaftem Speichern bestätigt das Gerät den Empfang; erst dann wird der Versandinhalt entfernt. Nicht abgeholte Sendungen verfallen nach sieben Tagen und werden stündlich bereinigt. Metadaten 30 Tage, Auditdaten 90 Tage. Das Bestätigen einer Sendung löscht keine gespeicherte Vorlage.
 
-Keine automatischen Profilabrufe beim Start oder während Wiedergabe. Verbindung trennen entfernt offene Sendungen und Zuordnung, nicht bereits lokal gespeicherte Profile. Verlorene Geräte-Tokens sind nicht aus der Adresse rekonstruierbar.
+Ab 0.7.2 verwenden gespeicherte Vorlagen stabile Geräteprofil-IDs (cloud-profile-UUID). Erneutes Senden aktualisiert ausschließlich den eigenen importierten Vorlageneintrag, ohne weitere Duplikate; manuelle Profile bleiben erhalten. Native letzte Senderposition bleibt dabei erhalten. Alte Einmalsendungen bleiben nach Nachrichten-ID dedupliziert. Ältere Apps ignorieren die zusätzliche sourceId; für Vorlagen-Aktualisierungen auf 0.7.2 aktualisieren.
 
-Passwort vergessen: Tarik erzeugt einen einmaligen Reset-Link (eine Stunde gültig) und übermittelt ihn selbst. Kein E-Mail-Dienst. Reset genehmigt kein wartendes Konto.
+Die Gerätezuordnung wird im Portal getrennt; keine Kontoverwaltung im Endnutzer-UI. Bereits lokal gespeicherte Profile werden dadurch nicht gelöscht. iOS/Android geben keine verlässliche Hardware-MAC heraus; dort gilt die dauerhaft private Geräteadresse im MAC-Format. LG ist vorbereitet, noch kein gebauter Client.
 
-Cloudflare-Free-Kontingente gelten; kostenlos bedeutet keine unbegrenzte Kapazität. Keine kostenpflichtige Erweiterung wurde für Connect aktiviert. Datenschutzinformationen stehen unter /privacy und müssen mit den tatsächlichen Betreiberabläufen aktuell gehalten werden.
-
-## Entwicklung und Deployment
+## Betrieb
 
 `node --test connect/tests/service.test.mjs`
 
-`python connect/scripts/deploy.py` verwendet den bestehenden Wrangler-Login, prüft Remote-Schlüssel, migriert D1 und deployt Dienst und Verwaltung. Vorhandene AUTH_PEPPER und CRYPTO_KEY werden bei normalen Deployments niemals ersetzt. Fehlender/teilweiser Schlüsselbestand führt zum Abbruch; initiale Schlüssel nur ausdrücklich mit --initialize-empty erzeugen. Die ignorierte lokale Sicherung connect/.local/connect-secrets.dpapi ist mit Windows-CurrentUser-DPAPI verschlüsselt. Nicht entfernen oder Schlüssel ungeplant rotieren: Verlust kann Passwörter und offene Sendungen unbrauchbar machen.
+`python connect/scripts/deploy.py` prüft bestehende Remote-Schlüssel, migriert D1 und deployt Dienst und Verwaltung. Bestehende AUTH_PEPPER/CRYPTO_KEY niemals ungeplant ersetzen. Die ignorierte lokale Sicherung connect/.local/connect-secrets.dpapi ist Windows-CurrentUser-DPAPI-geschützt. Schlüsselverlust kann Passwörter und verschlüsselte Vorlagen unbrauchbar machen. Free-Kontingente gelten; keine kostenpflichtige Erweiterung aktiviert.
 
-`node connect/scripts/smoke.mjs` prüft Produktion mit temporären Testdaten und entfernt sie anschließend. Es genehmigt keine echten Konten.
+`node connect/scripts/smoke.mjs` prüft Produktion mit temporären Daten einschließlich Vorlagenverschlüsselung, erneutem Versand und Löschung und entfernt das Testkonto anschließend. Keine echten Konten werden automatisch genehmigt.
 
-Portal: /api/auth/register, /api/auth/login, /api/session, /api/pair, /api/devices, /api/messages, /api/unpair. Geräte: /v1/device/register, pairing, pull, ack. Clients: src/connect.rs und SmartTV/client/src/connect.tsx. Kompatibilität, manuelle Abrufe und Speichern vor Bestätigung beibehalten. Keine Zugangsdaten protokollieren.
+Protokoll: /api/profiles (Metadaten), /api/profiles/save, load, delete; /api/messages nimmt alternativ profileId an. Geräte registrieren über /v1/device/register und rufen ausdrücklich mit pull/ack ab. Das alte pairing-Endpunktformat bleibt für ältere Apps kompatibel, sein Code ist keine Voraussetzung der MAC-Zuordnung mehr. Zugangsdaten nicht protokollieren.

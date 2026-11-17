@@ -1,5 +1,4 @@
-import {useState,useLayoutEffect,useRef} from 'preact/hooks';
-import {createPortal} from 'preact/compat';
+import {useState} from 'preact/hooks';
 import {Profile} from './types';
 import config from '../../../connect/public-config.json';
 type Device={deviceId:string;address:string;owner:string|null;pairingCode?:string;pairingExpires?:number};
@@ -17,48 +16,46 @@ async function post<T>(secret:string,path:string,data:unknown):Promise<T>{
  }finally{clearTimeout(timer);}
 }
 export function cloudProfile(value:unknown,id:string):Profile{
- const p=value as Profile;
+ const p=value as Profile&{sourceId?:string};
  const url=(value:string)=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}};
  if(!/^[a-f0-9-]{36}$/.test(id)||!p||typeof p.name!=='string'||!p.name.trim()||p.name.length>80||!['Xtream','M3u'].includes(p.kind))throw Error('Ungültiges Cloud-Profil.');
  if(p.kind==='Xtream'&&(!url(p.host)||typeof p.username!=='string'||!p.username||typeof p.password!=='string'||!p.password)||p.kind==='M3u'&&!url(p.m3uUrl))throw Error('Anbieteradresse oder Zugangsdaten fehlen.');
- return {id:'cloud-'+id,name:p.name,kind:p.kind,host:p.kind==='Xtream'?p.host:'',username:p.kind==='Xtream'?p.username:'',password:p.kind==='Xtream'?p.password:'',m3uUrl:p.kind==='M3u'?p.m3uUrl:'',epgUrl:''};
+ if(p.sourceId!==undefined&&!/^[a-f0-9-]{36}$/.test(p.sourceId))throw Error('Ungültige Cloud-Vorlage.');
+ return {id:p.sourceId?'cloud-profile-'+p.sourceId:'cloud-'+id,name:p.name,kind:p.kind,host:p.kind==='Xtream'?p.host:'',username:p.kind==='Xtream'?p.username:'',password:p.kind==='Xtream'?p.password:'',m3uUrl:p.kind==='M3u'?p.m3uUrl:'',epgUrl:''};
+}
+export function mergeCloudProfiles(existing:Profile[],incoming:Profile[]):{profiles:Profile[];added:number}{
+ const profiles=[...existing];let added=0;
+ for(const p of incoming){const index=profiles.findIndex(old=>old.id===p.id);if(index<0){profiles.push(p);added++;}else if(p.id.startsWith('cloud-profile-'))profiles[index]=p;}
+ return {profiles,added};
+}
+
+let registration:Promise<Saved>|null=null;
+export function prepareCloudDevice(force=false):Promise<Saved>{
+ if(registration&&!force)return registration;
+ registration=(async()=>{
+  const previous=saved();
+  if(previous.deviceId&&previous.address&&!force)return previous;
+  if(!previous.token){previous.token=token();persist(previous);}
+  let mac:string|null=null;try{mac=(window as any).webapis?.network?.getMac?.()||null;}catch{}
+  const device=await post<Device>(previous.token,'register',{platform:'samsung',mac});
+  const next={...previous,...device};delete next.pairingCode;delete next.pairingExpires;persist(next);return next;
+ })();
+ return registration;
 }
 export function ConnectPanel({importProfiles,compact=false}:{importProfiles:(profiles:Profile[])=>number;compact?:boolean}){
- const [open,setOpen]=useState(false),modal=useRef<HTMLElement>(null);
- useLayoutEffect(()=>{
-  if(!compact||!open)return;
-  const previous=document.activeElement as HTMLElement;
-  const key=(e:KeyboardEvent)=>{if(e.key==='Escape'||e.keyCode===10009||e.key==='BrowserBack'){e.preventDefault();e.stopImmediatePropagation();setOpen(false);}};
-  document.addEventListener('keydown',key,true);modal.current?.querySelector('button')?.focus({preventScroll:true});
-  return()=>{document.removeEventListener('keydown',key,true);previous?.focus({preventScroll:true});};
- },[compact,open]);
- const [state,setState]=useState<Saved>(saved),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[reset,setReset]=useState(false);
- async function run(pair=false,rebind=false){
-  if(busy)return;setBusy(true);setMessage('Cloud-Verbindung wird hergestellt …');setReset(false);
-  let next={...saved()};
+ const [busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ async function refresh(){
+  if(busy)return;setBusy(true);setMessage('');
   try{
-   if(!next.token){next.token=token();persist(next);}
-   let mac:string|null=null;try{mac=(window as any).webapis?.network?.getMac?.()||null;}catch{}
-   const device=await post<Device>(next.token,'register',{platform:'samsung',mac});
-   if(pair){const paired=await post<Device>(next.token,'pairing',{reset:rebind});next={...next,...paired};persist(next);setState(next);setMessage('Adresse und Code im Portal eintragen. Der Code gilt zehn Minuten.');}
-   else{
-    const inbox=await post<Device&{messages:{id:string;profile:unknown}[]}>(next.token,'pull',{});
-    next={...next,...device,...inbox};delete (next as any).messages;if(next.owner){delete next.pairingCode;delete next.pairingExpires;}persist(next);setState(next);
-    const profiles=inbox.messages.map(m=>cloudProfile(m.profile,m.id));
-    if(!profiles.length){setMessage(next.owner?'Keine neuen Profile vorhanden.':'Noch nicht gekoppelt. Bitte zuerst Gerät verbinden.');return;}
-    const count=importProfiles(profiles); // Must durably save or throw BEFORE ack.
-    try{await post(next.token,'ack',{ids:inbox.messages.map(m=>m.id)});setMessage(count+' neue Profile gespeichert. Unter Profile auswählen und anmelden.');}
-    catch{setMessage('Profile gespeichert. Empfangsbestätigung fehlt; bitte Aktualisieren erneut drücken.');}
-   }
-  }catch(error){setMessage(error instanceof Error&&error.name!=='AbortError'?error.message:'Cloud-Dienst nicht erreichbar. Verbindung prüfen.');}
+   const state=await prepareCloudDevice(true);
+   const inbox=await post<Device&{messages:{id:string;profile:unknown}[]}>(state.token,'pull',{});
+   const next={...state,...inbox};delete (next as any).messages;persist(next);
+   if(!inbox.messages.length){setMessage('Keine neuen Profile vorhanden.');return;}
+   importProfiles(inbox.messages.map(m=>cloudProfile(m.profile,m.id)));
+   try{await post(state.token,'ack',{ids:inbox.messages.map(m=>m.id)});setMessage('Profile gespeichert. In der Profilwahl auswählen.');}
+   catch{setMessage('Profile gespeichert. Bitte Aktualisieren erneut drücken.');}
+  }catch(error){setMessage(error instanceof Error&&error.name!=='AbortError'?error.message:'Profile konnten nicht abgerufen werden. Verbindung prüfen.');}
   finally{setBusy(false);}
  }
- const panel=<section class="glass connect-panel" data-focus-zone="connect"><h2>Profile vom Handy/PC</h2><p>Dado Connect · Konto im Portal erstellen und vom Betreiber freigeben lassen.</p><p class="connect-url">{config.portalUrl}</p>
- {state.address&&<p>Geräteadresse: <strong>{state.address}</strong></p>}{state.owner&&<p>Verbunden mit: {state.owner}</p>}
- {state.pairingCode&&<p>Kopplungscode: <strong>{(state.pairingExpires||0)>Date.now()/1000?state.pairingCode:'Abgelaufen – bitte neu erzeugen'}</strong><small> Nur an die Person weitergeben, die Profile senden darf.</small></p>}
- {!state.owner&&<button disabled={busy} onClick={()=>void run(true)}>Gerät verbinden</button>} <button disabled={busy} onClick={()=>void run()}>{busy?'Wird abgerufen …':'Aktualisieren'}</button>
- {state.owner&&<button disabled={busy} onClick={()=>setReset(true)}>Verbindung trennen</button>}
- {reset&&<div><p>Zuordnung und ungelesene Sendungen entfernen? Gespeicherte Profile bleiben erhalten.</p><button onClick={()=>void run(true,true)}>Trennen bestätigen</button><button onClick={()=>setReset(false)}>Abbrechen</button></div>}
- <p role="status">{message}</p><small>Abruf nur auf Knopfdruck. Keine automatische Anmeldung oder Wiedergabe.</small></section>;
- return compact?<><button onClick={()=>setOpen(true)}>Profile vom Handy/PC</button>{open&&createPortal(<div class="scrim"><section ref={modal} class="modal glass" role="dialog" aria-modal="true" aria-label="Dado Connect"><button onClick={()=>setOpen(false)}>Zurück zu Profilen</button>{panel}</section></div>,document.getElementById('app')!)}</>:panel;
+ return <div class={compact?'profile-refresh':'connect-panel'}><button disabled={busy} onClick={()=>void refresh()}>{busy?'Profile werden aktualisiert …':'Profile aktualisieren'}</button>{message&&<p role="status">{message}</p>}</div>;
 }
