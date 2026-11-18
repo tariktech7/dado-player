@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 const testConfig = process.env.DADO_LICENSE_TEST_CONFIG;
+const legacy = process.env.DADO_TIZEN_PROFILE === '2019';
 const root = fileURLToPath(new URL("..", import.meta.url));
 process.chdir(root);
 const release = JSON.parse(await readFile('../../release.json', 'utf8'));
@@ -12,11 +13,11 @@ if (out !== path.join(root, "dist")) throw new Error("Unexpected output path");
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await build({
-  entryPoints: ["src/app.tsx"],
+  entryPoints: [legacy ? "src/legacy-entry.ts" : "src/app.tsx"],
   bundle: true,
   outfile: "dist/app.js",
   format: "iife",
-  target: ["chrome85"],
+  target: [legacy ? "chrome63" : "chrome85"],
   jsx: "automatic",
   jsxImportSource: "preact",
   minify: true,
@@ -44,7 +45,7 @@ await cp("node_modules/preact/LICENSE", "dist/PREACT-LICENSE.txt");
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
 await writeFile(
   "dist/config.xml",
-  (await readFile("tizen/config.xml", "utf8")).replace(
+  (await readFile("tizen/config.xml", "utf8")).replace('required_version="6.5"',legacy?'required_version="5.0"':'required_version="6.5"').replace(
     "__VERSION__",
     pkg.version,
   ),
@@ -60,7 +61,8 @@ await writeFile(
       name: "Dado Player",
       version: pkg.version,
       platform: "Samsung Tizen",
-      minimumTizen: "6.5",
+      minimumTizen: legacy ? "5.0" : "6.5",
+      browserTarget: legacy ? "chrome63" : "chrome85",
       licenseTestBuild: !!testConfig,
     },
     null,

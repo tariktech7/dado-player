@@ -1,8 +1,9 @@
 # Dado Player für Smart TVs
 
-Stand: 14. November 2026. Android TV ist Teil der bestehenden Android-App.
+Stand: 18. November 2026. Android TV ist Teil der bestehenden Android-App.
 Samsung Tizen hat jetzt einen eigenen baubaren [Web-TV-Client](client/README.md)
-(Lizenz-Beta 0.1.8, Tizen 6.5+). Die Samsung-Zertifikatssignierung und Hardwareabnahme sind getrennte Schritte.
+(Beta 0.7.2, Standardziel Tizen 6.5+, separates 2019-Profil für Tizen 5.0).
+Die Samsung-Zertifikatssignierung und Hardwareabnahme sind getrennte Schritte.
 LG webOS bleibt ein vorbereitetes Portierungsziel. APK/EXE sind keine IPK/WGT.
 
 - [UI-SPEC.md](UI-SPEC.md): Darstellung und Fernbedienungsabläufe.

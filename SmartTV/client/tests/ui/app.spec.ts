@@ -14,6 +14,13 @@ const profile = {
   epgUrl: "",
 };
 async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent') {
+  if(process.env.DADO_TIZEN_PROFILE==='2019')await page.addInitScript(()=>{
+    (String.prototype as any).replaceAll=undefined;
+    (Array.prototype as any).flatMap=undefined;
+    (window as any).ResizeObserver=undefined;
+    (window as any).AbortController=undefined;
+    (crypto as any).randomUUID=undefined;
+  });
   await page.route('https://dado-connect.dado-licensing.workers.dev/v1/device/**',async route=>{
     if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'}});
     return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'},json:{deviceId:'D7C-fixture',address:'02:11:22:33:44:55',owner:null,messages:[]}});

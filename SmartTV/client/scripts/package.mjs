@@ -14,7 +14,7 @@ const profileIndex = process.argv.indexOf("--profile"),
     profileIndex >= 0
       ? process.argv[profileIndex + 1]
       : process.env.TIZEN_SIGNING_PROFILE;
-const release = path.resolve("../../Releases");
+const release = path.resolve(process.env.DADO_PACKAGE_DIR || "../../Releases");
 await mkdir(release, { recursive: true });
 const entries = {};
 async function walk(dir, prefix = "") {
