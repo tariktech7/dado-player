@@ -706,6 +706,7 @@ test("Live TV, movies and series use the same category column", async ({ page })
 test("colored remote keys act on the focused title or current player", async ({ page }) => {
   await fixture(page, true, true);
   await page.goto("/");
+  await expect(page.locator(".navigation")).toBeVisible();
   const color = (keyCode: number, repeat = false) => page.evaluate(({keyCode, repeat}) => {
     document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { keyCode, repeat, bubbles: true }));
   }, {keyCode, repeat});
