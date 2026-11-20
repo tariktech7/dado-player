@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.7.2
+# Gemeinsamer Produktstand 0.7.4
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-21 und iOS-Buildnummer 16 bleiben eigenständig monoton steigend. Nach Änderungen
+23 und iOS-Buildnummer 18 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -109,3 +109,10 @@ einzelne Sender/Filme/Serien pro Anbieterprofil sperren. Alle Folgen einer gespe
 Serie geschützt; Wiedergabe, Vorschau, Favoriten und Fortsetzen prüfen zentral. PIN
 für Änderungen und jeden neuen gesperrten Wiedergabestart. Lokale Speicherung, keine
 Cloud-Abhängigkeit. Vertrag und Grenzen: [PARENTAL-CONTROLS.md](PARENTAL-CONTROLS.md).
+
+## Gemeinsame Darstellung 0.7.4
+Windows nutzt `src/ui/desktop.rs` als normale breite Oberfläche; Samsung bleibt Web-TV.
+Beide lesen Spaltenmaße und Bewegung aus `shared/shell-appearance.json`.
+Normale steel-blue Palette in `shared/normal-palette.json`; Dunkel ist weiches Mitternachtsblau,
+Hell weiß mit blauen Akzenten. Kein Lavendel-Modus. Alte gespeicherte `Warm`/`warm`-Werte
+bleiben lesbar und wählen nun Blau. Mobile Tabs und volle Detailseiten bleiben eigenständig.

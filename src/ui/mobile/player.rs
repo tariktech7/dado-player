@@ -41,7 +41,7 @@ fn draw_radio_card(ui: &Ui, rect: Rect, title: &str) {
     let center = pos2(rect.center().x, rect.center().y - 28.0);
     ui.painter().circle_filled(center, 52.0, accent_fill(ui));
     ui.painter()
-        .circle_stroke(center, 52.0, Stroke::new(2.0_f32, accent()));
+        .circle_stroke(center, 52.0, Stroke::new(2.0_f32, accent(ui)));
     ui.painter().text(
         center,
         Align2::CENTER_CENTER,
@@ -742,11 +742,11 @@ fn mobile_track_popover(
         );
         let sel = current == 0;
         draw_row_bg(ui, r, sel, resp.hovered());
-        let g = components::fit(ui, "Aus", reg(FS_ROW), row_fg(sel), pop_w - 24.0);
+        let g = components::fit(ui, "Aus", reg(FS_ROW), row_fg(ui, sel), pop_w - 24.0);
         ui.painter().galley(
             pos2(r.left() + 14.0, r.center().y - g.size().y * 0.5),
             g,
-            row_fg(sel),
+            row_fg(ui, sel),
         );
         if focus::clicked(ui, &resp) {
             pick = Some(TrackPick::Off);
@@ -777,11 +777,11 @@ fn mobile_track_popover(
             let resp = ui.interact(r, ui.id().with((tag, i, r.min.y as i32)), Sense::click());
             let sel = t.id == current;
             draw_row_bg(ui, r, sel, resp.hovered());
-            let g = components::fit(ui, &t.label(), reg(FS_ROW), row_fg(sel), pop_w - 44.0);
+            let g = components::fit(ui, &t.label(), reg(FS_ROW), row_fg(ui, sel), pop_w - 44.0);
             ui.painter().galley(
                 pos2(r.left() + 14.0, r.center().y - g.size().y * 0.5),
                 g,
-                row_fg(sel),
+                row_fg(ui, sel),
             );
             if sel {
                 let c = components::fit(ui, "✓", reg(FS_ROW), accent_text(ui), 30.0);
@@ -819,9 +819,9 @@ fn draw_row_bg(ui: &mut Ui, rect: Rect, selected: bool, hovered: bool) {
 }
 
 /// Foreground colour for a popover row (accent when selected).
-fn row_fg(selected: bool) -> Color32 {
+fn row_fg(ui: &Ui, selected: bool) -> Color32 {
     if selected {
-        crate::theme::ACCENT
+        crate::theme::accent(ui)
     } else {
         Color32::WHITE
     }

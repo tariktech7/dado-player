@@ -23,6 +23,16 @@ pub fn storage_failed() -> bool {
 }
 
 fn app_dir() -> PathBuf {
+    #[cfg(not(test))]
+    if std::env::var_os("IPTV_DEMO").is_some() {
+        if let Some(path) = std::env::var_os("DADO_QA_DATA_DIR") {
+            let path = PathBuf::from(path);
+            if path.is_absolute() {
+                log_resolved_once(&path);
+                return path;
+            }
+        }
+    }
     #[cfg(test)]
     return std::env::temp_dir().join(format!(
         "dado-player-unit-{}-{:?}",

@@ -134,8 +134,8 @@ pub fn text(ui: &Ui) -> Color32 {
 }
 
 /// Accent used for selection / primary actions.
-pub fn accent() -> Color32 {
-    crate::theme::ACCENT
+pub fn accent(ui: &Ui) -> Color32 {
+    crate::theme::accent(ui)
 }
 
 /// Stroke colour of the D-pad focus ring.

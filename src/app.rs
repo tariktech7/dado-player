@@ -684,8 +684,10 @@ impl App {
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         let _ = self.tx.context.set(ctx.clone());
-        self.connect
-            .prepare(ctx, self.rt.handle(), &mut self.profiles);
+        if std::env::var_os("IPTV_DEMO").is_none() {
+            self.connect
+                .prepare(ctx, self.rt.handle(), &mut self.profiles);
+        }
         #[cfg(target_os = "windows")]
         crate::licensing::tick(ctx);
         #[cfg(target_os = "ios")]
@@ -1228,31 +1230,7 @@ impl App {
             return;
         }
 
-        if self.nav_collapsed
-            && ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft))
-            && !ctx.wants_keyboard_input()
-        {
-            self.nav_collapsed = false;
-        }
-        egui::SidePanel::left("nav")
-            .resizable(false)
-            .exact_width(if self.nav_collapsed { 60.0 } else { 224.0 })
-            .show(ctx, |ui| ui::sidebar::show(self, ui));
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.push_id(("section", self.view as u64), |ui| match self.view {
-                View::Home => ui::home::show(self, ui),
-                View::Live => ui::live::show(self, ui),
-                View::Movies => ui::vod::show(self, ui),
-                View::Series => ui::series::show(self, ui),
-                View::Search => ui::search::show(self, ui),
-                View::Favorites => ui::favorites::show(self, ui),
-                View::Continue => ui::continue_watching::show(self, ui),
-                View::Settings => ui::settings::show(self, ui),
-                View::Player => ui::player::show(self, ui),
-                View::Login => {}
-            });
-        });
+        crate::ui::desktop::show(self, ctx);
 
         ui::library::description_dialog(self, ctx);
         ui::palette::show(self, ctx);

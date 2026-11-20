@@ -1,6 +1,6 @@
 # Dado Player für Samsung Tizen
 
-Eigenständige TV-Web-App, gemeinsamer Beta-Stand **0.7.3**. Standardziel: Tizen **6.5+**
+Eigenständige TV-Web-App, gemeinsamer Beta-Stand **0.7.4**. Standardziel: Tizen **6.5+**
 (Chromium 85). Für 2019-Geräte mit Tizen 5.0/Chromium 63 gibt es ein separates Buildprofil.
 Der Standard-Test-TV GQ77S94CATXZG meldet Tizen 9.0; ein GQ55Q60RGTXZG mit Tizen 5.0
 wurde am 18. November 2026 mit dem älteren Profil erfolgreich installiert und gestartet.
@@ -19,7 +19,7 @@ npm run package -- --profile DEIN_SAMSUNG_TV_PROFIL
 
 `TIZEN_CLI` muss wie beim Standardbuild auf die SDK-CLI zeigen. Das Samsung-Distributor-
 Zertifikat muss diesen TV enthalten; bestehende Autorenzertifikate und andere Geräteprofile
-behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.3.wgt -- PAKETORDNER`
+behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.4.wgt -- PAKETORDNER`
 installieren und `tizen run -s TV_IP:26101 -p DadoPlayTV.Player` starten.
 
 Das Profil setzt die deklarierte Mindestversion auf 5.0 und übersetzt JavaScript für Chrome 63.

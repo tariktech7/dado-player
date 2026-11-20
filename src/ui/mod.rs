@@ -1,4 +1,5 @@
 pub mod continue_watching;
+pub mod desktop;
 pub mod favorites;
 pub mod home;
 pub mod library;
@@ -239,15 +240,20 @@ pub fn pager(ui: &mut Ui, page: &mut usize, pages: usize, count: usize, noun: &s
 
 /// The little square app mark with "D7".
 pub fn brand_mark(ui: &mut Ui, size: f32) {
-    let key = egui::Id::new("d7-icon-texture");
+    let dark = ui.visuals().dark_mode && !crate::theme::is_normal(ui);
+    let key = egui::Id::new(("d7-icon-texture", dark));
     let texture = ui
         .ctx()
         .data(|d| d.get_temp::<egui::TextureHandle>(key))
         .unwrap_or_else(|| {
-            let img = image::load_from_memory(include_bytes!("../../assets/icon.png"))
-                .expect("bundled D7 icon")
-                .thumbnail(128, 128)
-                .to_rgba8();
+            let img = image::load_from_memory(if dark {
+                include_bytes!("../../assets/icon-dark.png").as_slice()
+            } else {
+                include_bytes!("../../assets/icon.png").as_slice()
+            })
+            .expect("bundled D7 icon")
+            .thumbnail(128, 128)
+            .to_rgba8();
             let image = egui::ColorImage::from_rgba_unmultiplied(
                 [img.width() as usize, img.height() as usize],
                 img.as_raw(),

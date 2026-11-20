@@ -17,6 +17,7 @@ for (const file of [
   "app.css",
   "icon.png",
   "d7.svg",
+  "d7-dark.svg",
   "fonts/SourceSans3-Regular.ttf",
   "fonts/SourceSans3-Bold.ttf",
   "fonts/SourceSans3-Semibold.ttf",

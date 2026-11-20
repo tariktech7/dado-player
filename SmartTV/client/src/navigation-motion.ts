@@ -1,4 +1,5 @@
 // Change the grid once, then animate the visual offset on the compositor.
+import appearance from './shell-appearance';
 // Animating grid-template-columns relayouts every channel/poster on every frame.
 const running = new WeakMap<HTMLElement, Animation[]>();
 export async function animateNavigation(shell: HTMLElement | null, collapsed: boolean): Promise<void> {
@@ -25,7 +26,7 @@ export async function animateNavigation(shell: HTMLElement | null, collapsed: bo
       animations.push(node.animate([
         {transform: `translate3d(${x}px, ${y}px, 0)`},
         {transform: "translate3d(0, 0, 0)"},
-      ], {duration: 220, easing: "cubic-bezier(.22,1,.36,1)"}));
+      ], {duration: appearance.navigationDurationMs, easing: `cubic-bezier(${appearance.navigationEasing.join(',')})`}));
     }
   });
   running.set(shell, animations);

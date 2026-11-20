@@ -73,7 +73,9 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
             // routes View::Home here), so one banner covers both platforms.
             ui::catalog_banner(app, ui);
             let name=app.active_profile.as_ref().map(|p|p.name.as_str()).unwrap_or("");
-            ui.label(RichText::new(format!("Guten Tag, {name}.")).size(if app.tv{22.0}else{26.0}).strong());
+            let desktop=super::desktop::active(ui.ctx());let scale=super::desktop::scale(ui.ctx());
+            if desktop {ui.label(RichText::new("DEIN PROGRAMM").size(18.0*scale).color(theme::muted(ui)));}
+            ui.label(RichText::new(format!("Guten Tag, {name}.")).size(if desktop{44.0*scale}else if app.tv{22.0}else{26.0}).strong());
             ui.label(RichText::new("Dein Programm. Dein Überblick.").small().color(theme::muted(ui)));
             ui.add_space(10.0);
             let featured = featured_item(app);
@@ -220,6 +222,15 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
             );
             ui.painter().image(tex.id(), art, uv, Color32::WHITE);
         }
+    } else if super::desktop::active(ui.ctx()) {
+        let size = (image_width * 0.56).min(h * 0.65);
+        let area = egui::Rect::from_center_size(
+            egui::pos2(rect.right() - image_width * 0.5, rect.center().y),
+            Vec2::splat(size),
+        );
+        let mut logo = ui.child_ui(area, Layout::top_down(Align::Min));
+        logo.set_clip_rect(area);
+        super::brand_mark(&mut logo, size);
     }
     let pad = if compact { 16.0 } else { 28.0 };
     let area = egui::Rect::from_min_max(
@@ -233,7 +244,7 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
             PlayKind::Vod => "Film",
             PlayKind::Episode => "Serie",
         })
-        .color(theme::ACCENT),
+        .color(theme::accent(&info)),
     );
     info.add_space(6.0);
     let font = egui::FontId::proportional(if compact { 22.0 } else { 32.0 });
@@ -257,7 +268,7 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
     let play_response = info.put(
         button,
         egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
-            .fill(theme::ACCENT_FILL)
+            .fill(theme::accent_fill(&info))
             .rounding(20.0),
     );
     let play_hit = if app.tv {

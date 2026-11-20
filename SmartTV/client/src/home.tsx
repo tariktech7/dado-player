@@ -59,7 +59,7 @@ export function Home({
               {featured.item.logo ? (
                 <img src={featured.item.logo} alt="" />
               ) : (
-                <img class="hero-fallback" src="d7.svg" alt="" />
+                <><img class="hero-fallback brand-normal" src="d7.svg" alt="" /><img class="hero-fallback brand-dark" src="d7-dark.svg" alt="" /></>
               )}
             </div>
           </section>
@@ -74,7 +74,7 @@ export function Home({
               </p>
             </div>
             <div class="home-hero-art">
-              <img class="hero-fallback" src="d7.svg" alt="" />
+              <><img class="hero-fallback brand-normal" src="d7.svg" alt="" /><img class="hero-fallback brand-dark" src="d7-dark.svg" alt="" /></>
             </div>
           </section>
         )}

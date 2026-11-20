@@ -54,6 +54,160 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
 }
 
+/// Samsung's category / channel / preview composition at desktop density.
+pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32) {
+    number_jump(app, ui);
+    let a = super::desktop::appearance();
+    let gap = 16.0 * s;
+    let category_w = (a.category_width * s).min(body.width() * 0.29);
+    let preview_w = (a.live_preview_width * s).min(body.width() * 0.37);
+    let cr = Rect::from_min_max(body.min, pos2(body.left() + category_w, body.bottom()));
+    let pr = Rect::from_min_max(pos2(body.right() - preview_w, body.top()), body.max);
+    let lr = Rect::from_min_max(
+        pos2(cr.right() + gap, body.top()),
+        pos2(pr.left() - gap, body.bottom()),
+    );
+    ui.painter().rect_filled(
+        lr.expand2(vec2(8.0 * s, 24.0 * s)),
+        0.0,
+        Color32::from_black_alpha(24),
+    );
+    super::desktop::column(ui, cr, "live-categories", offset, |ui| {
+        categories(app, ui, true)
+    });
+    super::desktop::column(ui, lr, "live-channels", offset, |ui| {
+        ui.spacing_mut().item_spacing.y = 6.0 * s;
+        channels(app, ui, true)
+    });
+    super::desktop::column(ui, pr, "live-preview", 0.0, |ui| {
+        preview_desktop(app, ui, s)
+    });
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_secs(30));
+}
+
+fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
+    let item = app.preview.clone().or_else(|| {
+        app.live_selected
+            .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
+            .map(play_item)
+    });
+    let header = super::desktop::heading(ui, "Vorschau");
+    if let Some(item) = &item {
+        let bounds = Rect::from_min_max(pos2(header.right() - 42.0 * s, header.top()), header.max);
+        let mut favorite = ui.child_ui(bounds, Layout::top_down(Align::Min));
+        crate::ui::fav_button(app, &mut favorite, &item.progress_key);
+    }
+    ui.add_space(6.0);
+    let w = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
+    ui.painter().rect_filled(rect, 12.0 * s, Color32::BLACK);
+    if app.preview.is_some() {
+        app.position_preview(rect.intersect(ui.clip_rect()), ui.ctx().pixels_per_point());
+    } else {
+        components::icon(
+            ui,
+            Rect::from_center_size(rect.center(), vec2(64.0 * s, 64.0 * s)),
+            components::Icon::Play,
+            theme::muted(ui),
+        );
+    }
+    let Some(item) = item else {
+        ui.add_space(16.0 * s);
+        ui.heading("Sender auswählen");
+        ui.label("Hier erscheinen Vorschau, Programm und Senderinformationen.");
+        return;
+    };
+    let open = ui
+        .add_sized(
+            [w, 40.0 * s],
+            egui::Button::new("Vollbild öffnen  ↗").frame(false),
+        )
+        .clicked();
+    if response.clicked() || open {
+        if app.preview.is_some() {
+            app.promote_preview(false);
+        } else {
+            app.start_preview(item.clone());
+        }
+    }
+    let mut title = egui::text::LayoutJob::simple(
+        item.title.clone(),
+        egui::FontId::proportional(32.0 * s),
+        ui.visuals().text_color(),
+        w,
+    );
+    title.wrap.max_rows = 2;
+    title.wrap.break_anywhere = true;
+    ui.label(title);
+    if let Some(error) = &app.player_error {
+        ui.colored_label(theme::DANGER, error);
+    }
+    egui::ScrollArea::vertical()
+        .id_source("desktop-live-epg")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.set_width(w);
+            if let Some(id) = item
+                .progress_key
+                .strip_prefix("live:")
+                .and_then(|v| v.parse::<u32>().ok())
+            {
+                app.request_epg(id);
+                let now = chrono::Utc::now().timestamp();
+                let entries = app.epg_for(id).cloned().unwrap_or_default();
+                for (label, entry) in [
+                    (
+                        "Jetzt",
+                        entries.iter().find(|e| e.start <= now && now < e.end),
+                    ),
+                    ("Danach", entries.iter().find(|e| e.start > now)),
+                ] {
+                    if let Some(e) = entry {
+                        ui.small(format!(
+                            "{label} · {} – {}",
+                            fmt_clock(e.start),
+                            fmt_clock(e.end)
+                        ));
+                        ui.label(RichText::new(&e.title).strong());
+                        ui.label(&e.description);
+                        ui.add_space(12.0 * s);
+                    }
+                }
+                if entries.is_empty() {
+                    ui.label(if app.epg_pending(id) {
+                        "EPG wird geladen …"
+                    } else {
+                        "Keine aktuellen Programmdaten."
+                    });
+                    if ui.button("EPG erneut laden").clicked() {
+                        app.retry_epg(id);
+                    }
+                }
+            }
+            if let Some(p) = &app.player {
+                let stream = &p.stream;
+                ui.separator();
+                ui.small("Stream");
+                if stream.width > 0 && stream.height > 0 {
+                    ui.label(format!(
+                        "{} × {} · {:.0} fps",
+                        stream.width, stream.height, stream.fps
+                    ));
+                }
+                for (label, value) in [
+                    ("Video", &stream.video_codec),
+                    ("Audio", &stream.audio_codec),
+                    ("Format", &stream.container),
+                ] {
+                    if !value.is_empty() {
+                        ui.label(format!("{label}: {value}"));
+                    }
+                }
+            }
+        });
+}
+
 /// TV keeps the category title in the brand row and search in the column
 /// header, leaving the full remaining height for ten or more channel rows.
 pub fn paint_tv_columns(ui: &Ui, content: Rect, nav: Rect, preview: bool) {
@@ -179,7 +333,15 @@ fn activated(ui: &Ui, response: &Response, tv: bool) -> bool {
     }
 }
 
+#[cfg(test)]
+thread_local! {static ROW_COUNT:std::cell::Cell<usize>=const{std::cell::Cell::new(0)};}
+#[cfg(test)]
+pub(crate) fn take_row_count() -> usize {
+    ROW_COUNT.with(|count| count.replace(0))
+}
 fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Response {
+    #[cfg(test)]
+    ROW_COUNT.with(|count| count.set(count.get() + 1));
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let response = ui.interact(rect, ui.id().with(id), Sense::click());
     if ui.is_rect_visible(rect) {
@@ -197,13 +359,19 @@ fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Re
 
 fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     let tv = app.tv;
+    let desktop = super::desktop::active(ui.ctx());
+    let s = super::desktop::scale(ui.ctx());
     if heading {
-        ui.label(
-            RichText::new("Kategorien")
-                .size(if tv { 20.0 } else { 22.0 })
-                .strong(),
-        );
-        ui.add_space(10.0);
+        if desktop {
+            super::desktop::heading(ui, "Kategorien");
+        } else {
+            ui.label(
+                RichText::new("Kategorien")
+                    .size(if tv { 20.0 } else { 22.0 })
+                    .strong(),
+            );
+            ui.add_space(10.0);
+        }
     }
     let mut list = vec![
         ("all".to_owned(), "Alle Sender".to_owned()),
@@ -224,7 +392,13 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                 let r = row(
                     ui,
                     ("category", &id),
-                    if tv { 34.0 } else { 44.0 },
+                    if desktop {
+                        58.0 * s
+                    } else if tv {
+                        34.0
+                    } else {
+                        44.0
+                    },
                     app.live_cat == id,
                 );
                 if ui.is_rect_visible(r.rect) {
@@ -232,7 +406,13 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                         ui,
                         pos2(r.rect.left() + 12.0, r.rect.center().y),
                         &name,
-                        tokens::medium(if tv { 16.0 } else { 14.0 }),
+                        tokens::medium(if desktop {
+                            21.0 * s
+                        } else if tv {
+                            16.0
+                        } else {
+                            14.0
+                        }),
                         ui.visuals().text_color(),
                         r.rect.width() - 24.0,
                     );
@@ -253,10 +433,61 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     }
 }
 
+type LiveFilterCache = (
+    (u64, usize, String, String, u64),
+    std::sync::Arc<Vec<usize>>,
+);
+fn filtered_channels(app: &mut App, ui: &Ui) -> std::sync::Arc<Vec<usize>> {
+    use std::hash::{Hash, Hasher};
+    let cat = app.live_cat.clone();
+    let query = app.live_q.trim().to_lowercase();
+    let favorites = if cat == "favorites" {
+        app.favorites.iter().fold(0, |sum, key| {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            key.hash(&mut h);
+            sum ^ h.finish()
+        })
+    } else {
+        0
+    };
+    let sig = (
+        app.catalog_generation(),
+        app.library.channels.len(),
+        cat.clone(),
+        query.clone(),
+        favorites,
+    );
+    let id = ui.id().with("live-filter");
+    if let Some((old, rows)) = ui.data(|d| d.get_temp::<LiveFilterCache>(id)) {
+        if old == sig {
+            return rows;
+        }
+    }
+    let rows = std::sync::Arc::new(
+        app.library
+            .channels
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| match cat.as_str() {
+                "all" => true,
+                "favorites" => app.is_favorite(&format!("live:{}", c.id)),
+                id => c.category_id == id,
+            })
+            .filter(|(_, c)| query.is_empty() || c.name.to_lowercase().contains(&query))
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>(),
+    );
+    app.live_order = rows.iter().map(|&i| app.library.channels[i].id).collect();
+    ui.data_mut(|d| d.insert_temp(id, (sig, rows.clone())));
+    rows
+}
+
 fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     let tv = app.tv;
+    let desktop = super::desktop::active(ui.ctx());
+    let scale = super::desktop::scale(ui.ctx());
     if controls {
-        ui.heading(if app.live_cat == "all" {
+        let title = if app.live_cat == "all" {
             "Alle Sender"
         } else if app.live_cat == "favorites" {
             "Favoriten"
@@ -267,35 +498,32 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 .find(|c| c.id == app.live_cat)
                 .map(|c| c.name.as_str())
                 .unwrap_or("Sender")
-        });
+        };
+        if desktop {
+            super::desktop::heading(ui, title);
+        } else {
+            ui.heading(title);
+        }
         ui.add_space(6.0);
         let query = ui.add_sized(
-            [ui.available_width(), if tv { 42.0 } else { 30.0 }],
+            [
+                ui.available_width(),
+                if desktop {
+                    56.0 * scale
+                } else if tv {
+                    42.0
+                } else {
+                    30.0
+                },
+            ],
             egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
         );
         if tv && focus::clicked(ui, &query) {
             query.request_focus();
         }
     }
-    let search = app.live_q.trim().to_lowercase();
-    let indices: Vec<_> = app
-        .library
-        .channels
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| match app.live_cat.as_str() {
-            "all" => true,
-            "favorites" => app.is_favorite(&format!("live:{}", c.id)),
-            cat => c.category_id == cat,
-        })
-        .filter(|(_, c)| search.is_empty() || c.name.to_lowercase().contains(&search))
-        .map(|(i, _)| i)
-        .collect();
-    app.live_order = indices
-        .iter()
-        .map(|&i| app.library.channels[i].id)
-        .collect();
-    if controls {
+    let indices = filtered_channels(app, ui);
+    if controls && !desktop {
         ui.label(
             RichText::new(format!("{} Sender", indices.len()))
                 .small()
@@ -303,7 +531,22 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         );
     }
     let tv_row_h = ((ui.available_height() - 9.0 * 3.0) / 10.0).clamp(34.0, 40.0);
-    let (name_size, epg_size) = (13.0, 10.0);
+    let (name_size, epg_size) = if desktop {
+        (
+            super::desktop::appearance().channel_name_font * scale,
+            super::desktop::appearance().epg_font * scale,
+        )
+    } else {
+        (13.0, 10.0)
+    };
+    let row_h = if desktop {
+        (super::desktop::appearance().channel_row_height - 6.0) * scale
+    } else if tv {
+        tv_row_h
+    } else {
+        90.0
+    };
+    let stride = row_h + ui.spacing().item_spacing.y;
     let (name_y, current_y, next_y) = ui.fonts(|fonts| {
         let name_h = fonts.row_height(&tokens::reg(name_size));
         let epg_h = fonts.row_height(&tokens::reg(epg_size));
@@ -316,22 +559,45 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     });
     let now = chrono::Utc::now().timestamp();
     let mut selected = None;
-    egui::ScrollArea::vertical()
+    let mut scroll = egui::ScrollArea::vertical()
         .id_source(("live-channels", &app.live_cat))
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            if indices.is_empty() {
-                ui.label("Keine passenden Sender");
-            }
-            for index in indices {
+        .auto_shrink([false, false]);
+    if let Some(target) = app.scroll_to.and_then(|id| {
+        indices
+            .iter()
+            .position(|&i| app.library.channels[i].id == id)
+    }) {
+        scroll = scroll.vertical_scroll_offset(
+            (target as f32 * stride - ui.available_height() * 0.5).max(0.0),
+        );
+    }
+    scroll.show_viewport(ui, |ui, viewport| {
+        if indices.is_empty() {
+            ui.label("Keine passenden Sender");
+        }
+        let total = (indices.len() as f32 * stride - ui.spacing().item_spacing.y).max(0.0);
+        ui.set_height(total);
+        let start = if desktop {
+            (viewport.min.y / stride).floor().max(0.0) as usize
+        } else {
+            0
+        };
+        let start = start.saturating_sub(2).min(indices.len());
+        let end = if desktop {
+            ((viewport.max.y / stride).ceil() as usize + 2).min(indices.len())
+        } else {
+            indices.len()
+        };
+        let origin = ui.max_rect().min;
+        let visible = Rect::from_min_max(
+            pos2(origin.x, origin.y + start as f32 * stride),
+            pos2(ui.max_rect().right(), origin.y + end as f32 * stride),
+        );
+        ui.allocate_ui_at_rect(visible, |ui| {
+            for &index in &indices[start..end] {
                 let id = app.library.channels[index].id;
                 let key = format!("live:{id}");
-                let r = row(
-                    ui,
-                    ("channel", id),
-                    if tv { tv_row_h } else { 90.0 },
-                    app.is_previewing(&key),
-                );
+                let r = row(ui, ("channel", id), row_h, app.is_previewing(&key));
                 if app.scroll_to == Some(id) {
                     ui.scroll_to_rect(r.rect, Some(Align::Center));
                     app.scroll_to = None;
@@ -344,8 +610,24 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             .request_repaint_after(std::time::Duration::from_millis(250));
                     }
                     let logo = Rect::from_min_size(
-                        r.rect.min + vec2(8.0, if tv { (tv_row_h - 24.0) * 0.5 } else { 15.0 }),
-                        Vec2::splat(if tv { 24.0 } else { 34.0 }),
+                        r.rect.min
+                            + vec2(
+                                8.0,
+                                if desktop {
+                                    (row_h - 48.0 * scale) * 0.5
+                                } else if tv {
+                                    (tv_row_h - 24.0) * 0.5
+                                } else {
+                                    15.0
+                                },
+                            ),
+                        Vec2::splat(if desktop {
+                            48.0 * scale
+                        } else if tv {
+                            24.0
+                        } else {
+                            34.0
+                        }),
                     );
                     components::thumb(
                         app,
@@ -361,13 +643,25 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now);
                     for (line, (offset, text, size, color)) in [
                         (
-                            if tv { name_y } else { 20.0 },
+                            if desktop {
+                                26.0 * scale
+                            } else if tv {
+                                name_y
+                            } else {
+                                20.0
+                            },
                             channel.name,
-                            if tv { name_size } else { 15.0 },
+                            if desktop || tv { name_size } else { 15.0 },
                             ui.visuals().text_color(),
                         ),
                         (
-                            if tv { current_y } else { 45.0 },
+                            if desktop {
+                                57.0 * scale
+                            } else if tv {
+                                current_y
+                            } else {
+                                45.0
+                            },
                             current.map(|s| format!("Jetzt: {s}")).unwrap_or_else(|| {
                                 if app.epg_pending(id) {
                                     "EPG wird geladen …".into()
@@ -375,13 +669,19 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                                     "Kein aktuelles EPG".into()
                                 }
                             }),
-                            if tv { epg_size } else { 12.0 },
+                            if desktop || tv { epg_size } else { 12.0 },
                             theme::muted(ui),
                         ),
                         (
-                            if tv { next_y } else { 68.0 },
+                            if desktop {
+                                57.0 * scale
+                            } else if tv {
+                                next_y
+                            } else {
+                                68.0
+                            },
                             next.map(|s| format!("Danach: {s}")).unwrap_or_default(),
-                            if tv { epg_size } else { 12.0 },
+                            if desktop || tv { epg_size } else { 12.0 },
                             theme::muted(ui),
                         ),
                     ]
@@ -389,7 +689,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     .enumerate()
                     {
                         let epg_width = ((width - 24.0) * 0.5).max(1.0);
-                        let line_x = if tv && line == 2 {
+                        let line_x = if (desktop || tv) && line == 2 {
                             x + epg_width + 24.0
                         } else {
                             x
@@ -400,7 +700,11 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             &text,
                             tokens::reg(size),
                             color,
-                            if tv && line > 0 { epg_width } else { width },
+                            if (desktop || tv) && line > 0 {
+                                epg_width
+                            } else {
+                                width
+                            },
                         );
                     }
                 }
@@ -409,6 +713,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 }
             }
         });
+    });
     if let Some(index) = selected {
         let channel = app.library.channels[index].clone();
         app.select_live_channel(play_item(&channel));

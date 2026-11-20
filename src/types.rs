@@ -66,7 +66,8 @@ impl Profile {
 pub enum Theme {
     /// Follow the operating system setting.
     System,
-    /// Warm daylight surfaces, independent of the OS appearance.
+    /// Normal steel-blue surfaces, independent of the OS appearance.
+    /// `Warm` is retained as the serialized key for existing settings.
     #[default]
     Warm,
     Dark,
@@ -77,7 +78,7 @@ impl Theme {
     pub fn label(self) -> &'static str {
         match self {
             Theme::System => "System",
-            Theme::Warm => "Lavendel",
+            Theme::Warm => "Blau",
             Theme::Dark => "Dunkel",
             Theme::Light => "Hell",
         }
@@ -91,7 +92,7 @@ impl Theme {
             Theme::System => system_dark,
             Theme::Dark => true,
             Theme::Light => false,
-            Theme::Warm => false,
+            Theme::Warm => true,
         }
     }
 }

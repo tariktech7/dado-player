@@ -38,6 +38,7 @@ for (const weight of ["Regular", "Semibold", "Bold"])
     `dist/fonts/SourceSans3-${weight}.ttf`,
   );
 await cp("../../assets/d7.svg", "dist/d7.svg");
+await cp("../../assets/d7-dark.svg", "dist/d7-dark.svg");
 await cp("../../ios/Resources/Playback.mp4", "dist/test-video.mp4");
 await cp("../../assets/icon.png", "dist/icon.png");
 await cp("../../assets/fonts/LICENSE.md", "dist/FONT-LICENSE.md");

@@ -41,6 +41,9 @@ impl App {
 }
 pub fn entry(app: &mut App, ui: &mut Ui) {
     ui.heading("Elternsperre");
+    if crate::ui::desktop::active(ui.ctx()) {
+        ui.add_space(12.0 * crate::ui::desktop::scale(ui.ctx()));
+    }
     ui.label(if app.parental.policy.enabled() {
         "Aktiv · gesperrte Inhalte benötigen die Eltern-PIN"
     } else {

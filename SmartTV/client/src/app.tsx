@@ -45,6 +45,8 @@ import "./style.css";
 import "./keyboard.css";
 import {ParentalControls} from './parental';
 import {ParentalPanel} from './parental-ui';
+import shellAppearance,{installShellAppearance} from './shell-appearance';
+installShellAppearance();
 
 const nav = [
   ["home", "⌂", "Startseite"],
@@ -909,7 +911,7 @@ function App() {
               saved.settings.theme,
               (v) => setting("theme", v as Settings["theme"]),
               [
-                ["warm", "Lavendel"],
+                ["warm", "Blau"],
                 ["dark", "Dunkel"],
                 ["light", "Hell"],
                 ["system", "System"],
@@ -1314,7 +1316,7 @@ function App() {
       {!session && !busy ? (
         <div class="welcome">
           <div class="welcome-brand">
-            <img src="d7.svg" />
+            <><img class="brand-normal" src="d7.svg" /><img class="brand-dark" src="d7-dark.svg" /></>
             <strong>Dado Player</strong>
             <span>SAMSUNG TV</span>
           </div>
@@ -1394,7 +1396,7 @@ function App() {
         </div>
       ) : busy ? (
         <div class="loading">
-          <img src="d7.svg" />
+          <><img class="brand-normal" src="d7.svg" /><img class="brand-dark" src="d7-dark.svg" /></>
           <h1>Deine Bibliothek wird geladen</h1>
           <p>Live-TV, Filme und Serien …</p>
           <button
@@ -1414,7 +1416,7 @@ function App() {
           >
             <aside class="navigation" data-focus-zone="navigation">
               <div class="brand">
-                <img src="d7.svg" />
+                <><img class="brand-normal" src="d7.svg" /><img class="brand-dark" src="d7-dark.svg" /></>
                 <div class="brand-copy"><strong>Dado Player</strong>
                   {license.claims?.kind==='trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit','').replace('Noch','noch')}</small>}
                 </div>
@@ -2039,7 +2041,7 @@ function VirtualChannels({
   const pendingFocus = useRef<number | null>(null);
   const [top, setTop] = useState(0),
     ref = useRef<HTMLDivElement>(null),
-    height = density === "compact" ? 78 : 97.5;
+    height = shellAppearance.channelRowHeight * (density === "compact" ? 1 : 1.25);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
     setTop(0);

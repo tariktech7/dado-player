@@ -19,6 +19,28 @@ async function parentalPin(page:Page,pin:string,setup=false) {
   for(const n of pin)await modal.getByRole('button',{name:n,exact:true}).click();
   await modal.getByRole('button',{name:setup?'PIN speichern / bestätigen':'Entsperren',exact:true}).click();
 }
+test('long live-preview metadata stays inside its own panel and retains a usable video area',async({page})=>{
+  await fixture(page,true,true);
+  await page.route('https://provider.invalid/**',async route=>{
+    const action=new URL(route.request().url()).searchParams.get('action');
+    if(action==='get_live_streams')return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'},json:[{stream_id:1,name:'Live Preview '+('InternationalerPremiumSenderOhneTrennzeichen'.repeat(8)),category_id:'1',stream_icon:''}]});
+    if(action==='get_short_epg'){
+      const now=Math.floor(Date.now()/1000);
+      return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'},json:{epg_listings:[{title:'Eine sehr ausführliche Programmbezeichnung '+('LangtextOhneLeerzeichen'.repeat(12)),description:('Beschreibung mit vielen Details zur Sendung. ').repeat(100),start_timestamp:now-600,stop_timestamp:now+1200},{title:'Danach '+('WeitereProgramminformationen'.repeat(12)),description:'Weitere Informationen. '.repeat(60),start_timestamp:now+1200,stop_timestamp:now+2400}]}});
+    }
+    return route.fallback();
+  });
+  await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();await page.locator('.channel').first().click();
+  await expect(page.locator('.epg-detail h3').first()).toBeVisible();
+  await page.screenshot({path:'test-results/tizen-long-preview.png'});
+  const sizes=await page.locator('.preview-panel').evaluate(panel=>{
+    const box=panel.getBoundingClientRect(),video=panel.querySelector('.preview-surface')!.getBoundingClientRect(),epg=panel.querySelector('.epg-detail')!;
+    return {panelWidth:box.width,epgWidth:epg.clientWidth,epgScrollWidth:epg.scrollWidth,videoHeight:video.height,videoWidth:video.width,headings:[...panel.querySelectorAll('h2,h3')].map(h=>({width:h.getBoundingClientRect().width,scroll:h.scrollWidth}))};
+  });
+  expect(sizes.epgScrollWidth).toBeLessThanOrEqual(sizes.epgWidth+1);
+  expect(sizes.videoHeight/sizes.videoWidth).toBeCloseTo(9/16,1);
+  for(const heading of sizes.headings)expect(heading.scroll).toBeLessThanOrEqual(heading.width+1);
+});
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);
   const make=(kind:any,id:string)=>({kind,id,name:'Test',category:'1',logo:'',url:''});
@@ -278,25 +300,27 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
     });
   }
 }
-test('warm, dark and white appearances switch immediately and persist', async({page})=>{
+test('blue, midnight and white appearances switch immediately and persist', async({page})=>{
   await fixture(page);
   await page.goto('/');
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
-  for(const [name,value,color] of [['Lavendel','warm','rgb(188, 180, 209)'],['Dunkel','dark','rgb(23, 20, 30)'],['Hell','light','rgb(247, 248, 250)']] as const){
+  for(const [name,value,color] of [['Blau','warm','rgb(25, 51, 78)'],['Dunkel','dark','rgb(16, 25, 39)'],['Hell','light','rgb(247, 248, 250)']] as const){
     await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme',value);
     await expect(page.locator('body')).toHaveCSS('background-color',color);
+    await expect(page.locator('.navigation '+(value==='dark'?'.brand-dark':'.brand-normal'))).toBeVisible();
+    await page.screenshot({path:`test-results/dado-theme-${value}-074.png`});
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme',value);
     await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
   }
   await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
-  await page.getByRole('option',{name:'Lavendel',exact:true}).click();
+  await page.getByRole('option',{name:'Blau',exact:true}).click();
   await page.getByRole('button',{name:'⌂ Startseite',exact:true}).click();
   await page.mouse.move(1880,1040);
   await page.waitForTimeout(500);
-  await page.screenshot({path:'test-results/dado-warm-071.png'});
+  await page.screenshot({path:'test-results/dado-blue-074.png'});
 });
 
 test('license settings show real MAC and Unlimited, and paid restarts never query the license server',async({page})=>{

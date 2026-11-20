@@ -828,7 +828,7 @@ fn drag_bar(ui: &mut Ui, rect: Rect, frac: f64, buffered: f64, _span: f64) -> Op
     p.rect_filled(
         Rect::from_min_size(rect.min, vec2(w as f32, rect.height())),
         Rounding::same(r),
-        theme::ACCENT,
+        theme::accent(ui),
     );
     let knob_x = rect.left() + w as f32;
     let radius = if resp.hovered() || resp.dragged() {
@@ -1134,7 +1134,7 @@ fn draw_radio_card(app: &App, ui: &Ui, rect: Rect) {
     let cy = rect.center().y - 28.0;
     let r = 52.0;
     ui.painter()
-        .circle_filled(egui::pos2(cx, cy), r, theme::ACCENT_FILL);
+        .circle_filled(egui::pos2(cx, cy), r, theme::accent_fill(ui));
     ui.painter().circle_stroke(
         egui::pos2(cx, cy),
         r,

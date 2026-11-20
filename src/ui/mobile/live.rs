@@ -325,7 +325,7 @@ pub fn epg_sheet(app: &mut App, ctx: &Context, l: &Layout) {
                     .rect_filled(play_rect, Rounding::same(10.0), pressed(ui));
             }
             ui.painter()
-                .rect_filled(play_rect, Rounding::same(10.0), theme::ACCENT_FILL);
+                .rect_filled(play_rect, Rounding::same(10.0), theme::accent_fill(ui));
             ui.painter().text(
                 play_rect.center(),
                 Align2::CENTER_CENTER,
@@ -399,7 +399,7 @@ pub fn epg_sheet(app: &mut App, ctx: &Context, l: &Layout) {
                                     ui.painter().rect_filled(
                                         r.shrink(1.0),
                                         RADIUS_SM,
-                                        theme::ACCENT_DIM,
+                                        theme::selection_surface(ui),
                                     );
                                 }
                                 let t = format!("{}–{}", fmt_hhmm(e.start), fmt_hhmm(e.end));

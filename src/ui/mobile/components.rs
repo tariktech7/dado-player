@@ -600,8 +600,11 @@ pub fn list_row(app: &mut App, ui: &mut Ui, row: Row<'_>, pad: f32) -> Response 
     // §23.6 B: the currently playing item gets an accent ring, not just a
     // tinted background. On a 10-foot screen a tint alone disappears.
     if row.playing {
-        ui.painter()
-            .rect_stroke(rect.shrink(1.0), RADIUS_SM, Stroke::new(SEL_RING, accent()));
+        ui.painter().rect_stroke(
+            rect.shrink(1.0),
+            RADIUS_SM,
+            Stroke::new(SEL_RING, accent(ui)),
+        );
     }
 
     // 22 = half of the 44 dp avatar, so the avatar's *left edge* lands exactly
@@ -800,7 +803,7 @@ pub fn poster_card(
         ui.painter().rect_stroke(
             img,
             Rounding::same(RADIUS_SM),
-            Stroke::new(SEL_RING, accent()),
+            Stroke::new(SEL_RING, accent(ui)),
         );
     }
 

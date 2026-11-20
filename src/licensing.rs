@@ -341,6 +341,9 @@ fn request(ctx: &Context, mode: RequestMode) {
 }
 pub fn settings(ui: &mut Ui) {
     ui.heading("Lizenz & Gerät");
+    if crate::ui::desktop::active(ui.ctx()) {
+        ui.add_space(12.0 * crate::ui::desktop::scale(ui.ctx()));
+    }
     license_controls(ui);
 }
 
@@ -417,17 +420,20 @@ fn license_controls(ui: &mut Ui) {
     if ui
         .add_enabled(
             enabled() && !busy,
-            egui::Button::new(if busy {
-                "Wird abgerufen …"
-            } else {
-                if permanent {
-                    "Lizenz wiederherstellen"
-                } else if started {
-                    "Freischaltung abrufen"
+            egui::Button::new(
+                egui::RichText::new(if busy {
+                    "Wird abgerufen …"
                 } else {
-                    "7 Tage kostenlos testen"
-                }
-            })
+                    if permanent {
+                        "Lizenz wiederherstellen"
+                    } else if started {
+                        "Freischaltung abrufen"
+                    } else {
+                        "7 Tage kostenlos testen"
+                    }
+                })
+                .color(egui::Color32::WHITE),
+            )
             .min_size(egui::vec2(0.0, 42.0))
             .fill(crate::theme::accent_fill(ui)),
         )

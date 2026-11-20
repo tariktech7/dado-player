@@ -1,0 +1,17 @@
+{
+  "referenceWidth": 1920,
+  "navigationExpanded": 276,
+  "navigationCollapsed": 80,
+  "categoryWidth": 320,
+  "livePreviewWidth": 480,
+  "catalogPreviewWidth": 440,
+  "navigationRowHeight": 76,
+  "navigationFont": 30,
+  "headingFont": 32,
+  "catalogHeadingFont": 22,
+  "channelRowHeight": 78,
+  "channelNameFont": 26,
+  "epgFont": 20,
+  "navigationDurationMs": 220,
+  "navigationEasing": [0.22, 1, 0.36, 1]
+}

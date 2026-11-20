@@ -68,14 +68,20 @@ fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
 pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
     ui.push_id(("library", series, app.catalog_generation()), |ui| {
         let a = ui.available_rect_before_wrap();
+        let desktop = super::desktop::active(ui.ctx());
+        let scale = super::desktop::scale(ui.ctx());
         let narrow = a.width() < 620.0;
         let gap = 10.0;
-        let cw = if narrow {
+        let cw = if desktop {
+            super::desktop::appearance().category_width * scale
+        } else if narrow {
             (a.width() * 0.31).clamp(96.0, 150.0)
         } else {
             (a.width() * 0.25).clamp(174.0, 244.0)
         };
-        let dw = if narrow {
+        let dw = if desktop {
+            super::desktop::appearance().catalog_preview_width * scale
+        } else if narrow {
             0.0
         } else {
             (a.width() * 0.32).clamp(220.0, 340.0)
@@ -95,6 +101,28 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         } else {
             Rect::from_min_max(pos2(lr.right() + gap, a.top()), a.max)
         };
+        if desktop {
+            let offset = super::desktop::offset(ui.ctx());
+            ui.painter().rect_filled(
+                lr.expand2(vec2(6.0, 16.0)),
+                0.0,
+                egui::Color32::from_black_alpha(24),
+            );
+            super::desktop::column(ui, cr, "catalog-categories", offset, |ui| {
+                categories(app, ui, series)
+            });
+            super::desktop::column(ui, lr, "catalog-posters", offset, |ui| {
+                posters(app, ui, series, false)
+            });
+            super::desktop::column(ui, dr, "catalog-details", 0.0, |ui| {
+                super::desktop::catalog_heading(
+                    ui,
+                    if series { "Serie & Folgen" } else { "Details" },
+                );
+                details(app, ui, series, false)
+            });
+            return;
+        }
         let mut c = ui.child_ui(cr, Layout::top_down(Align::Min));
         c.set_clip_rect(cr.intersect(ui.clip_rect()));
         focus::set_zone(1);
@@ -201,7 +229,13 @@ pub fn toggle_touch_search(app: &mut App, ctx: &egui::Context, series: bool) {
 }
 fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     let tv = app.tv;
-    ui.label(RichText::new("Kategorien").strong().size(15.0));
+    let desktop = super::desktop::active(ui.ctx());
+    let scale = super::desktop::scale(ui.ctx());
+    if desktop {
+        super::desktop::catalog_heading(ui, "Kategorien");
+    } else {
+        ui.label(RichText::new("Kategorien").strong().size(15.0));
+    }
     ui.add_space(6.0);
     let cats = if series {
         &app.library.series_categories
@@ -219,7 +253,13 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
         .id_source("categories")
         .auto_shrink([false, false])
         .show_viewport(ui, |ui, viewport| {
-            let row_height = if tv { 39.0 } else { 46.0 };
+            let row_height = if desktop {
+                58.0 * scale
+            } else if tv {
+                39.0
+            } else {
+                46.0
+            };
             let stride = row_height + ui.spacing().item_spacing.y;
             ui.set_height((stride * count as f32 - ui.spacing().item_spacing.y).max(0.0));
             // Keep neighbours mounted on BOTH sides for remote navigation.
@@ -260,7 +300,13 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                     }
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
-                        tokens::reg(if tv { 12.0 } else { 13.0 }),
+                        tokens::reg(if desktop {
+                            21.0 * scale
+                        } else if tv {
+                            12.0
+                        } else {
+                            13.0
+                        }),
                         ui.visuals().text_color(),
                         (rect.width() - 16.0).max(1.0),
                     );
@@ -364,20 +410,32 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
 fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     let tv = app.tv;
     if !touch {
-        ui.label(
-            RichText::new(if series { "Serien" } else { "Filme" })
-                .strong()
-                .size(18.0),
-        );
-        let mut reveal = false;
-        components::field(
-            ui,
-            "",
-            &mut app.catalog_queries[usize::from(series)],
-            "Titel suchen",
-            components::Kb::Text,
-            &mut reveal,
-        );
+        if super::desktop::active(ui.ctx()) {
+            super::desktop::catalog_heading(ui, if series { "Serien" } else { "Filme" });
+        } else {
+            ui.label(
+                RichText::new(if series { "Serien" } else { "Filme" })
+                    .strong()
+                    .size(18.0),
+            );
+        }
+        if super::desktop::active(ui.ctx()) {
+            ui.add_sized(
+                [ui.available_width(), 56.0 * super::desktop::scale(ui.ctx())],
+                egui::TextEdit::singleline(&mut app.catalog_queries[usize::from(series)])
+                    .hint_text("Titel suchen"),
+            );
+        } else {
+            let mut reveal = false;
+            components::field(
+                ui,
+                "",
+                &mut app.catalog_queries[usize::from(series)],
+                "Titel suchen",
+                components::Kb::Text,
+                &mut reveal,
+            );
+        }
         ui.add_space(6.0);
     }
     let rows = indices(app, ui, series);

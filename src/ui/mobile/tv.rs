@@ -308,7 +308,7 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
                     vec2(4.0, inner.height() - 24.0),
                 ),
                 Rounding::same(2.0),
-                tokens::accent(),
+                tokens::accent(ui),
             );
         } else if resp.is_pointer_button_down_on() {
             ui.painter()
@@ -495,7 +495,7 @@ fn tv_card(
             Rounding::same(2.0),
             Color32::from_white_alpha(30),
         );
-        p.rect_filled(bar, Rounding::same(2.0), tokens::accent());
+        p.rect_filled(bar, Rounding::same(2.0), tokens::accent(ui));
     }
 
     let ty = rect.min.y + art_h + 14.0;
@@ -543,7 +543,7 @@ fn paint_hero(ui: &Ui, rect: Rect, metas: &[Meta], app: &App) {
     p.rect_filled(
         Rect::from_min_size(r.min, vec2(6.0, r.height())),
         Rounding::same(3.0),
-        tokens::accent(),
+        tokens::accent(ui),
     );
     let x = r.left() + 26.0;
     let max_w = (r.width() - 52.0).max(80.0);
@@ -614,7 +614,7 @@ fn paint_hero(ui: &Ui, rect: Rect, metas: &[Meta], app: &App) {
         p.rect_filled(
             Rect::from_min_size(pos2(x, progress_y), vec2(w * f.clamp(0.0, 1.0), 4.0)),
             Rounding::same(2.0),
-            tokens::accent(),
+            tokens::accent(ui),
         );
     }
 }

@@ -373,7 +373,7 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
             };
             let rounding = Rounding::same(tokens::RADIUS_SM);
             ui.painter()
-                .rect_stroke(r, rounding, Stroke::new(halo, tokens::accent()));
+                .rect_stroke(r, rounding, Stroke::new(halo, tokens::accent(ui)));
             ui.painter()
                 .rect_stroke(r, rounding, Stroke::new(line, tokens::focus_ring(ui)));
             s.focus_rect = Some(resp.rect);

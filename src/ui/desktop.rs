@@ -1,0 +1,519 @@
+//! Desktop presentation of the Samsung shell, with native playback unchanged.
+use crate::{
+    app::{App, View},
+    theme, ui,
+};
+use egui::{
+    pos2, vec2, Align, Align2, Color32, Context, FontId, Id, LayerId, Layout, Order, Rect, Sense,
+    Ui,
+};
+use serde::Deserialize;
+use std::sync::OnceLock;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Appearance {
+    pub reference_width: f32,
+    pub navigation_expanded: f32,
+    pub navigation_collapsed: f32,
+    pub category_width: f32,
+    pub live_preview_width: f32,
+    pub catalog_preview_width: f32,
+    pub navigation_row_height: f32,
+    pub navigation_font: f32,
+    pub heading_font: f32,
+    pub catalog_heading_font: f32,
+    pub channel_row_height: f32,
+    pub channel_name_font: f32,
+    pub epg_font: f32,
+    pub navigation_duration_ms: f32,
+    pub navigation_easing: [f32; 4],
+}
+pub fn appearance() -> &'static Appearance {
+    static A: OnceLock<Appearance> = OnceLock::new();
+    A.get_or_init(|| {
+        serde_json::from_str(include_str!("../../shared/shell-appearance.json"))
+            .expect("bundled shell appearance")
+    })
+}
+pub fn active(ctx: &Context) -> bool {
+    cfg!(target_os = "windows") && !ui::mobile::active(ctx)
+}
+pub fn scale(ctx: &Context) -> f32 {
+    (ctx.screen_rect().width() / appearance().reference_width).clamp(0.66, 1.25)
+}
+fn ease(x: f32) -> f32 {
+    let [x1, y1, x2, y2] = appearance().navigation_easing;
+    let curve = |t: f32, a: f32, b: f32| {
+        3.0 * (1.0 - t).powi(2) * t * a + 3.0 * (1.0 - t) * t * t * b + t.powi(3)
+    };
+    let (mut lo, mut hi) = (0.0, 1.0);
+    for _ in 0..16 {
+        let t = (lo + hi) * 0.5;
+        if curve(t, x1, x2) < x {
+            lo = t;
+        } else {
+            hi = t;
+        }
+    }
+    curve((lo + hi) * 0.5, y1, y2)
+}
+#[derive(Clone, Copy)]
+struct Motion {
+    target: f32,
+    from: f32,
+    started: f64,
+}
+impl Motion {
+    fn offset(self, now: f64) -> f32 {
+        let t = ((now - self.started) * 1000.0 / f64::from(appearance().navigation_duration_ms))
+            .clamp(0.0, 1.0) as f32;
+        if t >= 1.0 {
+            0.0
+        } else {
+            self.from * (1.0 - ease(t))
+        }
+    }
+    fn retarget(&mut self, target: f32, now: f64) {
+        if (target - self.target).abs() > 0.1 {
+            self.from = self.target + self.offset(now) - target;
+            self.target = target;
+            self.started = now;
+        }
+    }
+}
+fn motion(ctx: &Context, target: f32) -> f32 {
+    let now = ctx.input(|i| i.time);
+    let id = Id::new("desktop-shell-motion");
+    let mut m = ctx.data(|d| d.get_temp::<Motion>(id)).unwrap_or(Motion {
+        target,
+        from: 0.0,
+        started: now,
+    });
+    if reduced_motion(ctx) {
+        m = Motion {
+            target,
+            from: 0.0,
+            started: now,
+        };
+    } else {
+        m.retarget(target, now);
+    }
+    let offset = m.offset(now);
+    if offset.abs() > 0.05 {
+        ctx.request_repaint();
+    }
+    ctx.data_mut(|d| {
+        d.insert_temp(id, m);
+        d.insert_temp(Id::new("desktop-column-offset"), offset);
+    });
+    offset
+}
+pub fn reduced_motion(ctx: &Context) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let now = ctx.input(|i| i.time);
+        let id = Id::new("desktop-reduced-motion");
+        if let Some((when, value)) = ctx.data(|d| d.get_temp::<(f64, bool)>(id)) {
+            if now - when < 1.0 {
+                return value;
+            }
+        }
+        let value = crate::platform::windows::sys::reduced_motion();
+        ctx.data_mut(|d| d.insert_temp(id, (now, value)));
+        value
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = ctx;
+        false
+    }
+}
+pub fn offset(ctx: &Context) -> f32 {
+    ctx.data(|d| d.get_temp::<f32>(Id::new("desktop-column-offset")))
+        .unwrap_or(0.0)
+}
+pub fn heading(ui: &mut Ui, text: &str) -> Rect {
+    let s = scale(ui.ctx());
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 60.0 * s), Sense::hover());
+    ui::mobile::components::draw_line(
+        ui,
+        pos2(r.left(), r.center().y),
+        text,
+        ui::mobile::tokens::bold(appearance().heading_font * s),
+        ui.visuals().text_color(),
+        r.width(),
+    );
+    r
+}
+pub fn catalog_heading(ui: &mut Ui, text: &str) -> Rect {
+    let s = scale(ui.ctx());
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0 * s), Sense::hover());
+    ui::mobile::components::draw_line(
+        ui,
+        pos2(r.left(), r.center().y),
+        text,
+        ui::mobile::tokens::bold(appearance().catalog_heading_font * s),
+        ui.visuals().text_color(),
+        r.width(),
+    );
+    r
+}
+/// FLIP: calculate layout once at its destination, then translate its paint/input
+/// layer. Text is never scaled and a reversal starts at the current position.
+pub fn column<R>(
+    ui: &mut Ui,
+    rect: Rect,
+    name: &str,
+    dx: f32,
+    render: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    let layer = LayerId::new(Order::Middle, Id::new(("desktop-column", ui.id(), name)));
+    ui.ctx().set_transform_layer(
+        layer,
+        egui::emath::TSTransform::from_translation(vec2(dx, 0.0)),
+    );
+    egui::Area::new(layer.id)
+        .order(Order::Middle)
+        .fixed_pos(rect.min)
+        .constrain(false)
+        .show(ui.ctx(), |area| {
+            area.set_min_size(rect.size());
+            // The rect is already known: skip Area's invisible measurement
+            // frame so a freshly opened catalogue paints immediately.
+            let mut child = Ui::new(
+                ui.ctx().clone(),
+                layer,
+                layer.id,
+                rect,
+                rect.intersect(ui.clip_rect()),
+            );
+            render(&mut child)
+        })
+        .inner
+}
+fn style(ctx: &Context, s: f32) {
+    ctx.style_mut(|style| {
+        style.spacing.item_spacing = vec2(12.0 * s, 12.0 * s);
+        style.spacing.interact_size.y = 48.0 * s;
+        style.spacing.button_padding = vec2(16.0 * s, 9.0 * s);
+        style.spacing.scroll.bar_width = 5.0;
+        style.animation_time = appearance().navigation_duration_ms / 1000.0;
+        for (kind, size) in [
+            (egui::TextStyle::Body, 22.0),
+            (egui::TextStyle::Button, 22.0),
+            (egui::TextStyle::Small, 18.0),
+            (egui::TextStyle::Heading, 32.0),
+        ] {
+            style.text_styles.insert(
+                kind.clone(),
+                if kind == egui::TextStyle::Heading {
+                    ui::mobile::tokens::bold(size * s)
+                } else {
+                    FontId::proportional(size * s)
+                },
+            );
+        }
+    });
+}
+pub fn show(app: &mut App, ctx: &Context) {
+    if app.view == View::Player && app.current_play.is_some() {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(ctx, |ui| ui::player::show(app, ui));
+        return;
+    }
+    if app.active_profile.is_none() {
+        ui::login::show(app, ctx);
+        return;
+    }
+    let a = appearance();
+    let s = scale(ctx);
+    style(ctx, s);
+    let screen = ctx.screen_rect();
+    let expanded = a.navigation_expanded * s;
+    let collapsed = a.navigation_collapsed * s;
+    if app.nav_collapsed
+        && ctx.input(|i| {
+            i.pointer
+                .hover_pos()
+                .is_some_and(|p| p.x < screen.left() + collapsed)
+        })
+    {
+        app.nav_collapsed = false;
+    }
+    if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
+        app.nav_collapsed = false;
+    }
+    let target = if app.nav_collapsed {
+        collapsed
+    } else {
+        expanded
+    };
+    let dx = motion(ctx, target);
+    let visual = target + dx;
+    let pad = 24.0 * s;
+    egui::CentralPanel::default()
+        .frame(egui::Frame::none().fill(ctx.style().visuals.panel_fill))
+        .show(ctx, |ui| {
+            theme::ambient(ui, screen);
+            let nav = Rect::from_min_max(screen.min, pos2(screen.left() + visual, screen.bottom()));
+            ui.painter()
+                .rect_filled(nav, 0.0, Color32::from_black_alpha(24));
+            navigation(
+                app,
+                ui,
+                nav,
+                s,
+                (visual - collapsed) / (expanded - collapsed),
+            );
+            let body = Rect::from_min_max(
+                pos2(screen.left() + target + pad, screen.top() + pad),
+                pos2(screen.right() - pad, screen.bottom() - pad),
+            );
+            let view = app.view;
+            if view == View::Live {
+                ui::live::show_desktop(app, ui, body, s, dx);
+            } else {
+                column(
+                    ui,
+                    body,
+                    "content",
+                    if matches!(view, View::Movies | View::Series) {
+                        0.0
+                    } else {
+                        dx
+                    },
+                    |ui| {
+                        ui.push_id(("section", view as u64), |ui| match view {
+                            View::Home => ui::home::show(app, ui),
+                            View::Movies => ui::vod::show(app, ui),
+                            View::Series => ui::series::show(app, ui),
+                            View::Search => ui::search::show(app, ui),
+                            View::Favorites => ui::favorites::show(app, ui),
+                            View::Continue => ui::continue_watching::show(app, ui),
+                            View::Settings => ui::settings::show(app, ui),
+                            _ => {}
+                        });
+                    },
+                );
+            }
+        });
+}
+fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
+    use ui::mobile::components::{icon, Icon};
+    let mut nav = ui.child_ui_with_id_source(
+        rect,
+        Layout::top_down(Align::Min),
+        "samsung-desktop-navigation",
+    );
+    nav.set_clip_rect(rect);
+    let text = nav.visuals().text_color();
+    let muted = theme::muted(&nav);
+    let label_alpha = visibility.clamp(0.0, 1.0);
+    let mark = Rect::from_center_size(
+        pos2(rect.left() + 40.0 * s, rect.top() + 53.0 * s),
+        vec2(44.0 * s, 44.0 * s),
+    );
+    let mut mark_ui = nav.child_ui(mark, Layout::top_down(Align::Min));
+    ui::brand_mark(&mut mark_ui, 44.0 * s);
+    if label_alpha > 0.01 {
+        nav.painter().text(
+            pos2(rect.left() + 76.0 * s, rect.top() + 53.0 * s),
+            Align2::LEFT_CENTER,
+            "Dado Player",
+            ui::mobile::tokens::bold(27.0 * s),
+            text.gamma_multiply(label_alpha),
+        );
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let badge = Rect::from_min_max(
+            pos2(rect.left() + 8.0 * s, rect.top() + 82.0 * s),
+            pos2(rect.right() - 8.0 * s, rect.top() + 104.0 * s),
+        );
+        let mut b = nav.child_ui(badge, Layout::top_down(Align::Min));
+        crate::licensing::trial_badge(&mut b, app.nav_collapsed);
+    }
+    let list_rect = Rect::from_min_max(
+        pos2(rect.left() + 8.0 * s, rect.top() + 112.0 * s),
+        pos2(rect.right() - 8.0 * s, rect.bottom() - 140.0 * s),
+    );
+    let mut list = nav.child_ui(list_rect, Layout::top_down(Align::Min));
+    list.set_clip_rect(list_rect.intersect(rect));
+    egui::ScrollArea::vertical()
+        .id_source("desktop-navigation-list")
+        .auto_shrink([false, false])
+        .show(&mut list, |nav| {
+            nav.spacing_mut().item_spacing.y = 8.0 * s;
+            for (label, view, symbol) in [
+                ("Startseite", View::Home, Icon::Home),
+                ("Live TV", View::Live, Icon::Tv),
+                ("Filme", View::Movies, Icon::Film),
+                ("Serien", View::Series, Icon::Series),
+                ("Fortsetzen", View::Continue, Icon::Play),
+                ("Favoriten", View::Favorites, Icon::Star),
+                ("Suche", View::Search, Icon::Search),
+                ("Einstellungen", View::Settings, Icon::Sliders),
+            ] {
+                let (r, _) = nav.allocate_exact_size(
+                    vec2(
+                        nav.available_width(),
+                        appearance().navigation_row_height * s - 8.0 * s,
+                    ),
+                    Sense::hover(),
+                );
+                let response = nav.interact(r, nav.id().with(view as u64), Sense::click());
+                let selected = app.view == view;
+                let color = if selected { theme::accent(nav) } else { text };
+                let hover = nav.ctx().animate_bool_with_time(
+                    response.id.with("hover"),
+                    selected || response.hovered(),
+                    if reduced_motion(nav.ctx()) { 0.0 } else { 0.12 },
+                );
+                if hover > 0.0 {
+                    nav.painter().rect_filled(
+                        r,
+                        16.0 * s,
+                        (if selected {
+                            theme::selection_surface(nav)
+                        } else {
+                            theme::card_hover(nav)
+                        })
+                        .gamma_multiply(hover),
+                    );
+                }
+                icon(
+                    nav,
+                    Rect::from_center_size(
+                        pos2(rect.left() + 40.0 * s, r.center().y),
+                        vec2(30.0 * s, 30.0 * s),
+                    ),
+                    symbol,
+                    color,
+                );
+                if label_alpha > 0.01 {
+                    nav.painter().text(
+                        pos2(rect.left() + 70.0 * s, r.center().y),
+                        Align2::LEFT_CENTER,
+                        label,
+                        FontId::proportional(appearance().navigation_font * s),
+                        color.gamma_multiply(label_alpha),
+                    );
+                }
+                if response.on_hover_text(label).clicked() {
+                    app.view = view;
+                    app.nav_collapsed = false;
+                }
+            }
+        });
+    if label_alpha > 0.01 {
+        let name = app
+            .active_profile
+            .as_ref()
+            .map(|p| p.name.as_str())
+            .unwrap_or("");
+        let footer = Rect::from_min_max(
+            pos2(rect.left() + 20.0 * s, rect.bottom() - 130.0 * s),
+            pos2(rect.right() - 12.0 * s, rect.bottom() - 12.0 * s),
+        );
+        let mut footer_ui = nav.child_ui(footer, Layout::top_down(Align::Min));
+        footer_ui.label(
+            egui::RichText::new(name)
+                .color(muted.gamma_multiply(label_alpha))
+                .size(18.0 * s),
+        );
+        footer_ui.label(
+            egui::RichText::new(format!("Windows {}", crate::release_info::VERSION))
+                .color(muted.gamma_multiply(label_alpha))
+                .size(16.0 * s),
+        );
+        footer_ui.horizontal(|ui| {
+            if ui.small_button("Abmelden").clicked() {
+                app.logout();
+            }
+            if ui
+                .small_button("⌕")
+                .on_hover_text("Schnellsuche · Strg+K")
+                .clicked()
+            {
+                app.palette_open = true;
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn large_live_catalogue_keeps_layout_work_bounded_while_scrolling() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut app = App::new(rt);
+        app.library = crate::demo::library();
+        let template = app.library.channels[0].clone();
+        app.library.channels = (0..20_000)
+            .map(|i| {
+                let mut c = template.clone();
+                c.id = i;
+                c.name = format!("Live Probe {i}");
+                c.logo.clear();
+                c
+            })
+            .collect();
+        app.active_profile = Some(crate::types::Profile::new(
+            "Fixture",
+            crate::types::ProfileKind::M3u,
+        ));
+        app.view = View::Live;
+        app.live_cat = "all".into();
+        for (width, height) in [(1024.0, 640.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+            let ctx = Context::default();
+            theme::apply(&ctx, false);
+            theme::apply_warm(&ctx);
+            for frame in 0..8 {
+                super::super::live::take_row_count();
+                let out = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            vec2(width, height),
+                        )),
+                        time: Some(frame as f64 / 120.0),
+                        events: if frame == 0 {
+                            vec![]
+                        } else {
+                            vec![
+                                egui::Event::PointerMoved(pos2(width * 0.5, height * 0.5)),
+                                egui::Event::Scroll(vec2(0.0, -240.0)),
+                            ]
+                        },
+                        ..Default::default()
+                    },
+                    |ctx| show(&mut app, ctx),
+                );
+                let count = super::super::live::take_row_count();
+                assert!(count > 0 && count < 100, "{count} rows laid out from 20000");
+                assert!(!out.shapes.is_empty());
+            }
+        }
+    }
+    #[test]
+    fn reversing_navigation_keeps_the_current_visual_position_and_settles() {
+        let mut motion = Motion {
+            target: 276.0,
+            from: 0.0,
+            started: 0.0,
+        };
+        motion.retarget(80.0, 1.0);
+        assert!((motion.target + motion.offset(1.0) - 276.0).abs() < 0.1);
+        let before = motion.target + motion.offset(1.06);
+        motion.retarget(276.0, 1.06);
+        assert!((motion.target + motion.offset(1.06) - before).abs() < 0.1);
+        assert_eq!(motion.offset(1.4), 0.0);
+    }
+}

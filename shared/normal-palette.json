@@ -1,0 +1,14 @@
+{
+  "background": "#19334e",
+  "panel": "#224462",
+  "card": "#2a4b69",
+  "input": "#294b6b",
+  "text": "#edf4ff",
+  "muted": "#bfd0e2",
+  "accent": "#91c9ff",
+  "accentFill": "#25689f",
+  "selection": "#365f85",
+  "line": "#486b8a",
+  "hover": "#365d7f",
+  "glow": "#274a6b"
+}
