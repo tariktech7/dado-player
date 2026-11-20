@@ -979,6 +979,33 @@ test("live remote up/down zaps and zero toggles the last two channels", async ({
   await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
 });
 
+test("live left and right seek in the DVR window without changing channels", async ({ page }) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  await page.locator(".channel").first().click();
+  await page.locator(".channel").first().click();
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  const calls = (action: string) => page.evaluate(action =>
+    (window as any).__avLog.filter((entry: any[]) => entry[0] === action), action);
+  await expect.poll(async () => (await calls("play")).length).toBeGreaterThan(0);
+  const opens = (await calls("open")).length;
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator(".fullscreen").getByText("Dieser Live-Stream unterstützt kein Spulen.")).toBeVisible();
+  expect(await calls("seek")).toEqual([]);
+  await page.evaluate(() => {
+    (window as any).webapis.avplay.getStreamingProperty = () => "10000|30000";
+  });
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => calls("seek")).toEqual([["seek", 10000]]);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => calls("seek")).toEqual([["seek", 10000], ["seek", 20000]]);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => calls("seek")).toEqual([["seek", 10000], ["seek", 20000], ["seek", 10000]]);
+  expect(await calls("open")).toHaveLength(opens);
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+});
+
 test("all home rails scroll horizontally with remote focus and both menus split by kind", async ({
   page,
 }) => {

@@ -109,15 +109,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     }
 
     let top_h = if show_ui { l.appbar_h } else { 0.0 };
-    let bot_h = if show_ui {
-        if l.compact_height() {
-            132.0 + l.bottom_inset
-        } else {
-            168.0 + l.bottom_inset
-        }
-    } else {
-        0.0
-    };
+    let bot_h = if show_ui { 106.0 + l.bottom_inset } else { 0.0 };
     let video = Rect::from_min_max(
         pos2(full.left(), full.top() + top_h),
         pos2(full.right(), full.bottom() - bot_h),
@@ -261,12 +253,13 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         .unwrap_or_default();
 
     // ---- top bar ----
-    let top = Rect::from_min_size(full.min, vec2(full.width(), l.appbar_h + l.top_inset));
-    scrim(ui, top, true);
-    let back = Rect::from_center_size(
-        pos2(top.left() + 8.0 + 24.0, top.center().y + l.top_inset * 0.5),
-        vec2(TOUCH, TOUCH),
+    let inset = l.side + 8.0;
+    let top = Rect::from_min_max(
+        full.min + vec2(inset, l.top_inset + 4.0),
+        pos2(full.right() - inset, full.top() + l.top_inset + l.appbar_h),
     );
+    player_glass(ui, top, 16.0);
+    let back = Rect::from_center_size(pos2(top.left() + 28.0, top.center().y), vec2(TOUCH, TOUCH));
     let back_resp = ui.interact(back, ui.id().with("p-back"), Sense::click());
     components::icon(
         ui,
@@ -276,37 +269,30 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     );
     // Register Back first (top-left) so it is focus index 0 on a fresh player.
     let back_hit = focus::clicked(ui, &back_resp);
-    let tw = (full.width() - 140.0).max(80.0);
+    let tw = (top.right() - back.right() - if is_live { 66.0 } else { 16.0 }).max(1.0);
     let g = components::fit(ui, &title, bold(FS_HEAD), Color32::WHITE, tw);
     ui.painter().galley(
-        pos2(
-            back.right() + 6.0,
-            top.center().y + l.top_inset * 0.5 - g.size().y * 0.5,
-        ),
+        pos2(back.right() + 6.0, top.center().y - g.size().y * 0.5),
         g,
         Color32::WHITE,
     );
     if is_live {
         let b = Rect::from_min_size(
-            pos2(
-                full.right() - 66.0,
-                top.center().y + l.top_inset * 0.5 - 10.0,
-            ),
+            pos2(top.right() - 60.0, top.center().y - 10.0),
             vec2(50.0, 20.0),
         );
         components::live_badge(ui, b);
     }
 
     // ---- bottom bar ----
-    let bot = Rect::from_min_size(
-        pos2(full.left(), full.bottom() - bot_h),
-        vec2(full.width(), bot_h),
+    let bottom_inset = l.bottom_inset + 6.0;
+    let panel_width = (full.width() - 2.0 * inset).min(660.0);
+    let bot = Rect::from_center_size(
+        pos2(full.center().x, full.bottom() - bottom_inset - 50.0),
+        vec2(panel_width, 100.0),
     );
-    let controls = Rect::from_min_max(
-        bot.min + vec2(8.0, 4.0),
-        bot.max - vec2(8.0, l.bottom_inset + 4.0),
-    );
-    crate::theme::glass(ui, controls, 22.0);
+    player_glass(ui, bot, 18.0);
+    let pad = 14.0;
 
     let mut seek_to: Option<f64> = None;
     let mut seek_rel: f64 = 0.0;
@@ -317,16 +303,16 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
 
     // progress
     let bar = Rect::from_min_max(
-        pos2(bot.left() + l.pad, bot.top() + 18.0),
-        pos2(bot.right() - l.pad, bot.top() + 24.0),
+        pos2(bot.left() + pad, bot.top() + 18.0),
+        pos2(bot.right() - pad, bot.top() + 24.0),
     );
     if is_live {
-        let b = Rect::from_min_size(pos2(bot.left() + l.pad, bot.top() + 14.0), vec2(54.0, 20.0));
+        let b = Rect::from_min_size(pos2(bot.left() + pad, bot.top() + 14.0), vec2(54.0, 20.0));
         components::live_badge(ui, b);
         let txt = format!("Puffer {:.0}s", cache);
         let g = components::fit(ui, &txt, reg(FS_CAP), Color32::from_white_alpha(170), 120.0);
         ui.painter().galley(
-            pos2(bot.right() - l.pad - g.size().x, bot.top() + 14.0),
+            pos2(bot.right() - pad - g.size().x, bot.top() + 14.0),
             g,
             Color32::from_white_alpha(170),
         );
@@ -376,14 +362,10 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     }
 
     // transport
-    let cy = if is_live {
-        bot.top() + 70.0
-    } else {
-        bot.bottom() - l.bottom_inset - 44.0
-    };
+    let cy = bot.bottom() - 28.0;
     let cx = full.center().x;
 
-    let play_size = 64.0;
+    let play_size = TOUCH;
     let play_rect = Rect::from_center_size(pos2(cx, cy), vec2(play_size, play_size));
     let pr = ui.interact(play_rect, ui.id().with("p-play"), Sense::click());
     ui.painter()
@@ -398,7 +380,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         toggle = true;
     }
 
-    let side_x = 78.0;
+    let side_x = (bot.width() * 0.18).clamp(48.0, 56.0);
     let left = Rect::from_center_size(pos2(cx - side_x, cy), vec2(TOUCH, TOUCH));
     let right = Rect::from_center_size(pos2(cx + side_x, cy), vec2(TOUCH, TOUCH));
     let lr = ui.interact(left, ui.id().with("p-left"), Sense::click());
@@ -419,19 +401,19 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         if is_live {
             step = -1;
         } else {
-            seek_rel = -10.0;
+            seek_rel = -crate::release_info::SEEK_STEP_SECONDS;
         }
     }
     if focus::clicked(ui, &rr) {
         if is_live {
             step = 1;
         } else {
-            seek_rel = 10.0;
+            seek_rel = crate::release_info::SEEK_STEP_SECONDS;
         }
     }
 
     // volume + fullscreen
-    let vol_rect = Rect::from_center_size(pos2(bot.left() + l.pad + 24.0, cy), vec2(TOUCH, TOUCH));
+    let vol_rect = Rect::from_center_size(pos2(bot.left() + pad + 24.0, cy), vec2(TOUCH, TOUCH));
     let vr = ui.interact(vol_rect, ui.id().with("p-vol"), Sense::click());
     components::icon(
         ui,
@@ -447,7 +429,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         new_vol = Some(if app.volume > 0 { 0 } else { 100 });
     }
 
-    let fs_rect = Rect::from_center_size(pos2(bot.right() - l.pad - 24.0, cy), vec2(TOUCH, TOUCH));
+    let fs_rect = Rect::from_center_size(pos2(bot.right() - pad - 24.0, cy), vec2(TOUCH, TOUCH));
     let fr = ui.interact(fs_rect, ui.id().with("p-fs"), Sense::click());
     components::icon(
         ui,
@@ -519,16 +501,15 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
         let btns_h = if has_tracks { TOUCH } else { 0.0 };
         let gap: f32 = if has_tracks { 10.0 } else { 0.0 };
         let panel_h = info_h + gap + btns_h;
-        let panel_w = (full.width() - 2.0 * pad).clamp(1.0, 260.0);
+        let panel_w = (full.width() - 2.0 * (pad + l.side)).clamp(1.0, 260.0);
         let panel = Rect::from_min_size(
-            pos2(full.right() - pad - panel_w, video.bottom() - pad - panel_h),
+            pos2(
+                full.right() - l.side - pad - panel_w,
+                (video.bottom() - pad - panel_h).max(top.bottom() + 6.0),
+            ),
             vec2(panel_w, panel_h),
         );
-        ui.painter().rect_filled(
-            panel,
-            Rounding::same(RADIUS_SM),
-            Color32::from_black_alpha(150),
-        );
+        player_glass(ui, panel, RADIUS_SM);
 
         // Line 1: resolution + fps
         let mut res = String::new();
@@ -864,59 +845,12 @@ fn scrub(ui: &mut Ui, bar: Rect, frac: f32) -> Option<f32> {
     }
 }
 
-/// On Android the render API paints the picture into the framebuffer, so the
-/// chrome belongs on a translucent gradient scrim over it. On desktop video is
-/// a native child window above egui — any scrim drawn here would be hidden
-/// behind it — so opaque bars outside the video rect are the correct choice.
-const HAS_VIDEO: bool = cfg!(any(target_os = "android", target_os = "ios"));
-
-fn scrim(ui: &Ui, rect: Rect, top: bool) {
-    if !HAS_VIDEO {
-        ui.painter()
-            .rect_filled(rect, 0.0, Color32::from_rgb(0x0D, 0x10, 0x15));
-        let y = if top {
-            rect.bottom() - 0.5
-        } else {
-            rect.top() + 0.5
-        };
-        ui.painter().hline(
-            rect.left()..=rect.right(),
-            y,
-            Stroke::new(1.0_f32, Color32::from_rgb(0x26, 0x2E, 0x3A)),
-        );
-        return;
-    }
-    gradient(ui, rect, top);
-}
-
-fn gradient(ui: &Ui, rect: Rect, top: bool) {
-    // Cheap two-step scrim: solid at the edge, transparent towards the video.
-    let (a, b) = if top {
-        (Color32::from_black_alpha(170), Color32::TRANSPARENT)
-    } else {
-        (Color32::TRANSPARENT, Color32::from_black_alpha(190))
-    };
-    let steps = 6;
-    for i in 0..steps {
-        let t0 = i as f32 / steps as f32;
-        let t1 = (i + 1) as f32 / steps as f32;
-        let c = mix(a, b, (t0 + t1) * 0.5);
-        let y0 = rect.top() + rect.height() * t0;
-        let y1 = rect.top() + rect.height() * t1;
-        ui.painter().rect_filled(
-            Rect::from_min_max(pos2(rect.left(), y0), pos2(rect.right(), y1 + 0.5)),
-            0.0,
-            c,
-        );
-    }
-}
-
-fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    Color32::from_rgba_unmultiplied(
-        f(a.r(), b.r()),
-        f(a.g(), b.g()),
-        f(a.b(), b.b()),
-        f(a.a(), b.a()),
-    )
+/// The dark glass keeps white controls readable even over a white frame.
+fn player_glass(ui: &Ui, rect: Rect, radius: f32) {
+    ui.painter().rect(
+        rect,
+        Rounding::same(radius),
+        Color32::from_rgba_unmultiplied(12, 24, 43, 218),
+        Stroke::new(1.0, Color32::from_rgba_unmultiplied(156, 194, 232, 125)),
+    );
 }

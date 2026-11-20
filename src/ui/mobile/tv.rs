@@ -102,20 +102,29 @@ struct Geom {
     content: Rect,
 }
 
-fn geom(ctx: &Context, collapsed: bool) -> Geom {
+fn geom(ctx: &Context, l: &Layout, collapsed: bool, handheld: bool) -> Geom {
     let r = ctx.screen_rect();
-    let ox = (r.width() * 0.05).max(OVERSCAN_MIN);
-    let oy = (r.height() * 0.05).max(OVERSCAN_MIN);
+    let (ox, top_inset, bottom_inset) = if handheld {
+        (
+            l.side + 10.0,
+            l.top_inset + 6.0,
+            l.bottom_inset.max(l.ime) + 6.0,
+        )
+    } else {
+        let oy = (r.height() * 0.05).max(OVERSCAN_MIN);
+        ((r.width() * 0.05).max(OVERSCAN_MIN), oy, oy)
+    };
     let rail_w = if collapsed {
         48.0
     } else {
-        ((r.width() - 2.0 * ox) * 0.16).clamp(128.0, 176.0)
+        let min = if handheld { 104.0 } else { 128.0 };
+        ((r.width() - 2.0 * ox) * 0.16).clamp(min, 176.0)
     };
     let content_x = ox + rail_w + COLUMN_GAP;
     let content_right = (r.max.x - ox).max(content_x + 120.0);
-    let brand = Rect::from_min_size(pos2(ox, oy), vec2(content_right - ox, BRAND_H));
-    let top = (brand.bottom() + 8.0).min(r.max.y - oy - 60.0);
-    let bottom = (r.max.y - oy).max(top + 60.0);
+    let brand = Rect::from_min_size(pos2(ox, top_inset), vec2(content_right - ox, BRAND_H));
+    let bottom = (r.max.y - bottom_inset).max(brand.bottom() + 8.0);
+    let top = (brand.bottom() + 8.0).min(bottom);
     Geom {
         brand,
         headers: Rect::from_min_max(pos2(ox, top), pos2(ox + rail_w, bottom)),
@@ -180,7 +189,8 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
     if let Some(zone) = focus::current_zone() {
         app.nav_collapsed = zone != 0;
     }
-    let g = geom(ctx, app.nav_collapsed);
+    let handheld = super::handheld_landscape(ctx);
+    let g = geom(ctx, l, app.nav_collapsed, handheld);
     let bg = ctx.style().visuals.panel_fill;
 
     egui::CentralPanel::default()
@@ -195,7 +205,15 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
             let mut metas: Vec<Meta> = Vec::new();
             let mut hui = ui.child_ui(g.headers, egui::Layout::top_down(Align::LEFT));
             focus::set_zone(0);
-            draw_headers(app, &mut hui, &mut metas);
+            if handheld {
+                hui.set_clip_rect(g.headers);
+                egui::ScrollArea::vertical()
+                    .id_source("landscape-navigation")
+                    .max_height(g.headers.height())
+                    .show(&mut hui, |ui| draw_headers(app, ui, &mut metas));
+            } else {
+                draw_headers(app, &mut hui, &mut metas);
+            }
             focus::set_zone(1);
 
             if app.tv_nav == 0 {
@@ -204,6 +222,7 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
                 return;
             }
             let mut cui = ui.child_ui(g.content, egui::Layout::top_down(Align::LEFT));
+            cui.set_clip_rect(g.content.intersect(ui.clip_rect()));
             if app.view == crate::app::View::Live {
                 app.close_preview();
                 app.view = crate::app::View::Home;
@@ -238,6 +257,7 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
                 crate::ui::settings::show(app, &mut cui);
                 return;
             }
+            app.view = crate::app::View::Search;
             let hero_rect = draw_content(app, &mut cui, &g, &mut metas);
 
             // Painted last: only now are all `metas` (in registration order)

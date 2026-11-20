@@ -253,9 +253,9 @@ pub fn paint_tv_columns(ui: &Ui, content: Rect, nav: Rect, preview: bool) {
 
 fn tv_columns(content: Rect, preview: bool) -> (f32, f32, f32) {
     let gap = 10.0;
-    let category_w = (content.width() * 0.25).clamp(170.0, 230.0);
+    let category_w = (content.width() * 0.25).min(230.0);
     let preview_w = if preview {
-        (content.width() * 0.37).clamp(220.0, 420.0)
+        (content.width() * 0.37).min(420.0)
     } else {
         0.0
     };
@@ -325,6 +325,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         ),
         Layout::top_down(Align::Min),
     );
+    category_ui.set_clip_rect(category_ui.max_rect().intersect(ui.clip_rect()));
     category_ui.spacing_mut().item_spacing.y = 4.0;
     focus::set_zone(1);
     categories(app, &mut category_ui, false);
@@ -335,6 +336,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         ),
         Layout::top_down(Align::Min),
     );
+    channel_ui.set_clip_rect(channel_ui.max_rect().intersect(ui.clip_rect()));
     channel_ui.spacing_mut().item_spacing.y = 3.0;
     focus::set_zone(2);
     channels(app, &mut channel_ui, false);
@@ -344,6 +346,7 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
             content.max,
         );
         let mut preview_ui = ui.child_ui(preview_rect, Layout::top_down(Align::Min));
+        preview_ui.set_clip_rect(preview_rect.intersect(ui.clip_rect()));
         focus::set_zone(3);
         preview_panel(app, &mut preview_ui);
     }
@@ -594,6 +597,13 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             (target as f32 * stride - ui.available_height() * 0.5).max(0.0),
         );
     }
+    let previous_scroll_style = ui.spacing().scroll;
+    if desktop || tv {
+        // Reserve space for the thumb before measuring and painting channel rows.
+        let style = &mut ui.spacing_mut().scroll;
+        style.floating = false;
+        style.bar_inner_margin = 8.0 * scale;
+    }
     scroll.show_viewport(ui, |ui, viewport| {
         if indices.is_empty() {
             ui.label("Keine passenden Sender");
@@ -737,6 +747,9 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             }
         });
     });
+    if desktop {
+        ui.spacing_mut().scroll = previous_scroll_style;
+    }
     if let Some(index) = selected {
         let channel = app.library.channels[index].clone();
         app.select_live_channel(play_item(&channel));

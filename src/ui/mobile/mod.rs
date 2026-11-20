@@ -197,10 +197,25 @@ pub fn active(ctx: &Context) -> bool {
     s.x < TOUCH_UI_MAX_W || s.y < TOUCH_UI_MAX_H
 }
 
+pub(crate) fn use_tv_layout(
+    mode: crate::types::TvMode,
+    tv_device: bool,
+    handheld_landscape: bool,
+) -> bool {
+    mode.resolve(tv_device || handheld_landscape)
+}
+
+pub(crate) fn handheld_landscape(ctx: &Context) -> bool {
+    let size = ctx.screen_rect().size();
+    cfg!(any(target_os = "ios", target_os = "android"))
+        && !crate::platform::tv_device()
+        && size.x > size.y
+}
+
 /// Entry point, called from `App::draw`.
 pub fn show(app: &mut App, ctx: &Context) {
     let mut l = Layout::new(ctx);
-    if app.tv {
+    if app.tv && !handheld_landscape(ctx) {
         // 5 % overscan on every edge (MOBILE-BAUPLAN §23.4 P1). The TV shell
         // computes its own geometry, but login and the player still use `l`,
         // and on a TV they must not put a control in the overscan band either.

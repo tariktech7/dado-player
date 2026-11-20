@@ -484,23 +484,55 @@ export class Player {
     }
   }
   seek(delta: number): void {
-    if(!Number.isFinite(delta) || !this.current || this.current.kind==='live')return;
+    if(!Number.isFinite(delta) || !this.current)return;
     if(this.status.state==='loading'){this.pendingSeekDelta+=delta;return;}
     if(!['playing','paused'].includes(this.status.state))return;
     this.seekTo((this.seekTarget ?? this.status.time) + delta);
   }
   seekTo(seconds: number): void {
-    if (!Number.isFinite(seconds) || !this.current || this.current.kind === "live") return;
+    if (!Number.isFinite(seconds) || !this.current) return;
     if (!["playing", "paused"].includes(this.status.state)) return;
-    this.seekTarget = Math.max(0, Math.min(seconds, this.status.duration > 0 ? Math.max(0, this.status.duration - 1) : Infinity));
+    this.seekTarget = this.current.kind === "live" ? seconds
+      : Math.max(0, Math.min(seconds, this.status.duration > 0 ? Math.max(0, this.status.duration - 1) : Infinity));
     if(!this.seekBusy)this.flushSeek();
+  }
+  private liveSeekRange(): [number, number] | null {
+    if (this.av) {
+      try {
+        const value = this.av.getStreamingProperty("GET_LIVE_DURATION") as string;
+        const [start, end] = value.split("|").map(ms => Number(ms) / 1000);
+        return Number.isFinite(start) && Number.isFinite(end) && end > start ? [start, end] : null;
+      } catch {
+        return null;
+      }
+    }
+    const ranges = this.video?.seekable;
+    if (!ranges?.length) return null;
+    for (let index = 0; index < ranges.length; index++) {
+      const start = ranges.start(index), end = ranges.end(index);
+      if (this.status.time >= start && this.status.time <= end) return [start, end];
+    }
+    const last = ranges.length - 1;
+    return [ranges.start(last), ranges.end(last)];
   }
   private flushSeek(): void {
     if(this.seekTarget===null || this.seekBusy)return;
-    const target=this.seekTarget, gen=this.generation, av=this.av;
+    const requested = this.seekTarget;
+    const live = this.current?.kind === "live";
+    const range = live ? this.liveSeekRange() : null;
+    if (live && !range) {
+      this.seekTarget = null;
+      this.status.notice = "Dieser Live-Stream unterstützt kein Spulen.";
+      this.emit();
+      return;
+    }
+    const target = range ? Math.max(range[0], Math.min(requested, range[1])) : requested;
+    const gen = this.generation, av = this.av;
     this.seekBusy=true;
+    let finished = false;
     const finish=(ok:boolean)=>{
-      if(gen!==this.generation)return;
+      if(finished || gen!==this.generation)return;
+      finished = true;
       if(this.seekTimer)clearTimeout(this.seekTimer);
       this.seekTimer=null;this.seekBusy=false;
       if(!ok){
@@ -508,14 +540,16 @@ export class Player {
         this.status.notice='Diese Position ist nicht erreichbar. Die Wiedergabe läuft weiter.';
         this.emit();return;
       }
+      this.status.notice = '';
       this.tick();
       this.position();
       // New presses update a single absolute destination while a seek is busy.
-      if(this.seekTarget!==target){this.flushSeek();return;}
-      this.seekTarget=null;this.status.notice='';
+      if(this.seekTarget!==requested){this.flushSeek();return;}
+      this.seekTarget=null;
     };
     this.seekTimer=setTimeout(()=>{
-      if(gen===this.generation)this.fail('Der Player reagiert nach dem Spulen nicht. Bitte erneut starten.');
+      if (live) finish(false);
+      else if(gen===this.generation)this.fail('Der Player reagiert nach dem Spulen nicht. Bitte erneut starten.');
     },this.settings.timeoutSeconds*1000);
     try {
       if(av) av.seekTo(Math.floor(target*1000),()=>finish(true),()=>finish(false));

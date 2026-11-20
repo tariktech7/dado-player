@@ -688,11 +688,15 @@ function App() {
       }
       return;
     }
-    if (livePlayer && !tracksRef.current && !playerOptionsRef.current && !document.querySelector(".modal")
-      && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    if (livePlayer && !tracksRef.current && !playerOptionsRef.current && !parental.open
+      && !document.querySelector(".modal") && e.key.startsWith("Arrow")) {
       e.preventDefault();
       showControls();
-      stepLive(e.key === "ArrowUp" ? 1 : -1);
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        stepLive(e.key === "ArrowUp" ? 1 : -1);
+      } else {
+        safe(() => playerRef.current?.seek(e.key === "ArrowLeft" ? -policy.seekStepSeconds : policy.seekStepSeconds));
+      }
       return;
     }
     if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !playerOptionsRef.current && !document.querySelector(".modal")) {

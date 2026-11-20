@@ -70,10 +70,13 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let a = ui.available_rect_before_wrap();
         let desktop = super::desktop::active(ui.ctx());
         let scale = super::desktop::scale(ui.ctx());
-        let narrow = a.width() < 620.0;
+        let landscape = super::mobile::handheld_landscape(ui.ctx());
+        let narrow = a.width() < 620.0 && !landscape;
         let gap = 10.0;
         let cw = if desktop {
             super::desktop::appearance().category_width * scale
+        } else if landscape {
+            (a.width() * 0.25).min(212.0)
         } else if narrow {
             (a.width() * 0.31).clamp(96.0, 150.0)
         } else {
@@ -81,6 +84,8 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         };
         let dw = if desktop {
             super::desktop::appearance().catalog_preview_width * scale
+        } else if landscape {
+            (a.width() * 0.39).min(340.0)
         } else if narrow {
             0.0
         } else {

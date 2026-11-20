@@ -732,8 +732,22 @@ impl App {
         // Resolve the presentation mode every frame: the user can switch it in
         // settings and expects the screen to change immediately, not after a
         // restart. `IPTV_TV` is a desktop-only QA hook (see below).
-        self.tv = self.settings.tv_mode.resolve(crate::platform::tv_device())
-            || std::env::var("IPTV_TV").is_ok();
+        let tv = ui::mobile::use_tv_layout(
+            self.settings.tv_mode,
+            crate::platform::tv_device(),
+            ui::mobile::handheld_landscape(ctx),
+        ) || std::env::var("IPTV_TV").is_ok();
+        if tv && !self.tv {
+            let section = if self.view == View::Player {
+                self.previous_view
+            } else {
+                self.view
+            };
+            self.tv_nav = Self::tv_section(section);
+            self.tv_stack.clear();
+            self.nav_collapsed = false;
+        }
+        self.tv = tv;
 
         // Theme: "System" follows Windows, polled so a live OS switch is picked up.
         if now - self.last_theme_poll > 1.5 {
@@ -1002,6 +1016,7 @@ impl App {
                 .as_ref()
                 .is_some_and(|p| p.kind == PlayKind::Live)
             && !ctx.wants_keyboard_input()
+            && !self.parental.open
             && !self.audio_menu_open
             && !self.sub_menu_open
         {
@@ -1010,10 +1025,24 @@ impl App {
                 match key {
                     RemoteKey::Up => self.step_channel(1),
                     RemoteKey::Down => self.step_channel(-1),
+                    RemoteKey::Left | RemoteKey::Right => {
+                        let delta = if *key == RemoteKey::Left { -1.0 } else { 1.0 };
+                        if let Some(player) = &self.player {
+                            player
+                                .mpv
+                                .seek_relative(delta * crate::release_info::SEEK_STEP_SECONDS);
+                        }
+                        self.ui_activity = ctx.input(|i| i.time);
+                    }
                     _ => {}
                 }
             }
-            keys.retain(|k| !matches!(k, RemoteKey::Up | RemoteKey::Down));
+            keys.retain(|k| {
+                !matches!(
+                    k,
+                    RemoteKey::Up | RemoteKey::Down | RemoteKey::Left | RemoteKey::Right
+                )
+            });
         }
         if (self.tv || (self.view == View::Player && crate::ui::mobile::active(ctx)))
             && keys.is_empty()
@@ -1595,19 +1624,22 @@ impl App {
     /// the user on "Live TV" no matter where they were.
     pub fn navigate(&mut self, view: View) {
         if self.tv {
-            let nav = match view {
-                View::Live => 0,
-                View::Movies => 1,
-                View::Series => 2,
-                View::Continue => 3,
-                View::Favorites => 4,
-                View::Search => 5,
-                View::Settings => 6,
-                _ => 7,
-            };
-            self.tv_goto(nav);
+            self.tv_goto(Self::tv_section(view));
         }
         self.view = view;
+    }
+
+    fn tv_section(view: View) -> usize {
+        match view {
+            View::Live => 0,
+            View::Movies => 1,
+            View::Series => 2,
+            View::Continue => 3,
+            View::Favorites => 4,
+            View::Search => 5,
+            View::Settings => 6,
+            _ => 7,
+        }
     }
     pub fn tv_goto(&mut self, nav: usize) {
         if nav == self.tv_nav {
@@ -2477,7 +2509,10 @@ impl App {
                 .as_ref()
                 .map(|p| p.kind == PlayKind::Live)
                 .unwrap_or(false);
-        if in_player && is_live && !self.audio_menu_open && !self.sub_menu_open {
+        let menus_open = self.audio_menu_open || self.sub_menu_open;
+        #[cfg(windows)]
+        let menus_open = menus_open || crate::ui::player_desktop::menus_open(ctx);
+        if in_player && is_live && !menus_open {
             if up {
                 self.step_channel(1);
             }
@@ -2569,31 +2604,27 @@ impl App {
             return;
         }
 
-        if left || right {
+        if in_player
+            && (left || right)
+            && !menus_open
+            && (is_live || (!crate::ui::mobile::active(ctx) && !self.player_menu_navigation))
+        {
             let delta = if left { -1 } else { 1 };
-            if is_live {
-                self.step_channel(delta);
-            } else if !crate::ui::mobile::active(ctx)
-                && !self.player_menu_navigation
-                && !self.audio_menu_open
-                && !self.sub_menu_open
-            {
-                if let Some(pl) = &self.player {
-                    pl.mpv
-                        .seek_relative(delta as f64 * crate::release_info::SEEK_STEP_SECONDS);
-                }
-                self.ui_activity = ctx.input(|i| i.time);
-                ctx.input_mut(|i| {
-                    i.consume_key(
-                        egui::Modifiers::NONE,
-                        if left {
-                            egui::Key::ArrowLeft
-                        } else {
-                            egui::Key::ArrowRight
-                        },
-                    );
-                });
+            if let Some(pl) = &self.player {
+                pl.mpv
+                    .seek_relative(delta as f64 * crate::release_info::SEEK_STEP_SECONDS);
             }
+            self.ui_activity = ctx.input(|i| i.time);
+            ctx.input_mut(|i| {
+                i.consume_key(
+                    egui::Modifiers::NONE,
+                    if left {
+                        egui::Key::ArrowLeft
+                    } else {
+                        egui::Key::ArrowRight
+                    },
+                );
+            });
         }
     }
 
@@ -4580,6 +4611,39 @@ mod tests {
             assert_eq!(app.images.pending.len(), 9 - total);
         }
         assert_eq!(app.images.textures.len(), 9);
+    }
+
+    #[test]
+    fn live_keyboard_seek_preserves_the_channel_and_vertical_arrows_zap() {
+        let mut app = App::test_app();
+        app.load_demo();
+        app.active_profile = None;
+        let first = app.library.channels[0].id;
+        let second = app.library.channels[1].id;
+        let item = app.resolve_play(&format!("live:{first}")).unwrap();
+        app.play(item);
+        let ctx = egui::Context::default();
+        for (key, channel) in [
+            (egui::Key::ArrowLeft, first),
+            (egui::Key::ArrowRight, first),
+            (egui::Key::ArrowUp, second),
+            (egui::Key::ArrowDown, first),
+        ] {
+            let _ = ctx.run(
+                egui::RawInput {
+                    events: vec![egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                    ..Default::default()
+                },
+                |ctx| app.handle_keys(ctx),
+            );
+            assert_eq!(app.current_live_id(), Some(channel));
+        }
     }
 
     #[test]

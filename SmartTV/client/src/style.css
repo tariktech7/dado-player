@@ -1626,7 +1626,9 @@ hr {
 
 /* Keep rounded focus rings inside the rows that scroll against a clip edge. */
 .category-list { padding: 8px; }
-.channel-list, .catalog-title-list { padding: 8px; }
+.catalog-title-list { padding: 8px; }
+/* Leave a gutter for TVs that draw the scroll thumb over the list. */
+.channel-list { padding: 8px 18px 8px 8px; }
 .category-list button:focus,
 .channel-list .channel:focus,
 .catalog-title-list .catalog-poster:focus,

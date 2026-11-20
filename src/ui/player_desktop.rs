@@ -178,6 +178,14 @@ fn popup_row(
     })
 }
 
+pub(crate) fn menus_open(ctx: &Context) -> bool {
+    ctx.data(|data| {
+        ["desktop-player-aspect-menu", "desktop-player-options-menu"]
+            .iter()
+            .any(|key| data.get_temp::<bool>(Id::new(key)).unwrap_or(false))
+    })
+}
+
 pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
     let mut active = app.audio_menu_open || app.sub_menu_open;
     app.audio_menu_open = false;
