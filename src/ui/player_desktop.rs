@@ -385,7 +385,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     });
     if back {
         dismiss_menus(app, &ctx);
-        app.stop_play();
+        app.back_from_player();
         return;
     }
     layers.push(layer);

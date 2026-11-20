@@ -220,6 +220,7 @@ pub struct App {
     login_generation: u64,
     pub catalog_refreshing: bool,
     pub catalog_refresh_notice: Option<String>,
+    pub(crate) catalog_refresh_result: Option<(bool, std::time::Instant)>,
     pub error: Option<String>,
     pub info: Option<String>,
 
@@ -448,6 +449,7 @@ impl App {
             login_generation: 0,
             catalog_refreshing: false,
             catalog_refresh_notice: None,
+            catalog_refresh_result: None,
             error: None,
             info: None,
             login_kind: ProfileKind::Xtream,
@@ -1376,6 +1378,11 @@ impl App {
                     return;
                 }
                 self.catalog_refreshing = false;
+                let fully_refreshed = result
+                    .as_ref()
+                    .as_ref()
+                    .is_ok_and(|library| library.catalog_issues.is_empty());
+                self.catalog_refresh_result = Some((fully_refreshed, std::time::Instant::now()));
                 let language = self.settings.language;
                 match *result {
                     Ok(mut library) => {
@@ -1521,6 +1528,7 @@ impl App {
     pub fn start_login(&mut self, profile: Profile) {
         self.catalog_refreshing = false;
         self.catalog_refresh_notice = None;
+        self.catalog_refresh_result = None;
         if self.profiles.iter().any(|p| p.id == profile.id) {
             self.editing_profile = Some(profile.id.clone());
             self.login_kind = profile.kind;
@@ -1578,6 +1586,7 @@ impl App {
     fn invalidate_login(&mut self) {
         self.catalog_refreshing = false;
         self.catalog_refresh_notice = None;
+        self.catalog_refresh_result = None;
         self.login_generation = self.login_generation.wrapping_add(1);
         self.busy = false;
     }
@@ -2893,6 +2902,48 @@ impl App {
         }
     }
 
+    #[cfg(windows)]
+    fn queue_desktop_player_return(&mut self) {
+        if let Some(item) = &self.current_play {
+            self.desktop_return_item = Some(item.progress_key.clone());
+            if self.previous_view == View::Live {
+                self.scroll_to = item
+                    .progress_key
+                    .strip_prefix("live:")
+                    .and_then(|id| id.parse().ok());
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn back_from_player(&mut self) {
+        if self.previous_view == View::Live
+            && self
+                .current_play
+                .as_ref()
+                .is_some_and(|item| item.kind == PlayKind::Live)
+        {
+            self.queue_desktop_player_return();
+            self.desktop_overlay.hide();
+            if let Some(player) = &self.player {
+                player
+                    .mpv
+                    .set_desktop_aspect(crate::types::DesktopAspect::Fit);
+                player.surface.hide();
+            }
+            self.preview = self.current_play.take();
+            self.last_video_rect = None;
+            self.last_video_cutouts = None;
+            self.reset_track_state();
+            self.view = View::Live;
+            if self.fullscreen {
+                self.pending_fullscreen = Some(false);
+            }
+            return;
+        }
+        self.stop_play();
+    }
+
     pub fn stop_play(&mut self) {
         #[cfg(target_os = "windows")]
         self.desktop_overlay.hide();
@@ -2918,15 +2969,7 @@ impl App {
         self.save_user_data();
         self.reset_track_state();
         #[cfg(windows)]
-        if let Some(item) = &self.current_play {
-            self.desktop_return_item = Some(item.progress_key.clone());
-            if self.previous_view == View::Live {
-                self.scroll_to = item
-                    .progress_key
-                    .strip_prefix("live:")
-                    .and_then(|id| id.parse().ok());
-            }
-        }
+        self.queue_desktop_player_return();
         self.current_play = None;
         self.view = self.previous_view;
         if self.fullscreen {
@@ -3126,6 +3169,7 @@ impl App {
         };
         self.catalog_refreshing = true;
         self.catalog_refresh_notice = None;
+        self.catalog_refresh_result = None;
         let generation = self.login_generation;
         let timeout = self.settings.network_timeout_s;
         let extension = self.settings.live_format.extension().to_string();
@@ -4648,6 +4692,26 @@ mod tests {
             assert_eq!(app.images.pending.len(), 9 - total);
         }
         assert_eq!(app.images.textures.len(), 9);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn back_from_live_player_keeps_preview_and_restores_the_channel() {
+        let mut app = App::test_app();
+        app.load_demo();
+        app.view = View::Live;
+        let channel = app.library.channels[0].id;
+        let key = format!("live:{channel}");
+        app.play(app.resolve_play(&key).unwrap());
+        app.back_from_player();
+        assert!(app.view == View::Live);
+        assert!(app.current_play.is_none());
+        assert_eq!(
+            app.preview.as_ref().map(|item| item.progress_key.as_str()),
+            Some(key.as_str())
+        );
+        assert_eq!(app.desktop_return_item.as_deref(), Some(key.as_str()));
+        assert_eq!(app.scroll_to, Some(channel));
     }
 
     #[cfg(windows)]

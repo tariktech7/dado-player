@@ -1265,10 +1265,8 @@ hr {
 
 /* Catalogue v2: compact navigation, wider categories and virtual poster rows. */
 .shell {
-  --edge-left: 36px;
-  --nav-expanded: calc(var(--navigation-expanded, 276px) + 50px);
-  --nav-width: var(--nav-expanded);
-  padding-left: var(--edge-left);
+  --nav-width: var(--navigation-expanded, 326px);
+  padding-left: var(--navigation-edge, 36px);
   grid-template-columns: var(--nav-width) minmax(0, 1fr);
   /* Width changes once. navigation-motion.ts animates only transforms. */
 }
@@ -1283,8 +1281,8 @@ hr {
   column-gap: 24px;
 }
 .live-shell.with-preview {
-  padding-right: 32px;
-  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) calc(var(--live-preview-width, 640px) + 72px);
+  padding-right: var(--live-preview-edge, 32px);
+  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) var(--live-preview-width, 712px);
 }
 .navigation .nav-label {
   width: auto;
@@ -1310,13 +1308,13 @@ hr {
 }
 .navigation:before {
   right: auto;
-  left: calc(0px - var(--edge-left));
-  width: calc(var(--nav-expanded) + var(--edge-left) + 10px);
+  left: calc(0px - var(--navigation-edge, 36px));
+  width: calc(var(--navigation-expanded, 326px) + var(--navigation-edge, 36px) + 10px);
   transform-origin: left center;
   transition: transform 220ms cubic-bezier(.22,1,.36,1);
   will-change: transform;
 }
-.nav-collapsed .navigation:before { transform: scaleX(.33871); }
+.nav-collapsed .navigation:before { transform: scaleX(var(--navigation-backdrop-scale, .33871)); }
 .nav-collapsed .navigation nav button {
   justify-content: center;
   padding: 12px;
@@ -1681,7 +1679,7 @@ hr {
 .refresh-icon .success { color: #85d9a0; }
 .refresh-icon .error { color: #ff9b9b; }
 [data-refresh-status="loading"] .refresh-icon .refresh {
-  animation: refresh-spin .9s linear infinite;
+  animation: refresh-spin var(--refresh-spin-duration, 900ms) linear infinite;
 }
 [data-refresh-status="success"] .refresh-icon .refresh,
 [data-refresh-status="error"] .refresh-icon .refresh {

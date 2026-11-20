@@ -44,7 +44,9 @@ pub const ROW_H: f32 = 58.0;
 /// offers a one-tap refresh instead of the "log out and back in ten times"
 /// workaround. It also shows the in-flight state while that refresh runs.
 pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
-    let summary = if app.catalog_refreshing {
+    let summary = if desktop::active(ui.ctx()) {
+        app.library.catalog_issue_summary()
+    } else if app.catalog_refreshing {
         "Katalog wird erneut geladen…".to_string()
     } else {
         let issues = app.library.catalog_issue_summary();

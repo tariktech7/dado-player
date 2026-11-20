@@ -434,7 +434,7 @@ function App() {
   const refreshRequest = useRef<number | null>(null);
   useEffect(() => {
     if (refreshStatus !== "success" && refreshStatus !== "error") return;
-    const timer = setTimeout(() => setRefreshStatus("idle"), 2000);
+    const timer = setTimeout(() => setRefreshStatus("idle"), shellAppearance.refreshFeedbackMs);
     return () => clearTimeout(timer);
   }, [refreshStatus]);
   async function refreshCatalog() {

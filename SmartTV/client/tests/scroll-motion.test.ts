@@ -14,7 +14,7 @@ function clock(hz:number,integer=false,reduced=false) {
     scrollTo({left,top}:{left:number;top:number}){this.scrollLeft=integer?Math.round(left):left;this.scrollTop=integer?Math.round(top):top;},
   };
   return {pane:pane as unknown as HTMLElement,frames,
-    step(){now+=1000/hz;const batch=[...frames.values()];frames.clear();batch.forEach(fn=>fn(now));},
+    step(ms=1000/hz){now+=ms;const batch=[...frames.values()];frames.clear();batch.forEach(fn=>fn(now));},
   };
 }
 
@@ -37,6 +37,25 @@ test('remote repeats retarget a single running clock, including reversal',()=>{
   c.step();assert.ok(c.pane.scrollTop>before);
   moveScroll(c.pane,0,0);for(let i=0;i<120;i++)c.step();
   assert.equal(c.pane.scrollTop,0);assert.equal(c.frames.size,0);
+});
+test('home repeats accelerate continuously without a jump after a dropped frame',()=>{
+  const c=clock(60,true);
+  Object.defineProperty(c.pane,"firstElementChild",{
+    value:{classList:{contains:(name:string)=>name==="home-dashboard"}},
+  });
+  moveScroll(c.pane,0,1000);
+  c.step(100);
+  assert.ok(c.pane.scrollTop>0 && c.pane.scrollTop<=89);
+  const before=c.pane.scrollTop;
+  moveScroll(c.pane,0,1500);
+  moveScroll(c.pane,0,2000);
+  assert.equal(c.frames.size,1);
+  c.step();
+  assert.ok(c.pane.scrollTop>before && c.pane.scrollTop-before<=44);
+  moveScroll(c.pane,0,0);
+  for(let i=0;i<120;i++)c.step();
+  assert.equal(c.pane.scrollTop,0);
+  assert.equal(c.frames.size,0);
 });
 test('direct user scrolling interrupts an old remote animation',()=>{
   const c=clock(60);moveScroll(c.pane,0,2000);c.step();

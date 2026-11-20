@@ -59,10 +59,10 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
     number_jump(app, ui);
     let a = super::desktop::appearance();
     let gap = 24.0 * s;
-    let category_w = (a.category_width * s).min(body.width() * 0.29);
+    let category_w = super::desktop::category_width(body.width(), s);
     let preview_w = (a.live_preview_width * s)
-        .min(body.width() * 0.42)
-        .min(body.height() * 0.52 * 16.0 / 9.0);
+        .min((body.width() - category_w - 2.0 * gap).max(1.0) * 0.72)
+        .min(body.height() * 0.58 * 16.0 / 9.0);
     let cr = Rect::from_min_max(body.min, pos2(body.left() + category_w, body.bottom()));
     let pr = Rect::from_min_max(pos2(body.right() - preview_w, body.top()), body.max);
     let lr = Rect::from_min_max(

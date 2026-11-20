@@ -539,6 +539,12 @@ fn home_poster(app: &mut App, ui: &mut Ui, key: &str, url: &str, title: &str) ->
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     #[cfg(windows)]
     super::desktop::remember_favorite_target(&resp, key);
+    if super::desktop::active(ui.ctx()) && resp.gained_focus() {
+        resp.scroll_to_me(None);
+    }
+    if !ui.is_rect_visible(rect) {
+        return resp;
+    }
     ui.painter().rect_filled(rect, 7.0, theme::WIDGET_DARK);
     if !url.is_empty() {
         let image_key = format!("home-poster:{}", key);
@@ -571,7 +577,7 @@ fn home_poster(app: &mut App, ui: &mut Ui, key: &str, url: &str, title: &str) ->
     } else {
         poster_art(ui, rect, title, key);
     }
-    if resp.hovered() {
+    if resp.hovered() || resp.has_focus() {
         ui.painter().rect_stroke(
             rect.shrink(1.0),
             7.0,
@@ -651,25 +657,30 @@ fn live_rail(
                 for (key, name, logo, url) in items {
                     let (rect, resp) =
                         ui.allocate_exact_size(Vec2::new(148.0, 58.0), Sense::click());
-                    theme::glass(ui, rect, 12.0);
-                    channel_logo(
-                        app,
-                        ui,
-                        key,
-                        logo,
-                        egui::Rect::from_min_size(
-                            rect.min + Vec2::new(8.0, 9.0),
-                            Vec2::splat(40.0),
-                        ),
-                        name,
-                    );
-                    let text_rect = egui::Rect::from_min_max(
-                        rect.min + Vec2::new(56.0, 12.0),
-                        rect.max - Vec2::new(8.0, 8.0),
-                    );
-                    let mut child = ui.child_ui(text_rect, Layout::top_down(Align::Min));
-                    ui::one_line(&mut child, name, 12.0, true);
-                    child.label(RichText::new("Live-TV").size(10.0).color(theme::muted(ui)));
+                    if super::desktop::active(ui.ctx()) && resp.gained_focus() {
+                        resp.scroll_to_me(None);
+                    }
+                    if ui.is_rect_visible(rect) {
+                        theme::glass(ui, rect, 12.0);
+                        channel_logo(
+                            app,
+                            ui,
+                            key,
+                            logo,
+                            egui::Rect::from_min_size(
+                                rect.min + Vec2::new(8.0, 9.0),
+                                Vec2::splat(40.0),
+                            ),
+                            name,
+                        );
+                        let text_rect = egui::Rect::from_min_max(
+                            rect.min + Vec2::new(56.0, 12.0),
+                            rect.max - Vec2::new(8.0, 8.0),
+                        );
+                        let mut child = ui.child_ui(text_rect, Layout::top_down(Align::Min));
+                        ui::one_line(&mut child, name, 12.0, true);
+                        child.label(RichText::new("Live-TV").size(10.0).color(theme::muted(ui)));
+                    }
                     #[cfg(windows)]
                     super::desktop::remember_favorite_target(&resp, key);
                     if hit(app, ui, &resp) {

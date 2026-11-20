@@ -5,6 +5,10 @@ export function installShellAppearance() {
   for(const [key,value] of Object.entries(palette))style.setProperty('--normal-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value);
   for(const [key,value] of Object.entries({
     '--navigation-expanded':appearance.navigationExpanded+'px',
+    '--navigation-edge':appearance.navigationEdge+'px',
+    '--live-preview-edge':appearance.livePreviewEdge+'px',
+    '--navigation-backdrop-scale':String((appearance.navigationCollapsed+appearance.navigationEdge+10)/(appearance.navigationExpanded+appearance.navigationEdge+10)),
+    '--refresh-spin-duration':appearance.refreshSpinMs+'ms',
     '--navigation-collapsed':appearance.navigationCollapsed+'px',
     '--category-width':appearance.categoryWidth+'px',
     '--live-preview-width':appearance.livePreviewWidth+'px',

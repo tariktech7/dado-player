@@ -74,7 +74,7 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let narrow = a.width() < 620.0 && !landscape;
         let gap = 10.0;
         let cw = if desktop {
-            super::desktop::appearance().category_width * scale
+            super::desktop::category_width(a.width(), scale)
         } else if landscape {
             (a.width() * 0.25).min(212.0)
         } else if narrow {

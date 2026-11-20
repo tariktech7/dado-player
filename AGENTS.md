@@ -47,6 +47,10 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
   Die Debugprofile verwenden Zeilentabellen statt vollständiger Debugsymbole
   und erzeugen keine inkrementellen Zwischenstände.
 
+- Samsung und Windows sind ein gemeinsamer Release. UI-, Geometrie-, Bedienungs-
+  und Player-Änderungen auf beiden umsetzen, prüfen und gemeinsam veröffentlichen,
+  sofern Tarik eine Plattform ausdrücklich ausnimmt.
+
 - Nach einem Samsung-Build für Tarik das signierte Paket auf dem Haupt-TV aus
   SmartTV/client/tizen.local.json installieren und die Installation prüfen.
   Eine neuere Anweisung, den Fernseher in Ruhe zu lassen, hat Vorrang.

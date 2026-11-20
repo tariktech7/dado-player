@@ -1,9 +1,11 @@
 {
   "referenceWidth": 1920,
-  "navigationExpanded": 276,
+  "navigationExpanded": 326,
+  "navigationEdge": 36,
+  "livePreviewEdge": 32,
   "navigationCollapsed": 80,
   "categoryWidth": 320,
-  "livePreviewWidth": 640,
+  "livePreviewWidth": 712,
   "catalogPreviewWidth": 440,
   "navigationRowHeight": 76,
   "navigationFont": 30,
@@ -14,6 +16,8 @@
   "epgFont": 20,
   "navigationDurationMs": 220,
   "navigationHoverCloseMs": 700,
+  "refreshFeedbackMs": 2000,
+  "refreshSpinMs": 900,
   "navigationEasing": [
     0.22,
     1,

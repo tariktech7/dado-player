@@ -129,6 +129,10 @@ pub fn apply(ctx: &Context, dark: bool) {
     style.spacing.menu_margin = egui::Margin::same(6.0);
 
     style.text_styles = text_styles();
+    #[cfg(windows)]
+    {
+        style.interaction.selectable_labels = false;
+    }
     ctx.set_style(style);
 }
 
@@ -439,6 +443,48 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn display_text_keeps_the_arrow_and_inputs_keep_the_text_cursor() {
+        let ctx = egui::Context::default();
+        super::apply(&ctx, true);
+        let mut label = egui::Pos2::ZERO;
+        let mut field = egui::Pos2::ZERO;
+        let mut text = String::new();
+        let mut frame = |events, label: &mut egui::Pos2, field: &mut egui::Pos2| {
+            ctx.run(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        *label = ui.label("Sendername").rect.center();
+                        *field = ui.text_edit_singleline(&mut text).rect.center();
+                    });
+                },
+            )
+        };
+        let _ = frame(vec![], &mut label, &mut field);
+        let label_pos = label;
+        let field_pos = field;
+        let output = frame(
+            vec![egui::Event::PointerMoved(label_pos)],
+            &mut label,
+            &mut field,
+        );
+        assert_eq!(
+            output.platform_output.cursor_icon,
+            egui::CursorIcon::Default
+        );
+        let output = frame(
+            vec![egui::Event::PointerMoved(field_pos)],
+            &mut label,
+            &mut field,
+        );
+        assert_eq!(output.platform_output.cursor_icon, egui::CursorIcon::Text);
+    }
+
     #[test]
     fn blue_material_keeps_readable_text_and_keeps_a_distinct_midnight_mode() {
         fn luminance(c: egui::Color32) -> f32 {

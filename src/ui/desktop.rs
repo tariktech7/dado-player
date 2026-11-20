@@ -15,6 +15,8 @@ use std::sync::OnceLock;
 pub struct Appearance {
     pub reference_width: f32,
     pub navigation_expanded: f32,
+    pub navigation_edge: f32,
+    pub live_preview_edge: f32,
     pub navigation_collapsed: f32,
     pub category_width: f32,
     pub live_preview_width: f32,
@@ -28,6 +30,8 @@ pub struct Appearance {
     pub epg_font: f32,
     pub navigation_duration_ms: f32,
     pub navigation_hover_close_ms: f64,
+    pub refresh_feedback_ms: f32,
+    pub refresh_spin_ms: f32,
     pub navigation_easing: [f32; 4],
     pub player_top_height: f32,
     pub player_controls_height: f32,
@@ -82,6 +86,10 @@ pub fn active(ctx: &Context) -> bool {
 pub fn scale(ctx: &Context) -> f32 {
     (ctx.screen_rect().width() / appearance().reference_width).clamp(0.66, 1.25)
 }
+pub(crate) fn category_width(width: f32, scale: f32) -> f32 {
+    (appearance().category_width * scale).min(width * 0.33)
+}
+
 fn ease(x: f32) -> f32 {
     let [x1, y1, x2, y2] = appearance().navigation_easing;
     let curve = |t: f32, a: f32, b: f32| {
@@ -341,7 +349,7 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
                 ..
             } if matches!(
                 key,
-                egui::Key::F1 | egui::Key::F2 | egui::Key::F3 | egui::Key::F4
+                egui::Key::Escape | egui::Key::F1 | egui::Key::F2 | egui::Key::F3 | egui::Key::F4
             ) =>
             {
                 Some(*key)
@@ -359,7 +367,7 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
         return false;
     }
     if app.pending_resume.is_some() || app.description_open.is_some() {
-        if key == egui::Key::F1 {
+        if matches!(key, egui::Key::Escape | egui::Key::F1) {
             app.clear_resume();
             app.description_open = None;
         }
@@ -369,19 +377,36 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
         app.nav_collapsed = false;
         ctx.data_mut(|data| data.insert_temp(Id::new("desktop-navigation-focus"), true));
     };
+    let exit = Id::new("desktop-exit-prompt");
+    if ctx
+        .data(|data| data.get_temp::<bool>(exit))
+        .unwrap_or(false)
+    {
+        if matches!(key, egui::Key::Escape | egui::Key::F1) {
+            ctx.data_mut(|data| data.remove::<bool>(exit));
+        }
+        return true;
+    }
     match key {
-        egui::Key::F1 => {
+        egui::Key::Escape | egui::Key::F1 => {
             if player {
                 if !super::player_desktop::dismiss_menus(app, ctx) {
-                    app.stop_play();
+                    app.back_from_player();
                 }
             } else {
-                focus_navigation(app);
+                let focused = ctx.memory(|memory| memory.focused());
+                let nav_focus =
+                    ctx.data(|data| data.get_temp::<Id>(Id::new("desktop-nav-focused-id")));
+                if nav_focus.is_some() && focused == nav_focus {
+                    ctx.data_mut(|data| data.insert_temp(exit, true));
+                } else {
+                    focus_navigation(app);
+                }
             }
         }
         egui::Key::F2 => {
             if player {
-                app.stop_play();
+                app.back_from_player();
                 if app.view == View::Live {
                     return true;
                 }
@@ -454,7 +479,13 @@ pub fn show(app: &mut App, ctx: &Context) {
     if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
         app.nav_collapsed = false;
     }
-    let rail = |width| Rect::from_min_max(screen.min, pos2(screen.left() + width, screen.bottom()));
+    let left = screen.left() + a.navigation_edge * s;
+    let rail = |width| {
+        Rect::from_min_max(
+            pos2(left, screen.top()),
+            pos2(left + width, screen.bottom()),
+        )
+    };
     let is_collapsed = navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded));
     let target = if is_collapsed { collapsed } else { expanded };
     let dx = motion(ctx, target);
@@ -464,9 +495,12 @@ pub fn show(app: &mut App, ctx: &Context) {
         .frame(egui::Frame::none().fill(ctx.style().visuals.panel_fill))
         .show(ctx, |ui| {
             theme::ambient(ui, screen);
-            let nav = Rect::from_min_max(screen.min, pos2(screen.left() + visual, screen.bottom()));
-            ui.painter()
-                .rect_filled(nav, 0.0, Color32::from_black_alpha(24));
+            let nav = rail(visual);
+            ui.painter().rect_filled(
+                Rect::from_min_max(screen.min, nav.max),
+                0.0,
+                Color32::from_black_alpha(24),
+            );
             navigation(
                 app,
                 ui,
@@ -476,8 +510,16 @@ pub fn show(app: &mut App, ctx: &Context) {
                 is_collapsed,
             );
             let body = Rect::from_min_max(
-                pos2(screen.left() + target + pad, screen.top() + pad),
-                pos2(screen.right() - pad, screen.bottom() - pad),
+                pos2(left + target + pad, screen.top() + pad),
+                pos2(
+                    screen.right()
+                        - if app.view == View::Live {
+                            a.live_preview_edge * s
+                        } else {
+                            pad
+                        },
+                    screen.bottom() - pad,
+                ),
             );
             let view = app.view;
             if view == View::Live {
@@ -507,7 +549,117 @@ pub fn show(app: &mut App, ctx: &Context) {
                 );
             }
         });
+    #[cfg(windows)]
+    if ctx
+        .data(|data| data.get_temp::<bool>(Id::new("desktop-exit-prompt")))
+        .unwrap_or(false)
+    {
+        let mut dismiss = false;
+        let mut quit = false;
+        egui::Window::new(
+            app.settings
+                .language
+                .text("Dado Player beenden?", "Quit Dado Player?"),
+        )
+        .id(Id::new("desktop-exit-dialog"))
+        .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+        .resizable(false)
+        .collapsible(false)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                dismiss = ui
+                    .button(app.settings.language.text("Weitersehen", "Keep watching"))
+                    .clicked();
+                quit = ui
+                    .button(app.settings.language.text("Beenden", "Quit"))
+                    .clicked();
+            });
+        });
+        if dismiss || quit {
+            ctx.data_mut(|data| data.remove::<bool>(Id::new("desktop-exit-prompt")));
+        }
+        if quit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
 }
+fn refresh_icon(app: &App, ui: &Ui, rect: Rect, color: Color32, id: Id) {
+    let a = appearance();
+    let feedback = app.catalog_refresh_result.and_then(|(success, at)| {
+        let remaining = a.refresh_feedback_ms / 1000.0 - at.elapsed().as_secs_f32();
+        (remaining > 0.0).then(|| {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f32(remaining));
+            success
+        })
+    });
+    let motion = !reduced_motion(ui.ctx());
+    let transition = if motion { 0.24 } else { 0.0 };
+    let success = ui.ctx().animate_bool_with_time(
+        id.with("refresh-success"),
+        feedback == Some(true),
+        transition,
+    );
+    let error = ui.ctx().animate_bool_with_time(
+        id.with("refresh-error"),
+        feedback == Some(false),
+        transition,
+    );
+    let result = success.max(error);
+    let time = ui.input(|input| input.time);
+    let angle = if motion && app.catalog_refreshing {
+        ui.ctx().request_repaint();
+        (time * 1000.0 / f64::from(a.refresh_spin_ms) * std::f64::consts::TAU) as f32
+    } else {
+        0.0
+    };
+    let origin = rect.center();
+    let size = rect.width() / 24.0;
+    let draw = |points: &[(f32, f32)], angle: f32, scale: f32, tint: Color32| {
+        let (sin, cos) = angle.sin_cos();
+        let points = points
+            .iter()
+            .map(|&(x, y)| origin + vec2(cos * x - sin * y, sin * x + cos * y) * (size * scale))
+            .collect();
+        ui.painter().add(egui::Shape::line(
+            points,
+            egui::Stroke::new(1.8 * size, tint),
+        ));
+    };
+    if result < 0.999 {
+        let arc: Vec<_> = (0..=24)
+            .map(|i| {
+                let a = -0.46 - i as f32 * 5.36 / 24.0;
+                (8.0 * a.cos(), 8.0 * a.sin())
+            })
+            .collect();
+        let tint = color.gamma_multiply(1.0 - result);
+        let rotation = angle + result * 0.61;
+        draw(&arc, rotation, 1.0 - 0.45 * result, tint);
+        draw(
+            &[(8.0, -9.0), (8.0, -4.0), (3.0, -4.0)],
+            rotation,
+            1.0 - 0.45 * result,
+            tint,
+        );
+    }
+    if success > 0.001 {
+        draw(
+            &[(-7.0, 0.0), (-2.5, 4.5), (7.0, -5.0)],
+            -0.44 * (1.0 - success),
+            0.55 + 0.45 * success,
+            Color32::from_rgb(133, 217, 160).gamma_multiply(success),
+        );
+    }
+    if error > 0.001 {
+        let tint = Color32::from_rgb(255, 155, 155).gamma_multiply(error);
+        let rotation = -0.44 * (1.0 - error);
+        let scale = 0.55 + 0.45 * error;
+        draw(&[(-6.0, -6.0), (6.0, 6.0)], rotation, scale, tint);
+        draw(&[(6.0, -6.0), (-6.0, 6.0)], rotation, scale, tint);
+    }
+}
+
 fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, is_collapsed: bool) {
     use ui::mobile::components::{icon, Icon};
     let mut nav = ui.child_ui_with_id_source(
@@ -599,11 +751,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 ),
             ];
             let language = app.settings.language;
-            let refresh_label = if app.catalog_refreshing {
-                language.text("Wird aktualisiert …", "Refreshing …")
-            } else {
-                language.text("Liste aktualisieren", "Refresh library")
-            };
+            let refresh_label = language.text("Liste aktualisieren", "Refresh library");
             for (label, view, symbol) in rows
                 .into_iter()
                 .map(|(label, view, icon)| (label, Some(view), icon))
@@ -626,6 +774,11 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                     response.request_focus();
                     response.scroll_to_me(None);
                 }
+                if response.has_focus() {
+                    nav.data_mut(|data| {
+                        data.insert_temp(Id::new("desktop-nav-focused-id"), response.id)
+                    });
+                }
                 let color = if selected { theme::accent(nav) } else { text };
                 let hover = nav.ctx().animate_bool_with_time(
                     response.id.with("hover"),
@@ -644,32 +797,36 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                         .gamma_multiply(hover),
                     );
                 }
-                icon(
-                    nav,
-                    Rect::from_center_size(
-                        pos2(rect.left() + 40.0 * s, r.center().y),
-                        vec2(30.0 * s, 30.0 * s),
-                    ),
-                    symbol,
-                    color,
+                let icon_rect = Rect::from_center_size(
+                    pos2(rect.left() + 40.0 * s, r.center().y),
+                    vec2(30.0 * s, 30.0 * s),
                 );
+                if view.is_none() {
+                    refresh_icon(app, nav, icon_rect, color, response.id);
+                } else {
+                    icon(nav, icon_rect, symbol, color);
+                }
                 if label_alpha > 0.01 {
                     let label_x = rect.left() + 70.0 * s;
                     ui::mobile::components::draw_line(
                         nav,
                         pos2(label_x, r.center().y),
                         label,
-                        FontId::proportional(if view.is_none() {
-                            24.0 * s
-                        } else {
-                            appearance().navigation_font * s
-                        }),
+                        FontId::proportional(appearance().navigation_font * s),
                         color.gamma_multiply(label_alpha),
                         (r.right() - label_x - 8.0 * s).max(0.0),
                     );
                 }
                 let help = if view.is_none() {
-                    app.catalog_refresh_notice.as_deref().unwrap_or(label)
+                    if app.catalog_refreshing {
+                        language.text("Wird aktualisiert …", "Refreshing …")
+                    } else if app.catalog_refresh_result.is_some_and(|(_, at)| {
+                        at.elapsed().as_millis() < appearance().refresh_feedback_ms as u128
+                    }) {
+                        app.catalog_refresh_notice.as_deref().unwrap_or(label)
+                    } else {
+                        label
+                    }
                 } else {
                     label
                 };

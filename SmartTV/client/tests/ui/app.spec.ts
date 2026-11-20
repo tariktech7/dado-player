@@ -1131,12 +1131,14 @@ test("all home rails scroll horizontally with remote focus and both menus split 
     const native = HTMLElement.prototype.getBoundingClientRect;
     (window as any).homeCardReads = 0;
     (window as any).homeScrollWrites = 0;
-    (window as any).homeNativeScrollWrites = 0;
+    (window as any).homeScrollSteps = new Set<number>();
     const scrollTo = HTMLElement.prototype.scrollTo;
     HTMLElement.prototype.scrollTo = function (...args: any[]) {
       if (this.matches(".home-primary .card-rail,.shell[data-focus-scope='home'] > main")) {
         (window as any).homeScrollWrites++;
-        if (args[0]?.behavior === "smooth") (window as any).homeNativeScrollWrites++;
+        if (this.matches(".card-rail") && args[0]?.left !== undefined) {
+          (window as any).homeScrollSteps.add(args[0].left);
+        }
       }
       Reflect.apply(scrollTo, this, args);
     };
@@ -1153,15 +1155,14 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   await expect(rail.locator("button").nth(7)).toBeFocused();
   expect(await page.evaluate(() => (window as any).homeCardReads)).toBeLessThan(45);
   await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
-  const native = await page.evaluate(() => ({
+  const scroll = await page.evaluate(() => ({
     total: (window as any).homeScrollWrites,
-    smooth: (window as any).homeNativeScrollWrites,
+    steps: (window as any).homeScrollSteps.size,
     transformed: [...document.querySelectorAll(".home-dashboard,.home-rail-track")].some(el => getComputedStyle(el).transform !== "none"),
   }));
-  expect(native.total).toBeGreaterThan(0);
-  expect(native.total).toBeLessThanOrEqual(18);
-  expect(native.smooth).toBe(native.total);
-  expect(native.transformed).toBe(false);
+  expect(scroll.total).toBeGreaterThan(0);
+  expect(scroll.steps).toBeGreaterThan(1);
+  expect(scroll.transformed).toBe(false);
   await page.locator(".shell").evaluate(async el => {
     await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
   });
