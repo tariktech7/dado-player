@@ -1029,10 +1029,11 @@ test("refresh in the left rail reloads the open library and keeps the live previ
     await route.fulfill({json:[{stream_id: 1001, name: "Neuer Sender", category_id: "1"}]});
   });
   const refresh = page.getByRole("button", {name: "Liste aktualisieren"});
+  await refresh.focus();
+  await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
   const navLabel = page.getByRole("button", {name: "▣ Live TV", exact: true}).locator(".nav-label");
   await expect(refresh.locator(".nav-label")).toHaveCSS("font-size", await navLabel.evaluate(el => getComputedStyle(el).fontSize));
   expect(await refresh.locator(".nav-label").evaluate(el => el.scrollWidth <= el.clientWidth && el.clientHeight <= el.parentElement!.clientHeight)).toBe(true);
-  await refresh.focus();
   await page.keyboard.press("Enter");
   await expect(refresh).toHaveAttribute("data-refresh-status", "loading");
   await expect(refresh.locator(".refresh-icon .refresh")).toHaveCSS("animation-name", "refresh-spin");
