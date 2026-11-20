@@ -1240,8 +1240,17 @@ hr {
 .home-primary .card-rail {
   contain: layout paint;
 }
-.card-rail > span {
+.home-rail-track {
+  display: flex;
   flex: 0 0 auto;
+  width: max-content;
+  gap: 20px;
+}
+.home-rail-track > span {
+  flex: 0 0 auto;
+}
+.home-primary .media-card {
+  box-shadow: 0 4px 10px #0003;
 }
 .kind-tabs {
   display: flex;

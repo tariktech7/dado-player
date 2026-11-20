@@ -1026,11 +1026,13 @@ function App() {
       <section class="home-section">
         <h2>{title}</h2>
         <div class="card-rail">
-          {items.slice(0, 30).map((item) => (
-            <span key={itemKey(item)}>
-              {card(item, title.startsWith("Weiter ansehen"))}
-            </span>
-          ))}
+          <div class="home-rail-track">
+            {items.slice(0, 30).map((item) => (
+              <span key={itemKey(item)}>
+                {card(item, title.startsWith("Weiter ansehen"))}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
     );

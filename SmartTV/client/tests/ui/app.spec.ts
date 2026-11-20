@@ -64,14 +64,15 @@ test("live preview fits the stream from prepare and follows fullscreen transitio
   const inlineCalls = await log();
   const beforePrepare = inlineCalls.slice(0, inlineCalls.findIndex(([event]) => event === "prepare"));
   expect(beforePrepare).toContainEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
-  expect(beforePrepare.find(([event]) => event === "rect")?.slice(3)).toEqual([640, 360]);
+  const previewSize = [712, Math.round(712 * 9 / 16)];
+  expect(beforePrepare.find(([event]) => event === "rect")?.slice(3)).toEqual(previewSize);
 
   const surface = page.locator(".preview-surface");
   const size = (await surface.boundingBox())!;
-  expect(size.width).toBeCloseTo(640 * 2 / 3, 0);
-  expect(1280 - size.x - size.width).toBeCloseTo(48 * 2 / 3, 0);
+  expect(size.width).toBeCloseTo(previewSize[0] * 2 / 3, 0);
+  expect(1280 - size.x - size.width).toBeCloseTo(32 * 2 / 3, 0);
   const nativeWidth = () => page.locator("#video-host object").evaluate(o => (o as HTMLElement).style.width);
-  expect(await nativeWidth()).toBe("640px");
+  expect(await nativeWidth()).toBe(`${previewSize[0]}px`);
 
   await page.locator(".navigation button[data-focus-key='live']").focus();
   await page.locator(".channels").evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
@@ -99,7 +100,7 @@ test("live preview fits the stream from prepare and follows fullscreen transitio
   await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]).toEqual(["rect", 0, 0, 1920, 1080]);
   await expect.poll(async () => (await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_FULL_SCREEN"]);
   await page.getByRole("button", {name: "← Zurück"}).click();
-  await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]?.slice(3)).toEqual([640, 360]);
+  await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]?.slice(3)).toEqual(previewSize);
   expect((await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
   expect((await log()).filter(([event]) => event === "open")).toHaveLength(1);
 });
@@ -1129,6 +1130,14 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   await page.evaluate(() => {
     const native = HTMLElement.prototype.getBoundingClientRect;
     (window as any).homeCardReads = 0;
+    (window as any).homeScrollWrites = 0;
+    const scrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = function (...args: any[]) {
+      if (this.matches(".home-primary .card-rail,.shell[data-focus-scope='home'] > main")) {
+        (window as any).homeScrollWrites++;
+      }
+      Reflect.apply(scrollTo, this, args);
+    };
     HTMLElement.prototype.getBoundingClientRect = function () {
       if (this.matches(".home-primary .media-card")) (window as any).homeCardReads++;
       return native.call(this);
@@ -1142,6 +1151,7 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   await expect(rail.locator("button").nth(7)).toBeFocused();
   expect(await page.evaluate(() => (window as any).homeCardReads)).toBeLessThan(45);
   await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => (window as any).homeScrollWrites)).toBeLessThanOrEqual(18);
   await page.locator(".shell").evaluate(async el => {
     await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
   });
