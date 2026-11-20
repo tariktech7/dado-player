@@ -52,6 +52,21 @@ fn app_dir() -> PathBuf {
 pub fn license_path() -> PathBuf {
     app_dir().join("device-license.json")
 }
+pub fn load_parental() -> crate::parental::Policy {
+    let path = app_dir().join("parental.json");
+    if !path.exists() {
+        return Default::default();
+    }
+    // Damaged existing protection must not silently turn parental controls off.
+    read_json(&path).unwrap_or_else(|| crate::parental::Policy {
+        hash: vec![0; 32],
+        blocked: ["*".to_owned()].into_iter().collect(),
+        ..Default::default()
+    })
+}
+pub fn save_parental(policy: &crate::parental::Policy) -> Result<()> {
+    write_json(&app_dir().join("parental.json"), policy)
+}
 pub fn load_connect_state() -> serde_json::Value {
     read_json(&app_dir().join("connect-device.json")).unwrap_or(serde_json::Value::Null)
 }

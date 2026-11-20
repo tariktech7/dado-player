@@ -22,6 +22,7 @@ pub mod mpv;
 #[cfg(target_os = "ios")]
 #[path = "platform/ios/avplayer.rs"]
 pub mod mpv;
+pub mod parental;
 pub mod platform;
 pub mod player;
 pub mod store;

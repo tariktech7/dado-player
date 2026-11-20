@@ -1485,3 +1485,10 @@ hr {
 
 /* Fatal decoder errors must never reveal the still-mounted home screen. */
 .fullscreen.playback-failed { background: #000 !important; z-index: 25; }
+/* Parental controls remain above the video plane and retain TV focus scope. */
+.parental-scrim { z-index: 1000; }
+.parental-modal { max-height: 90vh; overflow-y: auto; width: min(760px, 90vw); }
+.parental-keypad { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); max-width: 360px; gap: 8px; margin: 16px 0; }
+.parental-keypad button { margin: 0; }
+.parental-items { display: flex; flex-direction: column; }
+.parental-modal output { font-size: 32px; letter-spacing: 12px; }

@@ -92,6 +92,7 @@ def main():
         ("Windows portable", windows, windows_file),
         ("Android", android, "Dado-Player-arm64-debug.apk"),
         ("Samsung TV", tv, f"Dado-Player-Tizen-{tv}.wgt"),
+        ("Samsung TV Tizen 5 (eingerichteter Entwickler-TV)", tv, f"Dado-Player-Tizen5-{tv}.wgt"),
         ("Tizen Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen-{tv}-unsigned.wgt"),
     ]:
         file = RELEASES / name

@@ -43,6 +43,8 @@ import {
 } from "./platform";
 import "./style.css";
 import "./keyboard.css";
+import {ParentalControls} from './parental';
+import {ParentalPanel} from './parental-ui';
 
 const nav = [
   ["home", "⌂", "Startseite"],
@@ -123,6 +125,8 @@ function App() {
   const [saved, setSaved] = useState<Saved>(load),
     savedRef = useRef(saved);
   savedRef.current = saved;
+  const parental = useMemo(()=>new ParentalControls(),[]);
+  const [,parentalRepaint]=useState(0);
   const [view, setView] = useState<View>("home"),
     [catalog, setCatalog] = useState<Catalog>(emptyCatalog),
     [busy, setBusy] = useState(false),
@@ -374,6 +378,9 @@ function App() {
     }
   };
   async function start(item: Item, fullscreen = false, position = 0) {
+    const profileId=savedRef.current.activeProfile || '', generationAtRequest=generation.current;
+    if(parental.locked(profileId,item)) stop();
+    if(!await parental.request(profileId,item) || generationAtRequest!==generation.current) return;
     if(!licenseClient.state.allowed){setView('settings');setMessage('Bitte Testversion starten oder Freischaltung abrufen.');return;}
     if (item.kind === "live")
       item = catalog.live.find((i) => i.id === item.id) || item;
@@ -516,6 +523,7 @@ function App() {
     return merged.added;
   };
   const back = () => {
+    if(parental.open){parental.close();return;}
     if (tracksRef.current) {
       setTracks(false);
       return;
@@ -1139,6 +1147,11 @@ function App() {
             <p class="muted">github.com/tariktech7/dado-player/releases</p>
           )}
           <p class="muted">{APP_VERSION} · Tizen 6.5+ · D7</p>
+        </section>
+        <section class="glass" data-focus-zone="settings-parental">
+          <h2>Elternsperre</h2>
+          <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
+          <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </section>
         <ConnectPanel importProfiles={importCloudProfiles} />
       </div>
@@ -1961,6 +1974,7 @@ function App() {
             )}
         </>
       )}
+      <ParentalPanel controls={parental} catalog={catalog} profile={session} onChange={()=>parentalRepaint(n=>n+1)}/>
       {message && (
         <div class="notification" role="alert">
           <span>{message}</span>

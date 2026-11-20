@@ -178,6 +178,7 @@ pub enum ContinueTab {
 }
 
 pub struct App {
+    pub parental: crate::parental::Controls,
     rt: Runtime,
     tx: EventSender,
     rx: UnboundedReceiver<AppEvent>,
@@ -431,6 +432,7 @@ impl App {
             tv_series: None,
             tv_search: String::new(),
             pending_delete: None,
+            parental: crate::parental::Controls::load(),
             busy: false,
             login_generation: 0,
             error: None,
@@ -1053,7 +1055,8 @@ impl App {
                 | (self.tv as u64) << 5
                 | (self.active_profile.is_none() as u64) << 4
                 | (self.mobile_more as u64) << 3
-                | (self.pending_delete.is_some() as u64) << 2;
+                | (self.pending_delete.is_some() as u64) << 2
+                | (self.parental.open as u64) << 1;
             let pointer_used = ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down());
             // A scrim-covered overlay makes every control underneath it
             // unreachable by D-pad; the focus engine switches to a modal scope.
@@ -1182,6 +1185,10 @@ impl App {
     }
 
     fn draw(&mut self, ctx: &Context) {
+        if self.parental.open {
+            crate::ui::parental::show(self, ctx);
+            return;
+        }
         #[cfg(target_os = "windows")]
         if crate::licensing::enabled() && !crate::licensing::allowed() {
             if self.current_play.is_some() {
@@ -1536,6 +1543,9 @@ impl App {
     /// One step back. Returns false when there is nothing to pop (the platform
     /// may then close the app). Used by Android's back key.
     pub fn mobile_can_back(&self) -> bool {
+        if self.parental.open {
+            return true;
+        }
         if self.description_open.is_some()
             || (self.tv && self.preview.is_some())
             || self.pending_delete.is_some()
@@ -1555,6 +1565,10 @@ impl App {
     }
 
     pub fn mobile_back(&mut self) -> bool {
+        if self.parental.open {
+            self.parental.close();
+            return true;
+        }
         if self.description_open.take().is_some() {
             return true;
         }
@@ -1791,6 +1805,9 @@ impl App {
     }
 
     pub fn play(&mut self, item: PlayItem) {
+        if !self.parental_gate(&item, false) {
+            return;
+        }
         self.pending_history_key = None;
         #[cfg(target_os = "windows")]
         if crate::licensing::enabled() && !crate::licensing::allowed() {
@@ -2042,6 +2059,9 @@ impl App {
     }
 
     pub fn start_preview(&mut self, item: PlayItem) {
+        if !self.parental_gate(&item, true) {
+            return;
+        }
         self.remember_live(&item);
         if item.kind == PlayKind::Live {
             let key = item.progress_key.clone();
@@ -2319,6 +2339,12 @@ impl App {
     }
 
     fn handle_keys(&mut self, ctx: &Context) {
+        if self.parental.open {
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.parental.close();
+            }
+            return;
+        }
         // Never steal keys while a text field has focus.
         if ctx.wants_keyboard_input() && self.view != View::Player {
             return;
@@ -3456,6 +3482,46 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parental_gate_covers_play_preview_and_series_without_starting_media() {
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("Parent fixture", ProfileKind::M3u));
+        let pid = app.active_profile.as_ref().unwrap().id.clone();
+        app.parental.policy.set_pin("0123").unwrap();
+        for (key, kind) in [
+            ("live:1", PlayKind::Live),
+            ("vod:2", PlayKind::Vod),
+            ("ep:3:4", PlayKind::Episode),
+        ] {
+            app.parental
+                .policy
+                .blocked
+                .insert(crate::parental::scoped_key(&pid, key));
+            let item = PlayItem {
+                title: "Protected".into(),
+                url: "https://example.invalid/test".into(),
+                kind,
+                progress_key: key.into(),
+            };
+            app.play(item.clone());
+            assert!(app.parental.open);
+            assert!(app.player.is_none());
+            assert!(app.current_play.is_none());
+            app.mobile_back();
+            assert!(!app.parental.open);
+            app.start_preview(item.clone());
+            assert!(app.parental.open);
+            assert!(app.preview.is_none());
+            app.parental.close();
+            let grant = crate::parental::scoped_key(&pid, key);
+            app.parental.grant = Some(grant);
+            assert!(app.parental_gate(&item, false));
+            assert!(!app.parental_gate(&item, false));
+            app.parental.close();
+        }
+        assert!(app.parental.policy.locked(&pid, "ep:3:999"));
+    }
+
     #[test]
     fn phone_tabs_keep_movies_and_series_separate_with_overlapping_provider_ids() {
         fn text(shape: &egui::epaint::Shape, out: &mut String) {

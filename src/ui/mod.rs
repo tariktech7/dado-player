@@ -6,6 +6,7 @@ pub mod live;
 pub mod login;
 pub mod mobile;
 pub mod palette;
+pub mod parental;
 pub mod player;
 pub mod search;
 pub mod series;

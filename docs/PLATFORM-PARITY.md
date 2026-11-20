@@ -101,3 +101,11 @@ Die begrenzten Uploads pro Frame und vorhandene VSync-/Displaytakt-Anbindung ble
 ## Dado Connect
 
 Alle aktuellen Clients: genehmigte Senderkonten, MAC-/Geräteadresse ohne Kopplungscode, M3U-URL/Xtream und manueller Aktualisieren-Abruf. Dauerhaft speichern vor Bestätigung; stabile Nachrichten-IDs verhindern Duplikate. Kein automatisches Login oder Überschreiben bestehender Profile. Mobile zeigt private Geräteadresse statt Hardware-MAC. LG muss diesen Vertrag künftig übernehmen, ist noch nicht gebaut. Siehe connect/README.md.
+
+## Elternsperre ab 0.7.3
+
+Windows, Android/Android TV, iOS und Samsung: vierstellige Eltern-PIN unter Einstellungen,
+einzelne Sender/Filme/Serien pro Anbieterprofil sperren. Alle Folgen einer gesperrten
+Serie geschützt; Wiedergabe, Vorschau, Favoriten und Fortsetzen prüfen zentral. PIN
+für Änderungen und jeden neuen gesperrten Wiedergabestart. Lokale Speicherung, keine
+Cloud-Abhängigkeit. Vertrag und Grenzen: [PARENTAL-CONTROLS.md](PARENTAL-CONTROLS.md).

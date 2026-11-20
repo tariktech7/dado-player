@@ -3,6 +3,7 @@ import { fresh } from "../../src/store";
 import {readFileSync} from 'node:fs';
 import {page as connectPage,script as connectScript,css as connectCss} from '../../../../connect/web.mjs';
 import {fingerprint,signLicense} from '../../../../licensing/shared/protocol.mjs';
+import {withPin,emptyPolicy,lockKey} from '../../src/parental';
 const profile = {
   id: "qa",
   name: "TV Demo",
@@ -13,6 +14,61 @@ const profile = {
   m3uUrl: "",
   epgUrl: "",
 };
+async function parentalPin(page:Page,pin:string,setup=false) {
+  const modal=page.locator('[data-parental]');
+  for(const n of pin)await modal.getByRole('button',{name:n,exact:true}).click();
+  await modal.getByRole('button',{name:setup?'PIN speichern / bestätigen':'Entsperren',exact:true}).click();
+}
+test('parental controls protect movies, every series episode and home continue',async({page})=>{
+  await fixture(page,true,true);
+  const make=(kind:any,id:string)=>({kind,id,name:'Test',category:'1',logo:'',url:''});
+  const policy={...await withPin(emptyPolicy(),'1234'),blocked:[lockKey('qa',make('vod','1')),lockKey('qa',make('series','2'))]};
+  await page.addInitScript(p=>localStorage.setItem('dado.parental.v1',JSON.stringify(p)),policy);
+  await page.goto('/');
+  await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
+  await page.getByRole('button',{name:/Demo Film/}).click();
+  await page.locator('.catalog-details button.primary').click();
+  const modal=page.locator('[data-parental]');await expect(modal).toBeVisible();await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'▤ Serien',exact:true}).click();
+  await page.getByRole('button',{name:/Demo Serie/}).click();
+  await page.locator('.series-play').click();await expect(modal).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__avLog.filter((x:any)=>x[0]==='open').length)).toBe(0);
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{
+    const s=JSON.parse(localStorage.getItem('dado.tv.v1')!);
+    s.history.qa=[{item:{id:'10',kind:'episode',seriesId:'2',name:'Staffel 1 · Folge 1',season:1,episode:1,category:'1',logo:'',url:'https://provider.invalid/series/demo/demo/10.mp4'},position:200,duration:1200,at:Date.now()}];
+    localStorage.setItem('dado.tv.v1',JSON.stringify(s));
+  });
+  await page.reload();await page.locator('.home-hero button').click();await expect(modal).toBeVisible();
+  await parentalPin(page,'1234');await expect(modal).not.toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__avLog.filter((x:any)=>x[0]==='play').length)).toBe(1);
+});
+test('parental controls persist, block live previews and require PIN for every new playback',async({page})=>{
+  await fixture(page,true,true);await page.goto('/');
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await page.getByRole('button',{name:'Eltern-PIN einrichten',exact:true}).click();
+  await parentalPin(page,'0123',true);await parentalPin(page,'0123',true);
+  const modal=page.locator('[data-parental]');
+  await modal.getByRole('button',{name:'Freigegeben · Dado Kanal 0001',exact:true}).click();
+  await expect(modal.getByRole('button',{name:'Gesperrt · Dado Kanal 0001',exact:true})).toBeVisible();
+  await modal.getByRole('button',{name:'Zurück / Abbrechen'}).click();
+  await page.reload();
+  await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();await page.locator('.channel').first().click();
+  await expect(modal).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__avLog.filter((x:any)=>x[0]==='open').length)).toBe(0);
+  await parentalPin(page,'1111');await expect(modal.locator('p[role="status"]')).toContainText('Falsche PIN');
+  await page.screenshot({path:'test-results/parental-pin.png'});
+  await parentalPin(page,'0123');await expect(modal).not.toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__avLog.filter((x:any)=>x[0]==='play').length)).toBe(1);
+  await page.keyboard.press('Escape');
+  await page.locator('.channel').first().click();await expect(modal).toBeVisible();
+  await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();
+  await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await page.getByRole('button',{name:'Elternsperre verwalten',exact:true}).click();
+  await expect(modal.getByRole('button',{name:'Elternsperre ausschalten'})).toHaveCount(0);
+  await parentalPin(page,'0123');await modal.getByRole('button',{name:'Elternsperre ausschalten'}).click();
+  await expect(modal).not.toBeVisible();
+});
 async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent') {
   if(process.env.DADO_TIZEN_PROFILE==='2019')await page.addInitScript(()=>{
     (String.prototype as any).replaceAll=undefined;

@@ -1,9 +1,9 @@
 # Dado Player
 
-Gemeinsamer Beta-Quellstand: **0.7.2** für Windows, Android (Build 21), iOS (Build 16) und Samsung Tizen.
-[Alle 0.7.2-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.2-beta).
+Gemeinsamer Beta-Quellstand: **0.7.3** für Windows, Android (Build 22), iOS (Build 17) und Samsung Tizen.
+[Alle 0.7.3-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.3-beta).
 Diese Vorabversion wird direkt über den Release-Link geladen; die bisherigen stabilen
-Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.7.2-lavender-profiles-2026-11-17.md).
+Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.7.3-parental-controls-2026-11-20.md).
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
 [Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
@@ -24,7 +24,7 @@ und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Fa
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der iOS-Stand **0.7.2 / Build 16** wird lokal unter Windows/WSL mit
+Der iOS-Stand **0.7.3 / Build 17** wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
 mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
 Der lokale Buildweg steht in [ios/README.md](ios/README.md).
@@ -113,3 +113,7 @@ M3U-URLs und Xtream-Zugänge nach manueller Kontogenehmigung und einmaliger Ger�
 Standard ist Lavendel: gedämpfte lilafarbene Flächen und violette Akzente. Dunkel, Hell und System sind unabhängig wählbar und werden gespeichert. Die einmalige Migration stellt bisherige System-Defaults auf Lavendel; ausdrücklich gespeicherte Dunkel-/Hell-Auswahl bleibt erhalten. Später gewähltes System bleibt System.
 
 Android und Android TV öffnen optional die installierte MX-Player-App im Expertenmodus. Automatisch verwendet weiterhin den eingebauten Player. Es gibt kein eingebettetes MX-SDK in diesem Projekt; alte irreführende Optionen sind entfernt und kompatibel migriert. Windows verwendet mpv, iOS AVPlayer/VLC, Samsung AVPlay/HTML. Anbieter-Kataloge bleiben nach Inhaltstyp getrennt; Datensätze mit fremdem Identifier oder ausdrücklich falschem Streamtyp werden nicht übernommen.
+Elternsperre ab 0.7.3: Unter **Einstellungen → Elternsperre** eine vierstellige PIN
+einrichten und Sender, Filme oder ganze Serien sperren. Weitere Informationen:
+[Elternsperre](docs/PARENTAL-CONTROLS.md).
+
