@@ -32,6 +32,8 @@ pub struct Appearance {
     pub navigation_hover_close_ms: f64,
     pub refresh_feedback_ms: f32,
     pub refresh_spin_ms: f32,
+    #[cfg(windows)]
+    pub remote_shortcuts: [RemoteShortcut; 4],
     pub navigation_easing: [f32; 4],
     pub player_top_height: f32,
     pub player_controls_height: f32,
@@ -73,6 +75,17 @@ pub struct Appearance {
     pub player_popup_offset: f32,
     pub player_corner_radius: f32,
 }
+#[cfg(windows)]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteShortcut {
+    key: String,
+    color: String,
+    de: String,
+    en: String,
+    player_de: Option<String>,
+    player_en: Option<String>,
+}
 pub fn appearance() -> &'static Appearance {
     static A: OnceLock<Appearance> = OnceLock::new();
     A.get_or_init(|| {
@@ -88,6 +101,63 @@ pub fn scale(ctx: &Context) -> f32 {
 }
 pub(crate) fn category_width(width: f32, scale: f32) -> f32 {
     (appearance().category_width * scale).min(width * 0.33)
+}
+
+#[cfg(windows)]
+pub(super) fn shortcut_legend(
+    painter: &egui::Painter,
+    screen: Rect,
+    scale: f32,
+    language: crate::types::AppLanguage,
+    text: Color32,
+    background: Option<Color32>,
+) -> Rect {
+    let s = scale.min(screen.width() / 520.0);
+    let labels = appearance().remote_shortcuts.each_ref().map(|shortcut| {
+        let label = if background.is_some() {
+            language.text(
+                shortcut.player_de.as_deref().unwrap_or(&shortcut.de),
+                shortcut.player_en.as_deref().unwrap_or(&shortcut.en),
+            )
+        } else {
+            language.text(&shortcut.de, &shortcut.en)
+        };
+        let galley = painter.layout_no_wrap(
+            format!("{}  {label}", shortcut.key),
+            FontId::proportional(16.0 * s),
+            text,
+        );
+        (
+            galley,
+            Color32::from_hex(&shortcut.color).expect("bundled shortcut color"),
+        )
+    });
+    let gap = 18.0 * s;
+    let width = labels
+        .iter()
+        .map(|(label, _)| label.size().x + 14.0 * s)
+        .sum::<f32>()
+        + 3.0 * gap
+        + 24.0 * s;
+    let bounds = Rect::from_center_size(
+        pos2(screen.center().x, screen.bottom() - 17.0 * s),
+        vec2(width, 24.0 * s),
+    );
+    if let Some(fill) = background {
+        painter.rect_filled(bounds, 12.0 * s, fill);
+    }
+    let mut x = bounds.left() + 12.0 * s;
+    for (label, color) in labels {
+        painter.circle_filled(pos2(x + 4.0 * s, bounds.center().y), 4.0 * s, color);
+        let size = label.size();
+        painter.galley(
+            pos2(x + 14.0 * s, bounds.center().y - size.y / 2.0),
+            label,
+            text,
+        );
+        x += size.x + 14.0 * s + gap;
+    }
+    bounds
 }
 
 fn ease(x: f32) -> f32 {
@@ -518,7 +588,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                         } else {
                             pad
                         },
-                    screen.bottom() - pad,
+                    screen.bottom() - 30.0 * s,
                 ),
             );
             let view = app.view;
@@ -548,6 +618,15 @@ pub fn show(app: &mut App, ctx: &Context) {
                     },
                 );
             }
+            #[cfg(windows)]
+            shortcut_legend(
+                ui.painter(),
+                screen,
+                s,
+                app.settings.language,
+                theme::muted(ui),
+                None,
+            );
         });
     #[cfg(windows)]
     if ctx

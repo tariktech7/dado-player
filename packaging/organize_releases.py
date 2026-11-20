@@ -58,6 +58,7 @@ def main():
     RELEASES.mkdir(exist_ok=True)
     if len(sys.argv) == 3 and sys.argv[1] == "--install-windows":
         install_windows(sys.argv[2])
+    release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
     tv = json.loads((ROOT / "SmartTV/client/package.json").read_text())["version"]
     for file in RELEASES.glob("Dado-Player-Tizen-*.wgt"):
         version = re.fullmatch(r"Dado-Player-Tizen-(\d+\.\d+\.\d+)(?:-unsigned)?\.wgt", file.name)
@@ -88,21 +89,22 @@ def main():
     gradle = (ROOT / "android/app/build.gradle").read_text()
     android = re.search(r'versionName "([^"]+)"', gradle)[1]
     current = []
-    for platform, version, name in [
-        ("Windows portable", windows, windows_file),
-        ("Android", android, "Dado-Player-arm64-debug.apk"),
-        ("Samsung TV", tv, f"Dado-Player-Tizen-{tv}.wgt"),
-        ("Samsung TV Tizen 5 (eingerichteter Entwickler-TV)", tv, f"Dado-Player-Tizen5-{tv}.wgt"),
-        ("Tizen Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen-{tv}-unsigned.wgt"),
+    for platform, version, name, label in [
+        ("Windows portable", windows, windows_file, f"windows-build-{release['windowsBuild']}"),
+        ("Android", android, "Dado-Player-arm64-debug.apk", f"android-build-{release['androidBuild']}"),
+        ("Samsung TV", tv, f"Dado-Player-Tizen-{tv}.wgt", f"tizen-build-{release['tizenBuild']}"),
+        ("Samsung TV Tizen 5 (eingerichteter Entwickler-TV)", tv, f"Dado-Player-Tizen5-{tv}.wgt", f"tizen-build-{release['tizenBuild']}"),
+        ("Tizen Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen-{tv}-unsigned.wgt", None),
     ]:
         file = RELEASES / name
         if file.exists():
             current.append(dict(platform=platform, version=version, file=name, bytes=file.stat().st_size,
-                                sha256=hashlib.sha256(file.read_bytes()).hexdigest()))
+                                sha256=hashlib.sha256(file.read_bytes()).hexdigest(), assetLabel=label))
     if current_ipa:
         current.append(dict(platform="iOS (AltStore/Sideloadly)",
                             version=f"{ios['version']} / Build {ios['build']}", file=ipa.name,
-                            bytes=ipa.stat().st_size, sha256=hashlib.sha256(ipa.read_bytes()).hexdigest()))
+                            bytes=ipa.stat().st_size, sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
+                            assetLabel=f"ios-build-{ios['build']}"))
     usb_preparation = RELEASES / f"Dado-Player-Samsung-USB-Vorbereitung-{tv}.zip"
     usb = dict(installable=False, status="Samsung-TMG und Lizenzdatei fehlen; kein direkter USB-Installer")
     if usb_preparation.exists():

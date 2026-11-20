@@ -12,7 +12,7 @@ def updates():
     version = release["version"]
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid product version")
-    for key in ("androidBuild", "iosBuild"):
+    for key in ("androidBuild", "iosBuild", "windowsBuild", "tizenBuild"):
         if not isinstance(release[key], int) or release[key] <= 0:
             raise ValueError(f"Invalid {key}")
     result = {}
@@ -40,6 +40,7 @@ def updates():
         f'pub const VERSION: &str = "{version}";\n'
         f'pub const ANDROID_BUILD: u32 = {release["androidBuild"]};\n'
         f'pub const IOS_BUILD: u32 = {release["iosBuild"]};\n'
+        f'pub const WINDOWS_BUILD: u32 = {release["windowsBuild"]};\n'
         f'pub const RESUME_END_MARGIN_SECONDS: u64 = {policy["resumeEndMarginSeconds"]};\n'
         f'pub const SEEK_STEP_SECONDS: f64 = {policy["seekStepSeconds"]:.1f};\n'
         f'pub const CONTROLS_HIDE_SECONDS: f64 = {policy["controlsHideMs"] / 1000:.1f};\n'

@@ -18,6 +18,12 @@
   "navigationHoverCloseMs": 700,
   "refreshFeedbackMs": 2000,
   "refreshSpinMs": 900,
+  "remoteShortcuts": [
+    { "key": "F1", "color": "#ff737f", "de": "Zurück", "en": "Back" },
+    { "key": "F2", "color": "#70d69d", "de": "Live TV", "en": "Live TV" },
+    { "key": "F3", "color": "#f9d66e", "de": "Favorit", "en": "Favorite" },
+    { "key": "F4", "color": "#78b8ff", "de": "Einstellungen", "en": "Settings", "playerDe": "Optionen", "playerEn": "Options" }
+  ],
   "navigationEasing": [
     0.22,
     1,

@@ -766,6 +766,22 @@ pub fn mobile_update(install: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn mobile_update_status() -> anyhow::Result<String> {
+    use anyhow::Context;
+    let app = super::entry::app_handle().context("Android-Activity fehlt")?;
+    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }?;
+    let mut env = vm.attach_current_thread()?;
+    let class = ACTIVITY_CLASS.get().context("Activity-Klasse fehlt")?;
+    let status = env.call_static_method(class, "mobileUpdateStatus", "()Ljava/lang/String;", &[]);
+    if status.is_err() {
+        let _ = env.exception_clear();
+    }
+    let status = JString::from(status?.l()?);
+    let value = env.get_string(&status)?.into();
+    env.delete_local_ref(status)?;
+    Ok(value)
+}
+
 // External players return only numeric progress. Never forward provider URLs.
 static EXTERNAL_KEY: Mutex<Option<String>> = Mutex::new(None);
 static EXTERNAL_RESULT: Mutex<Option<(String, u64, u64)>> = Mutex::new(None);

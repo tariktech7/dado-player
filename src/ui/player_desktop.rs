@@ -615,6 +615,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         layers.push(layer);
     }
+    if visible {
+        let id = Id::new("desktop-player-shortcut-legend");
+        let layer = LayerId::new(Order::Foreground, id);
+        let bounds = super::desktop::shortcut_legend(
+            &ctx.layer_painter(layer),
+            full,
+            s,
+            language,
+            Palette::get().text,
+            Some(Palette::get().panel),
+        );
+        ctx.move_to_top(layer);
+        layers.push((layer, bounds));
+    }
     let composited = !app.palette_open
         && video.is_some_and(|handle| app.desktop_overlay.paint(&ctx, handle, &layers));
     if composited {

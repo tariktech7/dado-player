@@ -93,19 +93,23 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
     public static int mobileUpdate(int install) {
         GameActivity activity = sSelf;
         if (activity == null) return 0;
-        try {
-            android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+        activity.runOnUiThread(() -> {
             if (install == 1) {
-                java.io.File apk = new java.io.File(activity.getFilesDir(), "updates/Dado-Player.apk");
-                android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(activity, activity.getPackageName() + ".updates", apk);
-                intent.setDataAndType(uri, "application/vnd.android.package-archive");
-                intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                PlayerUpdate.install(activity);
             } else {
-                intent.setData(android.net.Uri.parse("https://github.com/tariktech7/dado-player/releases/latest"));
+                try {
+                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/tariktech7/dado-player/releases")));
+                } catch (ActivityNotFoundException ignored) {
+                    PlayerUpdate.status = "Auf diesem Gerät ist kein Browser verfügbar.";
+                }
             }
-            activity.startActivity(intent);
-            return 1;
-        } catch (RuntimeException e) { return 0; }
+        });
+        return 1;
+    }
+
+    public static String mobileUpdateStatus() {
+        return PlayerUpdate.status;
     }
 
     // ---- external players -------------------------------------------------

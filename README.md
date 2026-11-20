@@ -49,9 +49,9 @@ Windows bündelt seine Laufzeit-DLLs in `dist/`. Das separate portable Paket wir
 
 Aktuelle Pakete liegen direkt in `Releases/`; die Windows-Datei heißt immer **Dado-Player.exe**, ohne Versionsnummer. `windows/package.ps1` ersetzt sie über `packaging/organize_releases.py --install-windows`, prüft die Kopie und sichert die Vorgängerdatei im Archiv. Eine geöffnete/gesperrte EXE führt zu einem klaren Fehler statt einer zweiten aktuellen Datei. `README.md` und `AKTUELL.json` dort nennen Plattform, Version und SHA-256. Frühere Pakete stehen unter `Releases/Archiv/`. `python packaging/organize_releases.py` archiviert frühere Windows-/Tizen-Dateinamen und veraltete IPAs. Der Android-Build prüft die Signatur der APK, der iOS-Build erzeugt die IPA für die anschließende Gerätesignierung.
 
-Die Windows-Version steht in `windows/VERSION`. Zum Paketieren `./windows/package.ps1` mit einer Python-Installation mit Pillow ausführen (optional `-Python <Pfad>`). Die portable EXE steht danach in `Releases/Dado-Player.exe`. Für ein neues Update zuerst die Version erhöhen, testen, den zugehörigen Quellstand committen und das Paket bauen. Anschließend `./windows/publish-portable.ps1` ausführen. Der Befehl veröffentlicht die EXE im privaten Repo als Git-Tag `portable-vX.Y.Z`.
+Zum Paketieren `./windows/package.ps1` mit einer Python-Installation mit Pillow ausführen (optional `-Python <Pfad>`). Die portable EXE steht danach in `Releases/Dado-Player.exe`.
 
-Die portable App fragt auf Wunsch unter **Einstellungen → Auf GitHub-Updates prüfen** die Tags ab. Sie benötigt Git für Windows und ein Konto mit Lesezugriff auf das Repo. Nach Auswahl einer neueren Version lädt sie den bezeichneten Commit und prüft das Paket. Beim Beenden ersetzt der Launcher seine EXE am ursprünglichen Ort, behält die letzte Datei als `.previous` und startet die neue Version. Ein späteres Release benötigt einen neuen Tag.
+Unter **Einstellungen → Auf GitHub-Updates prüfen** sucht die portable App in den veröffentlichten GitHub-Releases, einschließlich Betas. Für das private Repository verwendet sie vorhandene Git-Zugangsdaten oder einen eingegebenen Token mit Leserecht. Nach „Installieren und neu starten“ prüft die App das heruntergeladene Paket. Der Launcher ersetzt seine EXE am ursprünglichen Ort, sichert die letzte Datei als `.previous` und startet die neue Version.
 
 ### Windows 10/11 und Herausgebersignatur
 
@@ -61,11 +61,13 @@ Für eine öffentliche Herausgebersignatur ist ein gültiges, von einer öffentl
 
 Ohne konfigurierte Identität bleiben die Pakete unsigniert. Ein selbstsigniertes Zertifikat beseitigt „Unbekannter Herausgeber“ auf fremden Rechnern nicht. Eine gültige Signatur gibt den geprüften Herausgeber an, garantiert aber keine sofortige SmartScreen-Reputation. Offizielle Grundlagen: [Microsoft Code Signing](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options), [SmartScreen-Reputation](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation). Die Paketierung verändert keine SmartScreen-/Defender-Einstellungen.
 
-### Mobile Updates aus GitHub Releases
+### GitHub-Updates veröffentlichen
 
-Unter Einstellungen → App-Updates kann der Player ein Paket prüfen und laden. Für das private Repository einen kurzlebigen Fine-grained Token mit Contents: Read für dado-player eingeben oder die Release-Seite im angemeldeten Browser öffnen. Android öffnet den Systeminstaller. Auf iOS die IPA in Dateien sichern und in AltStore Classic über My Apps → + mit derselben Apple-ID installieren.
+Android übergibt das geprüfte APK beim Klick auf „Installieren“ direkt an Androids Paketinstaller. Je nach Android-Version und Gerätekonfiguration ist eine Systembestätigung oder die Berechtigung „Unbekannte Apps installieren“ erforderlich. Auf iOS die geprüfte IPA in Dateien sichern und in AltStore Classic über My Apps → + mit demselben Apple-Konto signieren und als Update installieren. Für das private GitHub-Repository benötigen mobile Geräte einen kurzlebigen Fine-grained Token mit Contents-Leserecht für dieses Repo.
 
-Bei jedem mobilen Release die Buildnummer in release.json erhöhen und python scripts/release_version.py ausführen. Native Konstanten und Paketmetadaten werden gemeinsam erzeugt. Die APK als Dado-Player-arm64-debug.apk mit Asset-Label android-build-<versionCode>, die IPA als Dado-Player-unsigned.ipa mit ios-build-<CFBundleVersion> veröffentlichen. Der Updater prüft Buildnummer, Dateigröße und den SHA-256-Digest von GitHub.
+Für Samsung am eingerichteten Entwickler-PC `./SmartTV/client/deploy.ps1 -FromGitHub` ausführen. Mit `-Tizen5` und `-TvIp` lässt sich das Paket für einen älteren autorisierten Fernseher auswählen. Der Befehl lädt das signierte WGT, prüft Größe und SHA-256 und installiert es über Tizen Studio. Das Paket muss zum DUID des Fernsehers passen.
+
+Vor jedem Release die Buildnummern der betroffenen Plattformen in `release.json` erhöhen, `python scripts/release_version.py` ausführen und die Pakete bauen. Anschließend `python packaging/organize_releases.py` ausführen und die kanonischen Dateien im GitHub-Release `vX.Y.Z-beta` oder `vX.Y.Z` mit den jeweiligen `assetLabel`-Werten aus `Releases/AKTUELL.json` veröffentlichen. Die Updater erwarten diese Labels und prüfen Buildnummer, Dateigröße und SHA-256. Gleichbleibende Versionsnummern sind mit einer höheren Buildnummer möglich.
 
 ## D7-Oberfläche und Wiedergabe
 

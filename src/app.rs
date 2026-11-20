@@ -4107,7 +4107,10 @@ mod tests {
         app.active_profile = Some(Profile::new("Desktop fixture", ProfileKind::M3u));
         app.view = View::Live;
 
-        for (width, height, expected_width) in [(1920.0, 1080.0, 640.0), (1280.0, 420.0, 359.0)] {
+        let shared_width = crate::ui::desktop::appearance().live_preview_width;
+        for (width, height, expected_width) in
+            [(1920.0, 1080.0, shared_width), (1280.0, 420.0, 396.0)]
+        {
             let ctx = egui::Context::default();
             crate::fonts::install(&ctx);
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));

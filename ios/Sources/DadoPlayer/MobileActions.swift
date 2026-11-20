@@ -90,11 +90,13 @@ public func copyDeviceAddress(_ address: UnsafePointer<CChar>) {
 public func mobileUpdate(_ install: Int32) {
     DispatchQueue.main.async {
         if install == 0 {
-            UIApplication.shared.open(URL(string: "https://github.com/tariktech7/dado-player/releases/latest")!)
+            UIApplication.shared.open(URL(string: "https://github.com/tariktech7/dado-player/releases")!)
             return
         }
-        guard let root = presentingController() else { return }
+        guard UIApplication.shared.applicationState == .active,
+              let root = presentingController(), !(root is UIActivityViewController) else { return }
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("Dado-Player.ipa")
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
         let share = UIActivityViewController(activityItems: [file], applicationActivities: nil)
         if let pop = share.popoverPresentationController {
             pop.sourceView = root.view

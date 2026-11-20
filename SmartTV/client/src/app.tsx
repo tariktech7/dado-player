@@ -27,6 +27,7 @@ import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
 import playbackLanguages from "../../../shared/playback-languages.json" with { type: "json" };
 import settingsSections from "../../../shared/settings-sections.json" with { type: "json" };
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
+import releaseInfo from '../../../release.json' with { type: 'json' };
 import { Home } from "./home";
 import {licenseClient} from './licensing';
 import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
@@ -52,6 +53,22 @@ import shellAppearance,{installShellAppearance} from './shell-appearance';
 installShellAppearance();
 
 type RefreshStatus = "idle" | "loading" | "success" | "error";
+
+function ShortcutLegend({t, player = false}: {
+  t: (de: string, en: string) => string;
+  player?: boolean;
+}) {
+  return (
+    <ul class="shortcut-legend" aria-label={t("Farbtasten", "Color buttons")}>
+      {appearance.remoteShortcuts.map(({key, color, de, en, playerDe, playerEn}) => (
+        <li key={key}>
+          <span class="shortcut-dot" style={{backgroundColor: color}} aria-hidden="true" />
+          {player && playerDe && playerEn ? t(playerDe, playerEn) : t(de, en)}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function RailIcon({kind}: {kind: "settings" | "refresh" | "success" | "error"}) {
   return <svg class={kind} aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -230,7 +247,7 @@ function App() {
     [playerOptions, setPlayerOptions] = useState<"options" | "aspect" | null>(null),
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
-    [updateUrl, setUpdateUrl] = useState("");
+    [checkingUpdate, setCheckingUpdate] = useState(false);
   const [, repaint] = useState(0),
     playerRef = useRef<Player | null>(null),
     providerRef = useRef<Provider | null>(null),
@@ -1037,26 +1054,38 @@ function App() {
       </section>
     );
   const checkUpdates = async () => {
-    setUpdate("Version wird geprüft …");
+    setCheckingUpdate(true);
+    setUpdate(t("Version wird geprüft …", "Checking for updates …"));
     try {
       const r = await fetch(
-        "https://api.github.com/repos/tariktech7/dado-player/releases/latest",
+        "https://api.github.com/repos/tariktech7/dado-player/releases?per_page=30",
       );
-      if (!r.ok) throw 0;
-      const data = await r.json();
-      const asset = data.assets?.find((a: any) =>
-        /^Dado-Player-Tizen-.*\.wgt$/.test(a.name),
-      );
-      setUpdateUrl(data.html_url);
+      if (!r.ok) throw new Error("GitHub release unavailable");
+      const releases: {draft: boolean; tag_name: string; assets: {name: string; label: string | null}[]}[] = await r.json();
+      const version = (value: string) => value.split(".").map(Number);
+      const current = version(APP_VERSION);
+      const isCurrentOrNewer = (value: string) => {
+        const candidate = version(value);
+        const difference = candidate.map((value, index) => value - current[index]).find(value => value !== 0);
+        return difference === undefined || difference > 0;
+      };
+      const updateAvailable = releases.some(release => {
+        const tag = /^v(\d+\.\d+\.\d+)(?:-beta)?$/.exec(release.tag_name);
+        return !release.draft && !!tag && isCurrentOrNewer(tag[1]) && release.assets.some(asset => {
+          const label = /^tizen-build-(\d+)$/.exec(asset.label || "");
+          return asset.name === `Dado-Player-Tizen-${tag[1]}.wgt` && !!label && Number(label[1]) > releaseInfo.tizenBuild;
+        });
+      });
       setUpdate(
-        asset
-          ? `Verfügbar: ${asset.name}. Tizen-Pakete müssen über den PC für diesen TV signiert und installiert werden.`
-          : "Kein neueres Tizen-Paket veröffentlicht.",
+        updateAvailable
+          ? t("Update verfügbar. Installiere es über den verbundenen PC.", "Update available. Install it from the connected PC.")
+          : t("Du verwendest die aktuelle Version.", "You are using the current version."),
       );
     } catch {
-      setUpdate(
-        "GitHub ist nicht erreichbar oder benötigt Zugriff auf das private Repository. Update über den PC prüfen.",
-      );
+      setUpdate(t("GitHub-Zugriff fehlt. Auf dem verbundenen PC lässt sich das private Release abrufen und installieren.",
+        "GitHub access is unavailable. Get and install the private release from the connected PC."));
+    } finally {
+      setCheckingUpdate(false);
     }
   };
   const choose = (
@@ -1190,8 +1219,8 @@ function App() {
           <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
         case "updates": return <>
-          <button onClick={() => void checkUpdates()}>
-            GitHub-Update prüfen
+          <button disabled={checkingUpdate} onClick={() => void checkUpdates()}>
+            {t("GitHub-Update prüfen", "Check for GitHub updates")}
           </button>
           <button
             onClick={() =>
@@ -1211,10 +1240,9 @@ function App() {
             Integriertes Testvideo abspielen
           </button>
           {update && <p role="status">{update}</p>}
-          {updateUrl && (
-            <p class="muted">github.com/tariktech7/dado-player/releases</p>
-          )}
-          <p class="muted">{APP_VERSION} · Tizen 6.5+ · D7</p>
+          <p class="muted">{t("Samsung installiert signierte Updates für diesen TV über den verbundenen PC.",
+            "Samsung installs signed updates for this TV from the connected PC.")}</p>
+          <p class="muted">{APP_VERSION} · Build {releaseInfo.tizenBuild} · D7</p>
         </>;
         case "license": return <>
           <p><strong>{license.text}</strong></p>
@@ -2002,6 +2030,7 @@ function App() {
               </main>
             )}
           </div>
+          {!full && <ShortcutLegend t={t} />}
           {editing && modal("Profil hinzufügen", profileForm())}
           {full && preview && (
             <div
@@ -2070,6 +2099,7 @@ function App() {
                   ))}
                 </div>
               )}
+              {controlsVisible && <ShortcutLegend t={t} player />}
               <div class="player-controls glass">
                 <div class="transport">
                   <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
