@@ -1237,6 +1237,9 @@ hr {
   font-size: 26px;
   margin-bottom: 16px;
 }
+.home-primary .card-rail {
+  contain: layout paint;
+}
 .card-rail > span {
   flex: 0 0 auto;
 }
@@ -1252,7 +1255,10 @@ hr {
 
 /* Catalogue v2: compact navigation, wider categories and virtual poster rows. */
 .shell {
-  --nav-width: var(--navigation-expanded, 276px);
+  --edge-left: 36px;
+  --nav-expanded: calc(var(--navigation-expanded, 276px) + 50px);
+  --nav-width: var(--nav-expanded);
+  padding-left: var(--edge-left);
   grid-template-columns: var(--nav-width) minmax(0, 1fr);
   /* Width changes once. navigation-motion.ts animates only transforms. */
 }
@@ -1267,8 +1273,8 @@ hr {
   column-gap: 24px;
 }
 .live-shell.with-preview {
-  padding-right: 48px;
-  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) var(--live-preview-width, 640px);
+  padding-right: 32px;
+  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) calc(var(--live-preview-width, 640px) + 72px);
 }
 .navigation .nav-label {
   width: auto;
@@ -1294,12 +1300,13 @@ hr {
 }
 .navigation:before {
   right: auto;
-  width: 382px;
+  left: calc(0px - var(--edge-left));
+  width: calc(var(--nav-expanded) + var(--edge-left) + 10px);
   transform-origin: left center;
   transition: transform 220ms cubic-bezier(.22,1,.36,1);
   will-change: transform;
 }
-.nav-collapsed .navigation:before { transform: scaleX(0.486911); }
+.nav-collapsed .navigation:before { transform: scaleX(.33871); }
 .nav-collapsed .navigation nav button {
   justify-content: center;
   padding: 12px;
@@ -1642,7 +1649,8 @@ hr {
 .navigation nav button > span:first-child svg { width: 30px; height: 30px; display: block; }
 .navigation .refresh-library .nav-label {
   max-width: calc(100% - 78px);
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.05;
 }
 .refresh-icon {

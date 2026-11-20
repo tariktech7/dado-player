@@ -631,11 +631,17 @@ test("Full HD and 4K keep aligned headings, ten rows, side-by-side EPG and conta
         dy: a.y - b.y,
         fit: getComputedStyle(document.querySelector(".logo img")!).objectFit,
         dom: document.querySelectorAll(".channel").length,
+        left: rect(".navigation").left / (innerWidth / 1920),
+        previewWidth: rect(".preview-surface").width / (innerWidth / 1920),
+        previewRight: (innerWidth - rect(".preview-surface").right) / (innerWidth / 1920),
       };
     });
     expect(Math.abs(geometry.brand - geometry.cat)).toBeLessThan(2);
     expect(Math.abs(geometry.cat - geometry.title)).toBeLessThan(2);
     expect(geometry.visible).toBeGreaterThanOrEqual(10);
+    expect(geometry.left).toBeCloseTo(36, 0);
+    expect(geometry.previewWidth).toBeGreaterThanOrEqual(710);
+    expect(geometry.previewRight).toBeCloseTo(32, 0);
     expect(geometry.gap).toBeGreaterThanOrEqual(47);
     expect(geometry.dy).toBe(0);
     expect(geometry.fit).toBe("contain");
@@ -1033,7 +1039,7 @@ test("refresh in the left rail reloads the open library and keeps the live previ
   await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
   const navLabel = page.getByRole("button", {name: "▣ Live TV", exact: true}).locator(".nav-label");
   await expect(refresh.locator(".nav-label")).toHaveCSS("font-size", await navLabel.evaluate(el => getComputedStyle(el).fontSize));
-  expect(await refresh.locator(".nav-label").evaluate(el => el.scrollWidth <= el.clientWidth && el.clientHeight <= el.parentElement!.clientHeight)).toBe(true);
+  expect(await refresh.locator(".nav-label").evaluate(el => el.scrollWidth <= el.clientWidth && el.clientHeight <= Math.ceil(parseFloat(getComputedStyle(el).lineHeight)) + 1)).toBe(true);
   await page.keyboard.press("Enter");
   await expect(refresh).toHaveAttribute("data-refresh-status", "loading");
   await expect(refresh.locator(".refresh-icon .refresh")).toHaveCSS("animation-name", "refresh-spin");
@@ -1120,9 +1126,22 @@ test("all home rails scroll horizontally with remote focus and both menus split 
     })
     .locator(".card-rail");
   await rail.locator("button").first().focus();
+  await page.evaluate(() => {
+    const native = HTMLElement.prototype.getBoundingClientRect;
+    (window as any).homeCardReads = 0;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.matches(".home-primary .media-card")) (window as any).homeCardReads++;
+      return native.call(this);
+    };
+  });
   for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowRight");
   await expect(rail.locator("button").nth(7)).toBeFocused();
-  expect(await rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator(".home-section").filter({hasText:"Live-TV entdecken"}).locator("button").first()).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(rail.locator("button").nth(7)).toBeFocused();
+  expect(await page.evaluate(() => (window as any).homeCardReads)).toBeLessThan(45);
+  await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
   await page.locator(".shell").evaluate(async el => {
     await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
   });

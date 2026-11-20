@@ -1,5 +1,5 @@
 import { ComponentChildren } from "preact";
-import { Catalog, Item, Watched } from "./types";
+import { Catalog, Item, Watched, itemKey } from "./types";
 
 export function Home({
   name,
@@ -47,6 +47,7 @@ export function Home({
               </p>
               <button
                 class="primary"
+                data-focus-key={itemKey(featured.item)}
                 onClick={() => play(featured.item, featured.position)}
               >
                 ▶ {featured.position > 1 ? "Fortsetzen" : "Abspielen"}
@@ -100,7 +101,7 @@ export function Home({
         {favorites.length ? (
           <div class="favorite-programs">
             {favorites.slice(0, 30).map((item) => (
-              <button onClick={() => play(item, 0)}>
+              <button key={itemKey(item)} data-focus-key={itemKey(item)} onClick={() => play(item, 0)}>
                 {logo(item)}
                 <span>
                   <strong>{item.name}</strong>

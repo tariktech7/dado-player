@@ -58,10 +58,13 @@ export function focusables(root: ParentNode = document): HTMLElement[] {
   });
 }
 const zoneMemory = new Map<string, { key: string; index: number }>();
+const homeRowMemory = new WeakMap<Element, HTMLElement>();
 export function resetFocusMemory() {
   zoneMemory.clear();
 }
 export function rememberFocus(target: HTMLElement) {
+  const homeRow = target.closest(".home-primary > section");
+  if (homeRow) homeRowMemory.set(homeRow, target);
   const zone = target.closest<HTMLElement>("[data-focus-zone]");
   if (!zone) return;
   const scope =
@@ -112,9 +115,15 @@ export function moveFocus(
     ? current.closest<HTMLElement>(".card-rail,.season-buttons,.kind-tabs")
     : null;
   if (rail) {
-    const controls = focusables(rail),
-      index = controls.indexOf(current),
-      next = controls[index + sign];
+    let next: HTMLElement | undefined;
+    if (rail.matches(".home-primary .card-rail")) {
+      const card = current.parentElement;
+      const adjacent = sign < 0 ? card?.previousElementSibling : card?.nextElementSibling;
+      next = adjacent?.querySelector<HTMLElement>(selector) ?? undefined;
+    } else {
+      const controls = focusables(rail);
+      next = controls[controls.indexOf(current) + sign];
+    }
     if (next) {
       next.focus({ preventScroll: true });
       scrollFocused(next);
@@ -141,7 +150,23 @@ export function moveFocus(
     if(!horizontal)return;
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
-  if(!horizontal && current.parentElement?.matches('.category-list,.episode-list,.channel-list')) {
+  const homeRow = !horizontal && current.closest(".home-primary > section");
+  if (homeRow) {
+    for (let row = sign < 0 ? homeRow.previousElementSibling : homeRow.nextElementSibling;
+      row; row = sign < 0 ? row.previousElementSibling : row.nextElementSibling) {
+      const remembered = homeRowMemory.get(row);
+      const target = remembered && row.contains(remembered)
+        ? remembered
+        : row.querySelector<HTMLElement>(selector);
+      if (target) {
+        target.focus({preventScroll: true});
+        scrollFocused(target);
+        break;
+      }
+    }
+    return;
+  }
+  if(!horizontal && current.parentElement?.matches('.category-list,.episode-list,.channel-list,.home-favorites .favorite-programs')) {
     const sibling=sign<0?current.previousElementSibling:current.nextElementSibling;
     if(sibling instanceof HTMLElement && sibling.matches(selector)) {
       sibling.focus({preventScroll:true});scrollFocused(sibling);return;
