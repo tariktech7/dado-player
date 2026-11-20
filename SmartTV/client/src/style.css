@@ -1237,6 +1237,7 @@ hr {
   font-size: 26px;
   margin-bottom: 16px;
 }
+.shell[data-focus-scope="home"] > main,
 .home-primary .card-rail {
   contain: layout paint;
 }

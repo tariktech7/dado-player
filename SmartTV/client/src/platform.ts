@@ -1,4 +1,4 @@
-import { homeScrollOffset, moveScroll, scrollDestination } from './scroll-motion';
+import { moveScroll, scrollDestination } from './scroll-motion';
 export const samsung = () =>
   typeof window !== "undefined" && !!(window as any).webapis?.avplay;
 export function registerKeys(): void {
@@ -264,7 +264,7 @@ function revealFocused(target: HTMLElement): void {
         rect = target.getBoundingClientRect(),
         scale = innerWidth / 1920,
         pad = 8 * scale;
-      const dest = scrollDestination(parent), shift = (dest.left-parent.scrollLeft+homeScrollOffset(parent).left)*scale;
+      const dest = scrollDestination(parent), shift = (dest.left-parent.scrollLeft)*scale;
       let left = dest.left;
       if (parent.querySelector(selector) === target) left = 0;
       else if (rect.left-shift < box.left + pad) left -= (box.left+pad-rect.left+shift)/scale;
@@ -291,7 +291,7 @@ function revealFocused(target: HTMLElement): void {
         rect = target.getBoundingClientRect(),
         scale = innerWidth / 1920,
         pad = 8 * scale;
-      const shift = (top-parent.scrollTop+homeScrollOffset(parent).top)*scale;
+      const shift = (top-parent.scrollTop)*scale;
       if (!atStart && rect.top-shift < box.top+pad) top -= (box.top+pad-rect.top+shift)/scale;
       else if (!atStart && rect.bottom-shift > box.bottom-pad) top += (rect.bottom-shift-box.bottom+pad)/scale;
       moveScroll(parent,scrollDestination(parent).left,top);

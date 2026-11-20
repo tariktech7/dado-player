@@ -2,51 +2,27 @@
 // Chromium's slow-start smooth-scroll animation on every remote repeat.
 type Plan = {left: number; top: number; frame: number; at: number; x: number; y: number; fx: number; fy: number};
 const plans = new WeakMap<HTMLElement, Plan>();
-type HomeMotion = { track: HTMLElement; animation: Animation; removeListeners: () => void };
-const homeMotions = new WeakMap<HTMLElement, HomeMotion>();
+type NativeHomeScroll = { left: number; top: number; timer: ReturnType<typeof setTimeout>; removeListeners: () => void };
+const nativeHomeScrolls = new WeakMap<HTMLElement, NativeHomeScroll>();
 
-export function homeScrollOffset(el: HTMLElement) {
-  const motion = homeMotions.get(el);
-  if (!motion) return {left: 0, top: 0};
-  const matrix = /^matrix(3d)?\((.+)\)$/.exec(getComputedStyle(motion.track).transform);
-  if (!matrix) return {left: 0, top: 0};
-  const index = matrix[1] ? 12 : 4;
-  const values = matrix[2].split(",");
-  return {left: Number(values[index]) || 0, top: Number(values[index + 1]) || 0};
-}
-
-function moveHomeScroll(el: HTMLElement, track: HTMLElement, left: number, top: number) {
-  if (Math.abs(el.scrollLeft - left) < .5 && Math.abs(el.scrollTop - top) < .5) return;
-  const previousLeft = el.scrollLeft, previousTop = el.scrollTop;
-  const offset = homeScrollOffset(el);
+function moveHomeScroll(el: HTMLElement, left: number, top: number) {
+  const previous = scrollDestination(el);
+  if (Math.abs(previous.left - left) < .5 && Math.abs(previous.top - top) < .5) return;
   cancelScroll(el);
-  el.scrollTo({left, top, behavior: "auto"});
-  const x = el.scrollLeft - previousLeft + offset.left;
-  const y = el.scrollTop - previousTop + offset.top;
-  if (Math.abs(x) < .5 && Math.abs(y) < .5) return;
-
-  // Give the compositor the motion. Scroll position and hit targets are
-  // committed once, even when a held direction key retargets the animation.
-  const animation = track.animate(
-    [{transform: `translate3d(${x}px,${y}px,0)`}, {transform: "translate3d(0,0,0)"}],
-    {duration: 200, easing: "cubic-bezier(.22,1,.36,1)"},
-  );
+  // The browser animates the actual scroll port, keeping its clipping, hit
+  // targets and nested rows in sync even when the remote keeps retargeting.
+  el.scrollTo({left, top, behavior: "smooth"});
   const stop = () => cancelScroll(el);
   el.addEventListener("wheel", stop, {passive: true});
-  el.addEventListener("pointerdown", stop, {passive: true});
+  el.addEventListener("touchstart", stop, {passive: true});
   const removeListeners = () => {
     el.removeEventListener("wheel", stop);
-    el.removeEventListener("pointerdown", stop);
+    el.removeEventListener("touchstart", stop);
   };
-  homeMotions.set(el, {track, animation, removeListeners});
-  void animation.finished.then(() => {
-    if (homeMotions.get(el)?.animation !== animation) return;
-    homeMotions.delete(el);
-    removeListeners();
-  }, () => {});
+  nativeHomeScrolls.set(el, {left, top, timer: setTimeout(stop, 500), removeListeners});
 }
 export function scrollDestination(el: HTMLElement) {
-  const plan = plans.get(el);
+  const plan = nativeHomeScrolls.get(el) ?? plans.get(el);
   return plan || {left:el.scrollLeft, top:el.scrollTop};
 }
 export function moveScroll(el: HTMLElement, left: number, top: number) {
@@ -57,9 +33,8 @@ export function moveScroll(el: HTMLElement, left: number, top: number) {
     cancelScroll(el);el.scrollTo({left,top,behavior:'auto'});return;
   }
   const track = el.firstElementChild;
-  if (track && track instanceof HTMLElement && typeof track.animate === "function" &&
-      (track.classList.contains("home-dashboard") || track.classList.contains("home-rail-track"))) {
-    moveHomeScroll(el, track, left, top);
+  if (track && (track.classList.contains("home-dashboard") || track.classList.contains("home-rail-track"))) {
+    moveHomeScroll(el, left, top);
     return;
   }
   if(old){old.left=left;old.top=top;return;}
@@ -86,11 +61,11 @@ export function moveScroll(el: HTMLElement, left: number, top: number) {
   plan.frame=requestAnimationFrame(tick);
 }
 export function cancelScroll(el:HTMLElement) {
-  const motion = homeMotions.get(el);
-  if (motion) {
-    homeMotions.delete(el);
-    motion.removeListeners();
-    motion.animation.cancel();
+  const native = nativeHomeScrolls.get(el);
+  if (native) {
+    nativeHomeScrolls.delete(el);
+    clearTimeout(native.timer);
+    native.removeListeners();
   }
   const old=plans.get(el);if(old)cancelAnimationFrame(old.frame);
   plans.delete(el);

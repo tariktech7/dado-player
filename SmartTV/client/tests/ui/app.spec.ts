@@ -1131,10 +1131,12 @@ test("all home rails scroll horizontally with remote focus and both menus split 
     const native = HTMLElement.prototype.getBoundingClientRect;
     (window as any).homeCardReads = 0;
     (window as any).homeScrollWrites = 0;
+    (window as any).homeNativeScrollWrites = 0;
     const scrollTo = HTMLElement.prototype.scrollTo;
     HTMLElement.prototype.scrollTo = function (...args: any[]) {
       if (this.matches(".home-primary .card-rail,.shell[data-focus-scope='home'] > main")) {
         (window as any).homeScrollWrites++;
+        if (args[0]?.behavior === "smooth") (window as any).homeNativeScrollWrites++;
       }
       Reflect.apply(scrollTo, this, args);
     };
@@ -1151,7 +1153,15 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   await expect(rail.locator("button").nth(7)).toBeFocused();
   expect(await page.evaluate(() => (window as any).homeCardReads)).toBeLessThan(45);
   await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
-  expect(await page.evaluate(() => (window as any).homeScrollWrites)).toBeLessThanOrEqual(18);
+  const native = await page.evaluate(() => ({
+    total: (window as any).homeScrollWrites,
+    smooth: (window as any).homeNativeScrollWrites,
+    transformed: [...document.querySelectorAll(".home-dashboard,.home-rail-track")].some(el => getComputedStyle(el).transform !== "none"),
+  }));
+  expect(native.total).toBeGreaterThan(0);
+  expect(native.total).toBeLessThanOrEqual(18);
+  expect(native.smooth).toBe(native.total);
+  expect(native.transformed).toBe(false);
   await page.locator(".shell").evaluate(async el => {
     await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
   });
@@ -1161,7 +1171,9 @@ test("all home rails scroll horizontally with remote focus and both menus split 
     const last=await rail.locator('button').nth(7).boundingBox(),box=await rail.boundingBox();
     return last!.x+last!.width-box!.x-box!.width;
   }).toBeLessThanOrEqual(1);
-  for (let i = 0; i < 7; i++) await page.keyboard.press("ArrowLeft");
+  for (let i = 0; i < 7; i++) await page.keyboard.down("ArrowLeft");
+  await page.keyboard.up("ArrowLeft");
+  await expect(rail.locator("button").first()).toBeFocused();
   await expect.poll(() => rail.evaluate((e) => e.scrollLeft)).toBe(0);
   await expect(page.locator(".home-hero")).toBeVisible();
   await expect(page.locator(".home-favorites")).toContainText(
