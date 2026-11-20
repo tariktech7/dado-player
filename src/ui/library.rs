@@ -483,70 +483,96 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         app.selected_movie
     };
     let poster_scope = ui.id().with("poster-control");
+    let returning_movie = if series {
+        None
+    } else {
+        app.desktop_return_item
+            .as_deref()
+            .and_then(|key| key.strip_prefix("vod:"))
+            .and_then(|id| id.parse().ok())
+    };
     let mut choose = None;
-    egui::ScrollArea::vertical()
+    let mut scroll = egui::ScrollArea::vertical()
         .id_source(("posters", &cat, &app.catalog_queries[usize::from(series)]))
-        .auto_shrink([false, false])
-        .show_rows(ui, row_h, rows.len().div_ceil(cols), |ui, range| {
-            ui.spacing_mut().item_spacing.x = gap;
-            for row in range {
-                ui.horizontal_top(|ui| {
-                    for column in 0..cols {
-                        let Some(index) = rows.get(row * cols + column) else {
-                            break;
-                        };
-                        let Some(entry) = entry_at(app, series, *index) else {
-                            continue;
-                        };
-                        ui.push_id(("poster", entry.id), |ui| {
-                            let (rect, _) =
-                                ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
-                            let response =
-                                ui.interact(rect, poster_scope.with(entry.id), Sense::click());
-                            if ui.is_rect_visible(rect) {
-                                ui.painter().rect_filled(
+        .auto_shrink([false, false]);
+    if let Some(index) = returning_movie.and_then(|id| {
+        rows.iter()
+            .position(|&index| app.library.movies[index].id == id)
+    }) {
+        let stride = row_h + ui.spacing().item_spacing.y;
+        let y = (index / cols) as f32 * stride;
+        scroll = scroll.vertical_scroll_offset((y - ui.available_height() * 0.5).max(0.0));
+    }
+    scroll.show_rows(ui, row_h, rows.len().div_ceil(cols), |ui, range| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for row in range {
+            ui.horizontal_top(|ui| {
+                for column in 0..cols {
+                    let Some(index) = rows.get(row * cols + column) else {
+                        break;
+                    };
+                    let Some(entry) = entry_at(app, series, *index) else {
+                        continue;
+                    };
+                    ui.push_id(("poster", entry.id), |ui| {
+                        let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
+                        let response =
+                            ui.interact(rect, poster_scope.with(entry.id), Sense::click());
+                        if returning_movie == Some(entry.id) {
+                            response.request_focus();
+                            app.desktop_return_item = None;
+                        }
+                        if ui.is_rect_visible(rect) {
+                            ui.painter().rect_filled(
+                                rect.shrink(1.0),
+                                10.0,
+                                if selected == Some(entry.id) {
+                                    crate::theme::selection_surface(ui)
+                                } else {
+                                    ui.visuals().faint_bg_color
+                                },
+                            );
+                            if response.has_focus() {
+                                ui.painter().rect_stroke(
                                     rect.shrink(1.0),
                                     10.0,
-                                    if selected == Some(entry.id) {
-                                        crate::theme::selection_surface(ui)
-                                    } else {
-                                        ui.visuals().faint_bg_color
-                                    },
-                                );
-                                let art = Rect::from_min_size(
-                                    rect.min + vec2(4.0, 4.0),
-                                    vec2((width - 8.0).max(1.0), art_h - 4.0),
-                                );
-                                components::thumb(
-                                    app,
-                                    ui,
-                                    &format!("poster:{}:{}", series, entry.id),
-                                    &entry.cover,
-                                    art,
-                                    &entry.name,
-                                );
-                                let mut job = egui::text::LayoutJob::simple(
-                                    entry.name.clone(),
-                                    tokens::medium(if tv { 11.0 } else { 13.0 }),
-                                    ui.visuals().text_color(),
-                                    (width - 8.0).max(1.0),
-                                );
-                                job.wrap.max_rows = 2;
-                                let galley = ui.fonts(|f| f.layout_job(job));
-                                ui.painter().galley(
-                                    pos2(rect.left() + 4.0, rect.top() + art_h + 4.0),
-                                    galley,
-                                    ui.visuals().text_color(),
+                                    egui::Stroke::new(2.0_f32, crate::theme::accent(ui)),
                                 );
                             }
-                            if hit(ui, &response, tv) {
-                                choose = Some(entry.id);
-                            }
-                        });
-                    }
-                });
-            }
-        });
+                            let art = Rect::from_min_size(
+                                rect.min + vec2(4.0, 4.0),
+                                vec2((width - 8.0).max(1.0), art_h - 4.0),
+                            );
+                            components::thumb(
+                                app,
+                                ui,
+                                &format!("poster:{}:{}", series, entry.id),
+                                &entry.cover,
+                                art,
+                                &entry.name,
+                            );
+                            let mut job = egui::text::LayoutJob::simple(
+                                entry.name.clone(),
+                                tokens::medium(if tv { 11.0 } else { 13.0 }),
+                                ui.visuals().text_color(),
+                                (width - 8.0).max(1.0),
+                            );
+                            job.wrap.max_rows = 2;
+                            let galley = ui.fonts(|f| f.layout_job(job));
+                            ui.painter().galley(
+                                pos2(rect.left() + 4.0, rect.top() + art_h + 4.0),
+                                galley,
+                                ui.visuals().text_color(),
+                            );
+                        }
+                        if hit(ui, &response, tv) {
+                            choose = Some(entry.id);
+                        }
+                    });
+                }
+            });
+        }
+    });
     if rows.is_empty() {
         ui.label("Keine passenden Titel");
     }
@@ -758,6 +784,15 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32, touch: bool) {
                 }
             });
         });
+    let returning_episode = app.desktop_return_item.as_deref().and_then(|key| {
+        let (series, episode) = key.strip_prefix("ep:")?.split_once(':')?;
+        (series.parse::<u32>().ok()? == sid)
+            .then(|| episode.parse::<u32>().ok())
+            .flatten()
+    });
+    if let Some(episode) = episodes.iter().find(|e| Some(e.id) == returning_episode) {
+        app.series_season = episode.season;
+    }
     let season = app.series_season;
     let rows: Vec<_> = episodes.iter().filter(|e| e.season == season).collect();
     let mut play = None;
@@ -795,7 +830,11 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32, touch: bool) {
                 ],
                 egui::SelectableLabel::new(target_id == Some(e.id), format!("Folge {}", e.episode)),
             );
-            if scroll_to == Some(e.id) {
+            if returning_episode == Some(e.id) {
+                r.request_focus();
+                app.desktop_return_item = None;
+                ui.scroll_to_rect(r.rect, Some(Align::Center));
+            } else if scroll_to == Some(e.id) {
                 ui.scroll_to_rect(r.rect, Some(Align::Min));
             }
             if hit(ui, &r, tv) {

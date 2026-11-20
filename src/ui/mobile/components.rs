@@ -1133,6 +1133,7 @@ pub fn field(
     let eye_w = if kb == Kb::Password { TOUCH } else { 0.0 };
     let text_w = (ui.available_width() - eye_w).max(48.0);
     let mut te = egui::TextEdit::singleline(text)
+        .id(ui.id().with(("mobile-text-field", label, hint)))
         .frame(false)
         .hint_text(hint)
         .desired_width(f32::INFINITY);
@@ -1185,7 +1186,7 @@ pub fn field(
                 resp.rect.center().y + TOUCH * 0.5,
             ),
         );
-        let eye_resp = ui.interact(eye_rect, ui.id().with("password_toggle"), Sense::click());
+        let eye_resp = ui.interact(eye_rect, resp.id.with("password_toggle"), Sense::click());
         let pill = Rect::from_center_size(eye_rect.center(), vec2(TOUCH - 8.0, TOUCH - 8.0));
         ui.painter()
             .rect_filled(pill, Rounding::same(10.0), accent_soft(ui));

@@ -19,7 +19,8 @@ private final class InlineEditor: NSObject, UITextFieldDelegate {
             return
         }
         guard let root = presentingController()?.view else { return }
-        if mode == 1 && (self.id != id || field == nil) {
+        let needsField = self.id != id || field == nil
+        if needsField {
             close()
             self.id = id
             let input = UITextField()
@@ -43,7 +44,9 @@ private final class InlineEditor: NSObject, UITextFieldDelegate {
         if input.isSecureTextEntry != (kind == 2) { input.isSecureTextEntry = kind == 2 }
         input.layer.cornerRadius = 8
         input.frame = rect
-        if mode == 1 { input.becomeFirstResponder() }
+        if (needsField || mode == 1) && !input.isFirstResponder {
+            input.becomeFirstResponder()
+        }
     }
 
     @objc private func changed() {
@@ -73,6 +76,14 @@ public func editField(_ id: UInt64, _ title: UnsafePointer<CChar>, _ initial: Un
                       _ x: Double, _ y: Double, _ w: Double, _ h: Double, _ mode: Int32, _ dark: Int32) {
     InlineEditor.shared.update(id: id, label: String(cString: title), value: String(cString: initial), kind: kind,
                               rect: CGRect(x: x, y: y, width: w, height: h), mode: mode, dark: dark != 0)
+}
+
+@_cdecl("dado_host_copy_device_address")
+public func copyDeviceAddress(_ address: UnsafePointer<CChar>) {
+    let value = String(cString: address)
+    DispatchQueue.main.async {
+        UIPasteboard.general.string = value
+    }
 }
 
 @_cdecl("dado_host_mobile_update")

@@ -79,6 +79,17 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
 
     private static GameActivity sSelf;
 
+    public static boolean copyDeviceAddress(String address) {
+        GameActivity activity = sSelf;
+        if (activity == null) return false;
+        android.content.ClipboardManager clipboard =
+                activity.getSystemService(android.content.ClipboardManager.class);
+        if (clipboard == null) return false;
+        activity.runOnUiThread(() -> clipboard.setPrimaryClip(
+                android.content.ClipData.newPlainText("Dado Player", address)));
+        return true;
+    }
+
     public static int mobileUpdate(int install) {
         GameActivity activity = sSelf;
         if (activity == null) return 0;

@@ -123,6 +123,7 @@ void dado_app_edited(uint64_t id, const char *value);
 void dado_host_edit(uint64_t id, const char *title, const char *value, int32_t kind, double x, double y, double w, double h, int32_t mode, int32_t dark);
 int32_t dado_host_error_code(void);
 void dado_host_mobile_update(int32_t install);
+void dado_host_copy_device_address(const char *address);
 void dado_host_motion_active(int32_t active);
 
 #ifdef __cplusplus

@@ -380,6 +380,13 @@ fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Re
             ui.visuals().faint_bg_color
         };
         ui.painter().rect_filled(rect.shrink(2.0), 12.0, color);
+        if response.has_focus() {
+            ui.painter().rect_stroke(
+                rect.shrink(2.0),
+                12.0,
+                egui::Stroke::new(2.0_f32, theme::accent(ui)),
+            );
+        }
     }
     response
 }
@@ -631,6 +638,10 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 let id = app.library.channels[index].id;
                 let key = format!("live:{id}");
                 let r = row(ui, ("channel", id), row_h, app.is_previewing(&key));
+                if desktop && app.desktop_return_item.as_deref() == Some(key.as_str()) {
+                    r.request_focus();
+                    app.desktop_return_item = None;
+                }
                 if app.scroll_to == Some(id) {
                     ui.scroll_to_rect(r.rect, Some(Align::Center));
                     app.scroll_to = None;

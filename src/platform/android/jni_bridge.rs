@@ -721,6 +721,29 @@ pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativeOnTvDevice(
     TV_DEVICE.store(is_tv != 0, Ordering::Relaxed);
 }
 
+pub fn copy_device_address(address: &str) -> anyhow::Result<()> {
+    use anyhow::{ensure, Context};
+    let app = super::entry::app_handle().context("Android-Activity fehlt")?;
+    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }?;
+    let mut env = vm.attach_current_thread()?;
+    let class = ACTIVITY_CLASS.get().context("Activity-Klasse fehlt")?;
+    let result = env.with_local_frame(2, |env| -> jni::errors::Result<bool> {
+        let value = jni::objects::JObject::from(env.new_string(address)?);
+        env.call_static_method(
+            class,
+            "copyDeviceAddress",
+            "(Ljava/lang/String;)Z",
+            &[jni::objects::JValue::Object(&value)],
+        )?
+        .z()
+    });
+    if result.is_err() {
+        let _ = env.exception_clear();
+    }
+    ensure!(result?, "Zwischenablage nicht verfügbar");
+    Ok(())
+}
+
 pub fn mobile_update(install: bool) -> anyhow::Result<()> {
     use anyhow::{ensure, Context};
     let app = super::entry::app_handle().context("Android-Activity fehlt")?;

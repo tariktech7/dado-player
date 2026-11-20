@@ -539,7 +539,9 @@ fn follow_focus(
             (viewport.max.y - 8.0).max(viewport.min.y + 8.0),
         ),
     );
-    if visible.contains_rect(target) {
+    if ui.input(|i| i.pointer.any_down())
+        || (visible.top() <= target.top() && target.bottom() <= visible.bottom())
+    {
         return;
     }
     // Re-issued on every frame where the field is not fully visible. egui

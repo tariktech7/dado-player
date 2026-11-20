@@ -684,6 +684,38 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     "Sender auswählen",
   );
 });
+test("Back restores focus to the watched channel, movie and episode", async ({ page }) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  const row = page.locator(".channel").first();
+  await row.click();
+  await row.click();
+  const adjacent = page.locator('.channel[data-channel="2"]');
+  await page.keyboard.press("ArrowUp");
+  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await page.keyboard.press("Escape");
+  await expect(adjacent).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator('.channel[data-channel="3"]')).toBeFocused();
+
+  await page.locator(".navigation").getByRole("button", { name: /Filme/ }).click();
+  const movie = page.locator(".catalog-poster").filter({ hasText: "Demo Film" });
+  await movie.click();
+  await page.locator(".catalog-details button.primary").click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(movie).toBeFocused();
+
+  await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
+  await page.getByRole("button", { name: "Demo Serie" }).click();
+  const episode = page.locator(".episode-list button").first();
+  await episode.click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(episode).toBeFocused();
+});
+
 test("favorites remain separate from history; series and settings work with remote input", async ({
   page,
 }) => {

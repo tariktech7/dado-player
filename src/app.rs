@@ -190,6 +190,9 @@ pub struct App {
     pub library: Library,
     pub view: View,
     previous_view: View,
+    #[cfg(windows)]
+    desktop_origin_focus: Option<egui::Id>,
+    pub(crate) desktop_return_item: Option<String>,
     /// "Mehr" bottom sheet of the phone UI is open.
     pub mobile_more: bool,
     /// Android/Live: channel whose expandable EPG sheet is open (None = closed).
@@ -429,6 +432,9 @@ impl App {
             library: Library::default(),
             view: View::Login,
             previous_view: View::Live,
+            #[cfg(windows)]
+            desktop_origin_focus: None,
+            desktop_return_item: None,
             mobile_more: false,
             mobile_epg_channel: None,
             tv: false,
@@ -1114,6 +1120,8 @@ impl App {
             .map(|item| item.progress_key.clone());
         let pending_resume_before_draw =
             self.pending_resume.as_ref().map(|(key, _, _)| key.clone());
+        #[cfg(windows)]
+        let returning_to_catalog = self.desktop_return_item.is_some() && self.view != View::Player;
         let mobile = crate::ui::mobile::active(ctx);
         if mobile {
             // Screen fingerprint: a new screen restarts focus at its first
@@ -1187,6 +1195,21 @@ impl App {
             crate::ui::mobile::focus::end();
         } else {
             self.draw(ctx);
+        }
+        #[cfg(windows)]
+        {
+            if view_before_draw != View::Player && self.view == View::Player {
+                self.desktop_origin_focus = ctx.memory(|m| m.focused());
+            }
+            if returning_to_catalog {
+                if self.desktop_return_item.take().is_some() {
+                    if let Some(origin) = self.desktop_origin_focus {
+                        ctx.memory_mut(|m| m.request_focus(origin));
+                    }
+                }
+                self.desktop_origin_focus = None;
+                ctx.request_repaint();
+            }
         }
         #[cfg(target_os = "ios")]
         crate::platform::ios::bridge::end_frame(ctx);
@@ -2890,6 +2913,16 @@ impl App {
         }
         self.save_user_data();
         self.reset_track_state();
+        #[cfg(windows)]
+        if let Some(item) = &self.current_play {
+            self.desktop_return_item = Some(item.progress_key.clone());
+            if self.previous_view == View::Live {
+                self.scroll_to = item
+                    .progress_key
+                    .strip_prefix("live:")
+                    .and_then(|id| id.parse().ok());
+            }
+        }
         self.current_play = None;
         self.view = self.previous_view;
         if self.fullscreen {
@@ -4614,6 +4647,40 @@ mod tests {
     }
 
     #[test]
+    fn password_keeps_focus_when_device_address_changes_login_layout() {
+        use crate::ui::mobile::components::{field, Kb};
+        let ctx = egui::Context::default();
+        let mut password = String::new();
+        let mut show_password = false;
+        let mut original = None;
+        for address_loaded in [false, true] {
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    if address_loaded {
+                        ui.label("Geräteadresse (MAC): 02:11:22:33:44:55");
+                        ui.label("Profile aktualisieren");
+                    }
+                    let response = field(
+                        ui,
+                        "Passwort",
+                        &mut password,
+                        "Passwort",
+                        Kb::Password,
+                        &mut show_password,
+                    );
+                    if let Some(id) = original {
+                        assert_eq!(response.id, id);
+                        assert!(response.has_focus());
+                    } else {
+                        response.request_focus();
+                        original = Some(response.id);
+                    }
+                });
+            });
+        }
+    }
+
+    #[test]
     fn live_keyboard_seek_preserves_the_channel_and_vertical_arrows_zap() {
         let mut app = App::test_app();
         app.load_demo();
@@ -4748,7 +4815,11 @@ mod tests {
         app.catalog_focus_play = true;
         let _ = frame(&mut app, false);
         assert!(!app.catalog_focus_play);
-        assert!(ctx.memory(|m| m.focused().is_some()));
+        let play_focus = ctx.memory(|m| m.focused()).expect("Dado play button");
+        app.desktop_return_item = Some("vod:17999".into());
+        let _ = frame(&mut app, false);
+        assert!(app.desktop_return_item.is_none());
+        assert_ne!(ctx.memory(|m| m.focused()), Some(play_focus));
         assert!(
             app.current_play.is_none(),
             "Selecting a poster focuses play, it must not start playback"

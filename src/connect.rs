@@ -389,7 +389,7 @@ pub fn show(
     rt: &tokio::runtime::Handle,
     profiles: &mut Vec<Profile>,
     tv: bool,
-    compact: bool,
+    _compact: bool,
 ) {
     state.prepare(ui.ctx(), rt, profiles);
     if clicked(
@@ -407,11 +407,23 @@ pub fn show(
     if !state.message.is_empty() && state.message != "Geräteadresse bereit." {
         ui.small(&state.message);
     }
-    if !compact && cfg!(any(target_os = "android", target_os = "ios")) {
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
         if !state.saved.address.is_empty() {
-            ui.label(format!("Geräteadresse: {}", state.saved.address));
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("Geräteadresse (MAC): {}", state.saved.address));
+                if clicked(ui, "Kopieren", true, tv) {
+                    state.message = match crate::platform::copy_device_address(&state.saved.address)
+                    {
+                        true => "Geräteadresse kopiert.".into(),
+                        false => "Geräteadresse konnte nicht kopiert werden.".into(),
+                    };
+                }
+            });
+        } else if !state.busy {
+            ui.small("Für die erste Geräteadresse online „Profile aktualisieren“ wählen.");
         }
-        if !state.saved.device_id.is_empty() {
+        if !_compact && !state.saved.device_id.is_empty() {
             ui.small(format!("Geräte-ID: {}", state.saved.device_id));
         }
     }

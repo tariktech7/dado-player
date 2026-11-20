@@ -23,6 +23,14 @@ pub fn text_focus() -> bool {
     TEXT_FOCUS.load(Ordering::Relaxed)
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn copy_device_address(address: &str) -> bool {
+    #[cfg(target_os = "android")]
+    return android::jni_bridge::copy_device_address(address).is_ok();
+    #[cfg(target_os = "ios")]
+    return ios::bridge::copy_device_address(address);
+}
+
 #[cfg(target_os = "android")]
 pub mod android;
 // `ios-check` compiles the iOS module on a non-iOS host purely for type

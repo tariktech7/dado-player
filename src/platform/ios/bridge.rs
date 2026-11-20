@@ -69,6 +69,7 @@ pub fn layout_seen() -> bool {
 
 extern "C" {
     fn dado_host_motion_active(active: i32);
+    fn dado_host_copy_device_address(address: *const c_char);
     fn dado_host_options(json: *const c_char);
     fn dado_host_native_player(enabled: i32);
     fn dado_host_tracks(buffer: *mut c_char, capacity: i32) -> i32;
@@ -104,6 +105,14 @@ extern "C" {
 /// caching incorrectly.
 pub fn attach() {
     unsafe { dado_host_attach() }
+}
+
+pub fn copy_device_address(address: &str) -> bool {
+    let Ok(address) = std::ffi::CString::new(address) else {
+        return false;
+    };
+    unsafe { dado_host_copy_device_address(address.as_ptr()) };
+    true
 }
 
 pub fn native_player(enabled: bool) {
@@ -331,8 +340,42 @@ mod native_fields {
             }
             order.1.push(resp.id);
         });
-        let r = resp.rect.intersect(ui.clip_rect());
-        let mode = if !resp.has_focus() || !r.is_positive() {
+        let finished = {
+            let mut pending = FINISHED.lock().unwrap();
+            if pending.as_ref().is_some_and(|(key, _)| *key == id) {
+                pending.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, next)) = finished {
+            if next {
+                let previous = ui
+                    .ctx()
+                    .data(|d| d.get_temp::<Vec<egui::Id>>(egui::Id::new("inline-last")))
+                    .unwrap_or_default();
+                if let Some(following) = previous.iter().skip_while(|x| **x != resp.id).nth(1) {
+                    ui.memory_mut(|m| m.request_focus(*following));
+                } else {
+                    resp.surrender_focus();
+                }
+            } else {
+                resp.surrender_focus();
+            }
+            return;
+        }
+        let visible = resp.rect.intersect(ui.clip_rect());
+        // A keyboard animation can clip the field for a frame before Rust
+        // scrolls it into view. Keep its native responder alive offscreen.
+        let r = if visible.is_positive() && visible.height() >= 22.0 {
+            visible
+        } else {
+            egui::Rect::from_min_size(
+                egui::pos2(resp.rect.left(), -resp.rect.height()),
+                resp.rect.size(),
+            )
+        };
+        let mode = if !resp.has_focus() {
             -1
         } else if resp.clicked() || resp.gained_focus() {
             1
@@ -358,23 +401,6 @@ mod native_fields {
                     mode,
                     ui.visuals().dark_mode as i32,
                 )
-            }
-        }
-        let mut done = FINISHED.lock().unwrap();
-        if done.as_ref().is_some_and(|(key, _)| *key == id) {
-            let (_, next) = done.take().unwrap();
-            if next {
-                let previous = ui
-                    .ctx()
-                    .data(|d| d.get_temp::<Vec<egui::Id>>(egui::Id::new("inline-last")))
-                    .unwrap_or_default();
-                if let Some(following) = previous.iter().skip_while(|x| **x != resp.id).nth(1) {
-                    ui.memory_mut(|m| m.request_focus(*following));
-                } else {
-                    resp.surrender_focus();
-                }
-            } else {
-                resp.surrender_focus();
             }
         }
     }

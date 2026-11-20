@@ -324,6 +324,17 @@ function App() {
       },
     });
   };
+  const playerOrigin = useRef<HTMLElement | null>(null);
+  const playerReturn = useRef<Item | null>(null);
+  const openFullscreen = () => {
+    if (!fullRef.current) {
+      const target = document.activeElement;
+      playerOrigin.current = target instanceof HTMLElement && target.closest(".shell")
+        ? target
+        : null;
+    }
+    setFull(true);
+  };
   const stop = () => {
     loadToken.current++;
     record();
@@ -332,6 +343,14 @@ function App() {
     setPreview(null);
     setFull(false);
     setTracks(false);
+  };
+  const leavePlayer = (keepLivePreview = true) => {
+    playerReturn.current = previewRef.current;
+    if (keepLivePreview && view === "live" && previewRef.current?.kind === "live") {
+      setFull(false);
+    } else {
+      stop();
+    }
   };
   const safe = (fn: () => void) => {
     try {
@@ -484,7 +503,7 @@ function App() {
       itemKey(previewRef.current) === itemKey(item) &&
       p.current
     ) {
-      setFull(true);
+      openFullscreen();
       return;
     }
     record();
@@ -494,8 +513,9 @@ function App() {
     }
     setPreview(item);
     previewRef.current = item;
-    setFull(fullscreen);
-    setDetail(null);
+    if (fullscreen) openFullscreen();
+    else setFull(false);
+    if (view !== "vod" && view !== "series") setDetail(null);
     setTracks(false);
     const token = ++loadToken.current;
     p.settings = { ...savedRef.current.settings };
@@ -632,7 +652,7 @@ function App() {
       return;
     }
     if (fullRef.current && !document.querySelector(".modal")) {
-      if(previewRef.current?.kind === 'live')setFull(false);else stop();
+      leavePlayer();
       return;
     }
     if (previewRef.current) {
@@ -725,7 +745,7 @@ function App() {
     if ([10252, 415, 19, 413, 417, 412, 427, 428].includes(code)) {
       e.preventDefault();
       const p = playerRef.current;
-      if (code === 413) stop();
+      if (code === 413) leavePlayer(false);
       else if (code === 417) safe(() => p?.seek(policy.seekStepSeconds));
       else if (code === 412) safe(() => p?.seek(-policy.seekStepSeconds));
       else if (code === 427 || code === 428) {
@@ -865,6 +885,24 @@ function App() {
       ),
     [catalog, category, query, favorites],
   );
+  const returnChannel = !full && view === "live" && playerReturn.current?.kind === "live"
+    ? filteredLive.findIndex(i => i.id === playerReturn.current?.id)
+    : -1;
+  useLayoutEffect(() => {
+    if (full || !playerReturn.current) return;
+    const item = playerReturn.current;
+    const origin = playerOrigin.current;
+    playerReturn.current = null;
+    playerOrigin.current = null;
+    if (returnChannel >= 0) return;
+    const key = itemKey(item);
+    const series = item.seriesId ? `series:${item.seriesId}` : null;
+    const targets = [...document.querySelectorAll<HTMLElement>(".shell [data-focus-key]")];
+    const target = targets.find(el => el.dataset.focusKey === key) ||
+      targets.find(el => el.dataset.focusKey === series) ||
+      (origin?.isConnected ? origin : null);
+    target?.focus({ preventScroll: true });
+  }, [full]);
   const p = playerRef.current,
     status = p?.status;
   useEffect(() => {
@@ -922,6 +960,7 @@ function App() {
   const card = (item: Item, continuing = false) => (
     <button
       class={`media-card ${item.kind === "live" ? "live-card" : ""}`}
+      data-focus-key={itemKey(item)}
       onClick={() =>
         continuing
           ? void start(
@@ -1645,6 +1684,7 @@ function App() {
                     row={channelRow}
                     epg={getEpg}
                     density={saved.settings.density}
+                    returnIndex={returnChannel}
                   />
                 </section>
                 {!preview && (
@@ -1678,7 +1718,7 @@ function App() {
                       ref={!full ? surface : undefined}
                       class="preview-surface"
                     />
-                    <button class="preview-open" onClick={() => setFull(true)}>
+                    <button class="preview-open" onClick={openFullscreen}>
                       Vollbild öffnen <span>↗</span>
                     </button>
                     <PlayerFeedback status={status} />
@@ -1921,7 +1961,7 @@ function App() {
             >
               <div ref={surface} class="full-surface" />
               <div class="player-top glass">
-                <button onClick={() => previewRef.current?.kind === "live" ? setFull(false) : stop()}>{t("← Zurück", "← Back")}</button>
+                <button onClick={() => leavePlayer()}>{t("← Zurück", "← Back")}</button>
                 <span>
                   <small>
                     {preview.kind === "live"
@@ -1961,7 +2001,7 @@ function App() {
                     setTracks(true);
                   }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>
                   <button onClick={() => setPlayerOptions("aspect")}>{t("Bildformat", "Aspect ratio")}</button>
-                  <button onClick={stop}>{t("Beenden", "Stop")}</button>
+                  <button onClick={() => leavePlayer(false)}>{t("Beenden", "Stop")}</button>
                 </div>
               )}
               {playerOptions === "aspect" && (
@@ -2189,11 +2229,13 @@ function VirtualChannels({
   row,
   epg,
   density,
+  returnIndex,
 }: {
   items: Item[];
   row: (i: Item) => ComponentChildren;
   epg: (i: Item) => Promise<void>;
   density: Settings["density"];
+  returnIndex: number;
 }) {
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const pendingFocus = useRef<number | null>(null);
@@ -2204,6 +2246,14 @@ function VirtualChannels({
     if (ref.current) ref.current.scrollTop = 0;
     setTop(0);
   }, [items]);
+  useLayoutEffect(() => {
+    if (returnIndex < 0 || !ref.current) return;
+    const nextTop = Math.max(0, returnIndex * height - ref.current.clientHeight / 2);
+    ref.current.scrollTop = nextTop;
+    pendingFocus.current = returnIndex;
+    setTop(ref.current.scrollTop);
+    setFocusIndex(returnIndex);
+  }, [returnIndex, height]);
   const visibleStart = Math.max(0, Math.floor(top / height) - 5);
   const start = focusIndex === null ? visibleStart : Math.max(0, Math.min(visibleStart, focusIndex-2), focusIndex-32),
     end = Math.min(items.length, Math.max(start + 24, (focusIndex ?? start) + 3));
@@ -2211,7 +2261,7 @@ function VirtualChannels({
     if (pendingFocus.current === null) return;
     const target = ref.current?.querySelector<HTMLElement>(`[data-list-index="${pendingFocus.current}"] button`);
     if (target) { pendingFocus.current=null; target.focus({preventScroll:true}); scrollFocused(target); }
-  }, [focusIndex, start]);
+  }, [focusIndex, start, returnIndex]);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
