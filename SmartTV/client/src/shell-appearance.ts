@@ -25,6 +25,11 @@ export function installShellAppearance() {
     '--player-top-max-width':appearance.playerTopMaxWidth+'px',
     '--player-controls-max-width':appearance.playerControlsMaxWidth+'px',
     '--player-border-color':appearance.playerBorderColor,
+    '--player-button-height':appearance.playerButtonHeight+'px',
+    '--player-button-font':appearance.playerButtonFont+'px',
+    '--player-popup-padding':appearance.playerPopupPadding+'px',
+    '--player-popup-gap':appearance.playerPopupGap+'px',
+    '--player-popup-offset':appearance.playerPopupOffset+'px',
     '--player-corner-radius':appearance.playerCornerRadius+'px',
   }))style.setProperty(key,value);
 }

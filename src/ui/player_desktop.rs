@@ -127,6 +127,8 @@ fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) 
 
 fn aspect_label(value: DesktopAspect, english: bool) -> &'static str {
     match (value, english) {
+        (DesktopAspect::Auto, false) => "Automatisch",
+        (DesktopAspect::Auto, true) => "Automatic",
         (DesktopAspect::Fit, false) => "Einpassen",
         (DesktopAspect::Fill, false) => "Ausfüllen",
         (DesktopAspect::Stretch, false) => "Strecken",
@@ -134,6 +136,46 @@ fn aspect_label(value: DesktopAspect, english: bool) -> &'static str {
         (DesktopAspect::Fill, true) => "Fill",
         (DesktopAspect::Stretch, true) => "Stretch",
     }
+}
+
+fn popup_row(
+    ctx: &Context,
+    name: &'static str,
+    bottom: Rect,
+    scale: f32,
+    entries: &[(&str, f32, bool)],
+) -> (Option<usize>, (LayerId, Rect)) {
+    let a = super::desktop::appearance();
+    let pad = a.player_popup_padding * scale;
+    let gap = a.player_popup_gap * scale;
+    let height = a.player_button_height * scale;
+    let width = entries.iter().map(|(_, w, _)| w * scale).sum::<f32>()
+        + gap * entries.len().saturating_sub(1) as f32
+        + 2.0 * pad;
+    let y = bottom.top() - a.player_popup_offset * scale - height - 2.0 * pad;
+    let rect = Rect::from_min_size(
+        pos2(bottom.center().x - width * 0.5, y),
+        vec2(width, height + 2.0 * pad),
+    );
+    pane(ctx, name, rect, scale, |ui| {
+        let mut x = rect.left() + pad;
+        let mut selection = None;
+        for (index, &(label, width, selected)) in entries.iter().enumerate() {
+            let bounds = Rect::from_min_size(pos2(x, y + pad), vec2(width * scale, height));
+            if button(
+                ui,
+                index,
+                bounds,
+                label,
+                a.player_button_font * scale,
+                selected,
+            ) {
+                selection = Some(index);
+            }
+            x += width * scale + gap;
+        }
+        selection
+    })
 }
 
 pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
@@ -344,8 +386,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let mut x = bottom.center().x - (widths.iter().sum::<f32>() + 34.0) * s / 2.0;
         let mut action = None;
         for (i, (name, width)) in names.into_iter().zip(widths).enumerate() {
-            let r = Rect::from_min_size(pos2(x, bottom.top() + 10.0 * s), vec2(width, 42.0) * s);
-            if button(ui, i, r, name, 22.0 * s, i == 1 || (i == 3 && options_open)) {
+            let r = Rect::from_min_size(
+                pos2(x, bottom.top() + 10.0 * s),
+                vec2(width, a.player_button_height) * s,
+            );
+            if button(
+                ui,
+                i,
+                r,
+                name,
+                a.player_button_font * s,
+                i == 1 || (i == 3 && options_open),
+            ) {
                 action = Some(i);
             }
             x += (width + if i == 2 { 18.0 } else { 8.0 }) * s;
@@ -462,28 +514,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         _ => {}
     }
     if options_open {
-        let rect = Rect::from_center_size(
-            pos2(bottom.center().x, bottom.top() - 47.0 * s),
-            vec2(550.0, 74.0) * s,
+        let (selection, layer) = popup_row(
+            &ctx,
+            "options",
+            bottom,
+            s,
+            &[
+                (t("Ton & Untertitel", "Audio & subtitles"), 202.0, false),
+                (t("Bildformat", "Aspect ratio"), 146.0, false),
+                (t("Beenden", "Stop"), 128.0, false),
+            ],
         );
-        let (selection, layer) = pane(&ctx, "options", rect, s, |ui| {
-            let items = [
-                (t("Ton & Untertitel", "Audio & subtitles"), 202.0),
-                (t("Bildformat", "Aspect ratio"), 146.0),
-                (t("Beenden", "Stop"), 144.0),
-            ];
-            let mut x = rect.left() + 19.0 * s;
-            let mut action = None;
-            for (i, (label, width)) in items.into_iter().enumerate() {
-                let control =
-                    Rect::from_min_size(pos2(x, rect.top() + 16.0 * s), vec2(width, 42.0) * s);
-                if button(ui, i, control, label, 21.0 * s, false) {
-                    action = Some(i);
-                }
-                x += (width + 10.0) * s;
-            }
-            action
-        });
         layers.push(layer);
         if let Some(selection) = selection {
             options_open = false;
@@ -500,39 +541,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
     ctx.data_mut(|data| data.insert_temp(options_menu, options_open));
     if aspect_open {
-        let rect = Rect::from_center_size(
-            pos2(bottom.center().x, bottom.top() - 70.0 * s),
-            vec2(620.0, 108.0) * s,
-        );
-        let (selected, layer) = pane(&ctx, "aspect", rect, s, |ui| {
-            [
-                DesktopAspect::Fit,
-                DesktopAspect::Fill,
-                DesktopAspect::Stretch,
-            ]
-            .into_iter()
-            .enumerate()
-            .find_map(|(index, value)| {
-                let bounds = Rect::from_min_size(
-                    pos2(
-                        rect.left() + (20.0 + index as f32 * 196.0) * s,
-                        rect.top() + 26.0 * s,
-                    ),
-                    vec2(184.0, 56.0) * s,
-                );
-                button(
-                    ui,
-                    index,
-                    bounds,
-                    aspect_label(value, is_english),
-                    24.0 * s,
-                    app.settings.desktop_aspect == value,
-                )
-                .then_some(value)
-            })
+        let aspects = [
+            DesktopAspect::Auto,
+            DesktopAspect::Fit,
+            DesktopAspect::Fill,
+            DesktopAspect::Stretch,
+        ];
+        let entries = aspects.map(|value| {
+            (
+                aspect_label(value, is_english),
+                140.0,
+                app.settings.desktop_aspect == value,
+            )
         });
+        let (selected, layer) = popup_row(&ctx, "aspect", bottom, s, &entries);
         layers.push(layer);
-        if let Some(value) = selected {
+        if let Some(value) = selected.and_then(|index| aspects.get(index).copied()) {
             app.settings.desktop_aspect = value;
             if let Some(player) = &app.player {
                 player.mpv.set_desktop_aspect(value);

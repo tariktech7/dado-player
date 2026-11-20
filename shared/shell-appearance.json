@@ -35,5 +35,10 @@
   "playerMutedColor": "#d0def0",
   "playerTopMaxWidth": 900,
   "playerControlsMaxWidth": 720,
-  "playerBorderColor": "#7592b598"
+  "playerBorderColor": "#7592b598",
+  "playerButtonHeight": 42,
+  "playerButtonFont": 22,
+  "playerPopupPadding": 10,
+  "playerPopupGap": 8,
+  "playerPopupOffset": 10
 }

@@ -383,6 +383,10 @@ impl Mpv {
     #[cfg(target_os = "windows")]
     pub fn set_desktop_aspect(&self, aspect: crate::types::DesktopAspect) {
         use crate::types::DesktopAspect;
+        if aspect == DesktopAspect::Auto {
+            // Restore mpv's stream-driven display aspect after a manual choice.
+            let _ = self.command(&["set", "video-aspect-override", "no"]);
+        }
         let _ = self.command(&[
             "set",
             "keepaspect",

@@ -225,7 +225,7 @@ function App() {
     ),
     [exit, setExit] = useState(false),
     [tracks, setTracks] = useState(false),
-    [playerOptions, setPlayerOptions] = useState(false),
+    [playerOptions, setPlayerOptions] = useState<"options" | "aspect" | null>(null),
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
     [updateUrl, setUpdateUrl] = useState("");
@@ -615,7 +615,7 @@ function App() {
       return;
     }
     if (playerOptionsRef.current) {
-      setPlayerOptions(false);
+      setPlayerOptions(null);
       document.querySelector<HTMLElement>(".player-options-toggle")?.focus();
       return;
     }
@@ -866,7 +866,7 @@ function App() {
   useEffect(() => {
     showControls();
     if (!full) {
-      setPlayerOptions(false);
+      setPlayerOptions(null);
       return;
     }
     const timer = setInterval(() => {
@@ -884,7 +884,11 @@ function App() {
     return () => clearInterval(timer);
   }, [full]);
   useEffect(() => {
-    if (playerOptions) document.querySelector<HTMLElement>(".player-options button")?.focus();
+    if (playerOptions) {
+      const popup = document.querySelector(".player-options");
+      (popup?.querySelector<HTMLElement>('button[aria-pressed="true"]') ??
+        popup?.querySelector<HTMLElement>("button"))?.focus();
+    }
   }, [playerOptions]);
   const [now, next] = preview ? currentNext(epg[preview.id] || []) : [];
   const favoriteRows = favorites.filter((i) => i.kind === "live");
@@ -1945,30 +1949,31 @@ function App() {
                   {p.subtitle}
                 </div>
               )}
-              {playerOptions && (
+              {playerOptions === "options" && (
                 <div class="player-options glass" aria-label={t("Player-Optionen", "Player options")}>
-                  <button
-                    onClick={() => {
-                      setPlayerOptions(false);
-                      p?.refreshTracks();
-                      setTracks(true);
-                    }}
-                  >
-                    {t("Ton & Untertitel", "Audio & subtitles")}
-                  </button>
-                  {choose(
-                    saved.settings.aspect,
-                    (v) => {
-                      setting("aspect", v as Settings["aspect"]);
-                      p?.setAspect(v as Settings["aspect"]);
-                    },
-                    [
-                      ["fit", "Einpassen"],
-                      ["fill", "Automatisch"],
-                      ["stretch", "Strecken"],
-                    ],
-                  )}
+                  <button onClick={() => {
+                    setPlayerOptions(null);
+                    p?.refreshTracks();
+                    setTracks(true);
+                  }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>
+                  <button onClick={() => setPlayerOptions("aspect")}>{t("Bildformat", "Aspect ratio")}</button>
                   <button onClick={stop}>{t("Beenden", "Stop")}</button>
+                </div>
+              )}
+              {playerOptions === "aspect" && (
+                <div class="player-options glass" aria-label={t("Bildformat", "Aspect ratio")}>
+                  {([
+                    ["fill", t("Automatisch", "Automatic")],
+                    ["fit", t("Einpassen", "Fit")],
+                    ["stretch", t("Strecken", "Stretch")],
+                  ] as const).map(([value, label]) => (
+                    <button key={value} aria-pressed={saved.settings.aspect === value} onClick={() => {
+                      setting("aspect", value);
+                      p?.setAspect(value);
+                      setPlayerOptions(null);
+                      document.querySelector<HTMLElement>(".player-options-toggle")?.focus();
+                    }}>{label}</button>
+                  ))}
                 </div>
               )}
               <div class="player-controls glass">
@@ -1982,8 +1987,8 @@ function App() {
                   <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
                     {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
                   </button>
-                  <button class="player-options-toggle" aria-expanded={playerOptions}
-                    onClick={() => setPlayerOptions(!playerOptions)}>
+                  <button class="player-options-toggle" aria-expanded={!!playerOptions}
+                    onClick={() => setPlayerOptions(playerOptions ? null : "options")}>
                     {t("Optionen", "Options")}
                   </button>
                 </div>

@@ -166,6 +166,32 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
   expect(measurements.guide).toBeGreaterThan(4.5);
   expect(measurements.buttons).toBeGreaterThan(4.5);
 });
+test("picture format opens at player scale and applies Automatic to the running decoder", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel").first().click();
+  await page.getByRole("button", {name: /Vollbild öffnen/}).click();
+  const options = page.locator(".player-options-toggle");
+  const buttonSize = (node: Element) => ({
+    height: node.getBoundingClientRect().height,
+    font: getComputedStyle(node).fontSize,
+  });
+  const mainSize = await options.evaluate(buttonSize);
+  await options.click();
+  await page.getByRole("button", {name: "Bildformat", exact: true}).click();
+  const automatic = page.getByRole("button", {name: "Automatisch", exact: true});
+  expect(await automatic.evaluate(buttonSize)).toEqual(mainSize);
+  await expect(page.locator(".selection-dialog")).toHaveCount(0);
+  await automatic.click();
+  await expect(page.locator(".player-options")).toHaveCount(0);
+  await expect(options).toBeFocused();
+  await expect.poll(() => page.evaluate(() => (window as any).__avLog
+    .filter((entry: string[]) => entry[0] === "aspect").slice(-1)[0]?.[1]))
+    .toBe("PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("dado.tv.v1")!).settings.aspect))
+    .toBe("fill");
+});
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);
   const make=(kind:any,id:string)=>({kind,id,name:'Test',category:'1',logo:'',url:''});

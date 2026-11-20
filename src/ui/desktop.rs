@@ -57,6 +57,16 @@ pub struct Appearance {
     pub player_controls_max_width: f32,
     #[cfg(target_os = "windows")]
     pub player_border_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_button_height: f32,
+    #[cfg(target_os = "windows")]
+    pub player_button_font: f32,
+    #[cfg(target_os = "windows")]
+    pub player_popup_padding: f32,
+    #[cfg(target_os = "windows")]
+    pub player_popup_gap: f32,
+    #[cfg(target_os = "windows")]
+    pub player_popup_offset: f32,
     pub player_corner_radius: f32,
 }
 pub fn appearance() -> &'static Appearance {

@@ -383,6 +383,7 @@ impl ClockFormat {
 #[cfg(target_os = "windows")]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DesktopAspect {
+    Auto,
     #[default]
     Fit,
     Fill,

@@ -1589,26 +1589,26 @@ hr {
 }
 .player-options {
   position: absolute; left: 24px; right: 24px;
-  bottom: calc(var(--player-controls-inset-y) + var(--player-controls-height) + 10px);
-  max-width: 550px; margin: 0 auto; padding: 15px 18px;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  bottom: calc(var(--player-controls-inset-y) + var(--player-controls-height) + var(--player-popup-offset));
+  max-width: 550px; width: max-content; margin: 0 auto; padding: var(--player-popup-padding);
+  display: flex; align-items: center; justify-content: center; gap: var(--player-popup-gap);
   z-index: 34;
 }
-.player-options .tv-select { margin: 0; min-width: 0; }
 .transport { gap: 8px; }
 .transport .player-options-toggle { margin-left: 10px; }
 .timeline { gap: 12px; margin-top: 8px; font-size: 20px; }
 #app .fullscreen .player-top small, #app .fullscreen .timeline { color: var(--player-muted-color); }
 #app .fullscreen .player-top button, #app .fullscreen .player-controls button, #app .fullscreen .player-options button {
-  min-height: 40px; padding: 5px 12px;
+  min-height: var(--player-button-height); padding: 5px 12px;
   background: var(--player-button-color);
   color: var(--player-text-color);
   border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 22px;
+  font-size: var(--player-button-font);
 }
 #app .fullscreen .player-top button[aria-pressed] { min-width: 42px; text-align: center; }
-#app .fullscreen .player-controls button.primary { background: var(--player-primary-color); }
+#app .fullscreen .player-controls button.primary,
+#app .fullscreen .player-options button[aria-pressed="true"] { background: var(--player-primary-color); }
 #app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus, #app .fullscreen .player-options button:focus,
 #app .fullscreen .player-top button:hover, #app .fullscreen .player-controls button:hover, #app .fullscreen .player-options button:hover {
   outline: 2px solid var(--player-focus-color);
