@@ -49,6 +49,7 @@ export class Player {
   private timer: ReturnType<typeof setInterval>;
   private pendingSeekDelta = 0;
   private lastNativeRect = "";
+  private lastNativeAspect = "";
   private lastCssRect = "";
   private seekTarget: number | null = null;
   private seekBusy = false;
@@ -59,14 +60,13 @@ export class Player {
   constructor(
     settings: Settings,
     private changed: () => void,
-    host?: HTMLElement,
+    private surface: () => HTMLElement | null,
   ) {
     this.settings = settings;
-    this.host = host || document.createElement("div");
+    this.host = document.createElement("div");
     this.host.id = "video-host";
     this.host.hidden = true;
-    if (!host)
-      (document.getElementById("app") || document.body).append(this.host);
+    (document.getElementById("app") || document.body).append(this.host);
     this.timer = setInterval(() => {
       if (this.status.state === "playing" || this.status.state === "paused")
         this.tick();
@@ -93,34 +93,66 @@ export class Player {
     }
     this.emit();
   }
-  position(rect: DOMRect): void {
-    if (!this.current) return;
-    const canvas = document.getElementById("app")?.getBoundingClientRect(),
-      scale = canvas ? canvas.width / 1920 : 1;
-    const cssKey = [rect.left,rect.top,rect.width,rect.height].join(',');
-    if(cssKey!==this.lastCssRect)Object.assign(this.host.style, {
-      left: `${(rect.left - (canvas?.left || 0)) / scale}px`,
-      top: `${(rect.top - (canvas?.top || 0)) / scale}px`,
-      width: `${rect.width / scale}px`,
-      height: `${rect.height / scale}px`,
-    });
-    this.lastCssRect=cssKey;
-    if (
-      !this.seekBusy && this.av &&
-      ["IDLE", "READY", "PLAYING", "PAUSED"].includes(this.av.getState())
-    ) {
-      try {
-        if(this.lastNativeRect===cssKey)return;
-        this.av.setDisplayRect(
-          Math.round((rect.left * 1920) / innerWidth),
-          Math.round((rect.top * 1080) / innerHeight),
-          Math.round((rect.width * 1920) / innerWidth),
-          Math.round((rect.height * 1080) / innerHeight),
-        );
-        this.lastNativeRect=cssKey;
-      } catch {
-        /* retry at ready */
+  position(): void {
+    const surface = this.surface();
+    if (!this.current || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const canvas = document.getElementById("app")?.getBoundingClientRect();
+    const scale = canvas ? canvas.width / 1920 : 1;
+    const cssRect = [
+      (rect.left - (canvas?.left || 0)) / scale,
+      (rect.top - (canvas?.top || 0)) / scale,
+      rect.width / scale,
+      rect.height / scale,
+    ];
+    const cssKey = cssRect.join(",");
+    if (cssKey !== this.lastCssRect) {
+      const [left, top, width, height] = cssRect.map((value) => `${value}px`);
+      Object.assign(this.host.style, { left, top, width, height });
+      const object = this.host.querySelector("object");
+      if (object) Object.assign(object.style, { width, height });
+      this.lastCssRect = cssKey;
+    }
+
+    // The preview always fits the entire frame. Fullscreen keeps the user's setting.
+    const aspect = surface.classList.contains("preview-surface") ? "fit" : this.settings.aspect;
+    if (this.video) {
+      this.video.style.objectFit =
+        aspect === "stretch" ? "fill" : aspect === "fill" ? "cover" : "contain";
+    }
+    if (!this.av || this.seekBusy) return;
+
+    try {
+      if (!["IDLE", "READY", "PLAYING", "PAUSED"].includes(this.av.getState())) return;
+      if (aspect !== this.lastNativeAspect) {
+        try {
+          this.av.setDisplayMethod({
+            fit: "PLAYER_DISPLAY_MODE_LETTER_BOX",
+            fill: "PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO",
+            stretch: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
+          }[aspect]);
+          this.lastNativeAspect = aspect;
+          this.lastNativeRect = "";
+        } catch {
+          // Still update the video bounds if this firmware rejects a mode change.
+        }
       }
+      // AVPlay uses a 1920x1080 screen coordinate system. Scale both axes
+      // by width, just like the TV canvas, even if the viewport height changes.
+      const units = 1920 / document.documentElement.clientWidth;
+      const x = Math.round(rect.left * units);
+      const y = Math.round(rect.top * units);
+      const width = Math.round(rect.right * units) - x;
+      const height = Math.round(rect.bottom * units) - y;
+      const nativeKey = [x, y, width, height].join(",");
+      if (nativeKey !== this.lastNativeRect) {
+        this.av.setDisplayRect(x, y, width, height);
+        this.lastNativeRect = nativeKey;
+      }
+    } catch {
+      // Some states reject changes temporarily. Retry on ready or next layout.
     }
   }
   async open(item: Item, resume = 0, htmlFallback = false): Promise<void> {
@@ -158,6 +190,7 @@ export class Player {
         const source = await resolvePackagedMedia(item.url);
         if (gen !== this.generation) return;
         native.open(source);
+        this.position();
         native.setListener({
           onbufferingstart: () => {
             if (gen === this.generation) {
@@ -251,9 +284,9 @@ export class Player {
           );
         });
         if (gen !== this.generation) return;
-        this.lastNativeRect="";
-        this.position(this.host.getBoundingClientRect());
-        this.setAspect(this.settings.aspect);
+        this.lastNativeRect = "";
+        this.lastNativeAspect = "";
+        this.position();
         native.play();
         this.status.state = "playing";
         this.status.buffer = 100;
@@ -272,7 +305,7 @@ export class Player {
         video.preload = "auto";
         this.video = video;
         this.replaceSurface(video);
-        this.setAspect(this.settings.aspect);
+        this.position();
         video.addEventListener("error", () => {
           if (gen === this.generation)
             this.fail(
@@ -476,7 +509,7 @@ export class Player {
         this.emit();return;
       }
       this.tick();
-      this.position(this.host.getBoundingClientRect());
+      this.position();
       // New presses update a single absolute destination while a seek is busy.
       if(this.seekTarget!==target){this.flushSeek();return;}
       this.seekTarget=null;this.status.notice='';
@@ -492,21 +525,7 @@ export class Player {
   }
   setAspect(aspect: Settings["aspect"]): void {
     this.settings.aspect = aspect;
-    try {
-      if (this.av)
-        this.av.setDisplayMethod(
-          {
-            fit: "PLAYER_DISPLAY_MODE_LETTER_BOX",
-            fill: "PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO",
-            stretch: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
-          }[aspect],
-        );
-    } catch {
-      /* set again after prepare */
-    }
-    if (this.video)
-      this.video.style.objectFit =
-        aspect === "stretch" ? "fill" : aspect === "fill" ? "cover" : "contain";
+    this.position();
   }
   visibility(hidden: boolean): void {
     if (hidden) {
@@ -529,6 +548,9 @@ export class Player {
             false,
             () => {
               this.suspended = false;
+              this.lastNativeRect = "";
+              this.lastNativeAspect = "";
+              this.position();
               if (!this.hiddenPlaying) this.av.pause();
               this.status.state = this.hiddenPlaying ? "playing" : "paused";
               screensaver(!this.hiddenPlaying);
@@ -549,7 +571,9 @@ export class Player {
     }
   }
   stop(): void {
-    this.lastNativeRect="";this.lastCssRect="";
+    this.lastNativeRect = "";
+    this.lastNativeAspect = "";
+    this.lastCssRect = "";
     this.clearSeek();
     if (this.subtitleTimer) clearTimeout(this.subtitleTimer);
     this.subtitleTimer = null;

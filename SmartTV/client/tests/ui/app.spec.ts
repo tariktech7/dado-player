@@ -32,6 +32,7 @@ test('long live-preview metadata stays inside its own panel and retains a usable
   });
   await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();await page.locator('.channel').first().click();
   await expect(page.locator('.epg-detail h3').first()).toBeVisible();
+  await page.locator('.channels').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   await page.screenshot({path:'test-results/tizen-long-preview.png'});
   const sizes=await page.locator('.preview-panel').evaluate(panel=>{
     const box=panel.getBoundingClientRect(),video=panel.querySelector('.preview-surface')!.getBoundingClientRect(),epg=panel.querySelector('.epg-detail')!;
@@ -40,6 +41,67 @@ test('long live-preview metadata stays inside its own panel and retains a usable
   expect(sizes.epgScrollWidth).toBeLessThanOrEqual(sizes.epgWidth+1);
   expect(sizes.videoHeight/sizes.videoWidth).toBeCloseTo(9/16,1);
   for(const heading of sizes.headings)expect(heading.scroll).toBeLessThanOrEqual(heading.width+1);
+});
+test("live preview fits the stream from prepare and follows fullscreen transitions", async ({page}) => {
+  await page.setViewportSize({width: 1280, height: 720});
+  await fixture(page, true, true);
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem("dado.tv.v1")!);
+    saved.settings.aspect = "stretch";
+    localStorage.setItem("dado.tv.v1", JSON.stringify(saved));
+    const av = (window as any).webapis.avplay;
+    const prepare = av.prepareAsync;
+    av.prepareAsync = (...args: any[]) => {
+      (window as any).__avLog.push(["prepare"]);
+      prepare(...args);
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel").first().click();
+  const log = () => page.evaluate(() => (window as any).__avLog as [string, ...any[]][]);
+  await expect.poll(async () => (await log()).filter(([event]) => event === "play").length).toBe(1);
+  const inlineCalls = await log();
+  const beforePrepare = inlineCalls.slice(0, inlineCalls.findIndex(([event]) => event === "prepare"));
+  expect(beforePrepare).toContainEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
+  expect(beforePrepare.find(([event]) => event === "rect")?.slice(3)).toEqual([640, 360]);
+
+  const surface = page.locator(".preview-surface");
+  const size = (await surface.boundingBox())!;
+  expect(size.width).toBeCloseTo(640 * 2 / 3, 0);
+  expect(1280 - size.x - size.width).toBeCloseTo(48 * 2 / 3, 0);
+  const nativeWidth = () => page.locator("#video-host object").evaluate(o => (o as HTMLElement).style.width);
+  expect(await nativeWidth()).toBe("640px");
+
+  await page.locator(".navigation button[data-focus-key='live']").focus();
+  await page.locator(".channels").evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+  const channelGap = await page.locator(".shell").evaluate(shell => {
+    shell.querySelector<HTMLElement>(".channel.selected")!.focus();
+    const channels = shell.querySelector<HTMLElement>(".channels")!;
+    const preview = shell.querySelector(".preview-panel")!.getBoundingClientRect();
+    const animation = channels.getAnimations().slice(-1)[0];
+    if (!animation) throw new Error("Expected the live column to animate");
+    animation.pause();
+    const gaps = [0, 60, 160].map(time => {
+      animation.currentTime = time;
+      const clip = getComputedStyle(channels).clipPath.match(/-?[\d.]+px/g);
+      if (!clip) throw new Error("The live column must clip its animated right edge");
+      const scale = channels.getBoundingClientRect().width / channels.offsetWidth;
+      const visibleRight = channels.getBoundingClientRect().right - parseFloat(clip[1]) * scale;
+      return preview.left - visibleRight;
+    });
+    animation.play();
+    return Math.min(...gaps);
+  });
+  expect(channelGap).toBeGreaterThanOrEqual(8);
+
+  await page.getByRole("button", {name: /Vollbild öffnen/}).click();
+  await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]).toEqual(["rect", 0, 0, 1920, 1080]);
+  await expect.poll(async () => (await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_FULL_SCREEN"]);
+  await page.getByRole("button", {name: "← Zurück"}).click();
+  await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]?.slice(3)).toEqual([640, 360]);
+  expect((await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
+  expect((await log()).filter(([event]) => event === "open")).toHaveLength(1);
 });
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);

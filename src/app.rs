@@ -3960,6 +3960,42 @@ mod tests {
     }
 
     #[test]
+    fn windows_live_preview_uses_shared_width_and_leaves_room_for_epg() {
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("Desktop fixture", ProfileKind::M3u));
+        app.view = View::Live;
+
+        for (width, height, expected_width) in [(1920.0, 1080.0, 640.0), (1280.0, 420.0, 359.0)] {
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
+            let draw = || egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            };
+            let _ = ctx.run(draw(), |ctx| crate::ui::desktop::show(&mut app, ctx));
+            let output = ctx.run(draw(), |ctx| crate::ui::desktop::show(&mut app, ctx));
+            let video = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Rect(rect)
+                        if rect.fill == egui::Color32::BLACK
+                            && (rect.rect.aspect_ratio() - 16.0 / 9.0).abs() < 0.001 =>
+                    {
+                        Some(rect.rect)
+                    }
+                    _ => None,
+                })
+                .max_by(|a, b| a.width().total_cmp(&b.width()))
+                .expect("16:9 live preview");
+            assert!((video.width() - expected_width).abs() < 2.0, "{video:?}");
+            assert!(screen.contains_rect(video));
+            assert!(screen.bottom() - video.bottom() > height * 0.30);
+        }
+    }
+
+    #[test]
     fn mobile_home_keeps_channels_compact_and_favorites_separate_at_phone_sizes() {
         use egui::epaint::Shape;
         fn texts(shape: &Shape, out: &mut Vec<String>) {

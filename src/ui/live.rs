@@ -58,9 +58,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32) {
     number_jump(app, ui);
     let a = super::desktop::appearance();
-    let gap = 16.0 * s;
+    let gap = 24.0 * s;
     let category_w = (a.category_width * s).min(body.width() * 0.29);
-    let preview_w = (a.live_preview_width * s).min(body.width() * 0.37);
+    let preview_w = (a.live_preview_width * s)
+        .min(body.width() * 0.42)
+        .min(body.height() * 0.52 * 16.0 / 9.0);
     let cr = Rect::from_min_max(body.min, pos2(body.left() + category_w, body.bottom()));
     let pr = Rect::from_min_max(pos2(body.right() - preview_w, body.top()), body.max);
     let lr = Rect::from_min_max(
@@ -75,10 +77,17 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
     super::desktop::column(ui, cr, "live-categories", offset, |ui| {
         categories(app, ui, true)
     });
+    let clip = ui.clip_rect();
+    // The channel column is already laid out at its final width. During
+    // collapse, keep its translated right edge clear of the fixed preview.
+    let mut channel_clip = clip;
+    channel_clip.max.x = channel_clip.max.x.min(lr.right() - offset.max(0.0));
+    ui.set_clip_rect(channel_clip);
     super::desktop::column(ui, lr, "live-channels", offset, |ui| {
         ui.spacing_mut().item_spacing.y = 6.0 * s;
         channels(app, ui, true)
     });
+    ui.set_clip_rect(clip);
     super::desktop::column(ui, pr, "live-preview", 0.0, |ui| {
         preview_desktop(app, ui, s)
     });
@@ -185,7 +194,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
                             app.settings.clock_format.format(e.end)
                         ));
                         ui.label(RichText::new(&e.title).strong());
-                        ui.label(&e.description);
+                        ui.label(RichText::new(&e.description).size(24.0 * s));
                         ui.add_space(12.0 * s);
                     }
                 }

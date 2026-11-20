@@ -23,10 +23,18 @@ export async function animateNavigation(shell: HTMLElement | null, collapsed: bo
     const x = (before[index].left - after[index].left) / scale;
     const y = (before[index].top - after[index].top) / scale;
     if ((Math.abs(x) > 0.5 || Math.abs(y) > 0.5) && node.animate) {
-      animations.push(node.animate([
-        {transform: `translate3d(${x}px, ${y}px, 0)`},
-        {transform: "translate3d(0, 0, 0)"},
-      ], {duration: appearance.navigationDurationMs, easing: `cubic-bezier(${appearance.navigationEasing.join(',')})`}));
+      const from: Keyframe = {transform: `translate3d(${x}px, ${y}px, 0)`};
+      const to: Keyframe = {transform: "translate3d(0, 0, 0)"};
+      if (x > 0 && node.classList.contains("channels")) {
+        // The grid gives this column its final width before the animation.
+        // Clip the translated extra width at the fixed preview boundary.
+        from.clipPath = `inset(-54px ${x - 10}px -54px -10px)`;
+        to.clipPath = "inset(-54px -10px -54px -10px)";
+      }
+      animations.push(node.animate([from, to], {
+        duration: appearance.navigationDurationMs,
+        easing: `cubic-bezier(${appearance.navigationEasing.join(',')})`,
+      }));
     }
   });
   running.set(shell, animations);

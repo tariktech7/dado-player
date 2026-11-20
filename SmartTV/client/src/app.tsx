@@ -163,8 +163,7 @@ function App() {
     if (navCollapsed.current === collapsed) return;
     navCollapsed.current = collapsed;
     void animateNavigation(document.querySelector<HTMLElement>(".shell"), collapsed).then(() => {
-      if (surface.current && previewRef.current)
-        playerRef.current?.position(surface.current.getBoundingClientRect());
+      playerRef.current?.position();
     });
   };
   const detailCache = useRef(
@@ -728,8 +727,10 @@ function App() {
   useEffect(() => {
     registerKeys();
     resizeCanvas();
-    const p = new Player({ ...savedRef.current.settings }, () =>
-      repaint((v) => v + 1),
+    const p = new Player(
+      { ...savedRef.current.settings },
+      () => repaint((v) => v + 1),
+      () => surface.current,
     );
     playerRef.current = p;
     const key = (e: KeyboardEvent) => keyHandler.current(e),
@@ -811,8 +812,7 @@ function App() {
   }, [view, !!session, editing, !!detail, !!resume, tracks, exit, full, license.ready, license.allowed]);
   const surface = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (preview && surface.current)
-      playerRef.current?.position(surface.current.getBoundingClientRect());
+    playerRef.current?.position();
   });
   const filteredLive = useMemo(
     () =>

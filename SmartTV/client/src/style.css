@@ -1265,7 +1265,9 @@ hr {
   grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr);
 }
 .live-shell.with-preview {
-  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) var(--live-preview-width, 480px);
+  padding-right: 48px;
+  column-gap: 24px;
+  grid-template-columns: var(--nav-width) var(--category-width, 320px) minmax(0, 1fr) var(--live-preview-width, 640px);
 }
 .navigation .nav-label {
   width: auto;
