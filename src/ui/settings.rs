@@ -169,6 +169,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     egui::ScrollArea::vertical()
                         .id_source("settings-menu")
                         .show(ui, |ui| {
+                            ui.add_space(4.0 * scale);
                             for (index, section) in sections().iter().enumerate() {
                                 if section.id == "license" && !cfg!(target_os = "windows") {
                                     continue;
@@ -176,8 +177,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                 let label = language.text(&section.de, &section.en);
                                 if ui
                                     .add_sized(
-                                        [menu_width, 42.0 * scale],
-                                        egui::Button::new(label).selected(current == index),
+                                        [
+                                            (ui.available_width() - 8.0 * scale).max(0.0),
+                                            42.0 * scale,
+                                        ],
+                                        egui::Button::new(label)
+                                            .selected(current == index)
+                                            .rounding(12.0 * scale),
                                     )
                                     .clicked()
                                 {
@@ -246,7 +252,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                         "{}  {label}",
                                         if open { "▾" } else { "›" }
                                     ))
-                                    .selected(open),
+                                    .selected(open)
+                                    .rounding(12.0),
                                 );
                                 if activate(ui, &response) {
                                     current = if open { usize::MAX } else { index };

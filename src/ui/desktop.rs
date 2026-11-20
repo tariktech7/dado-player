@@ -184,11 +184,19 @@ pub fn column<R>(
             area.set_min_size(rect.size());
             // The rect is already known: skip Area's invisible measurement
             // frame so a freshly opened catalogue paints immediately.
+            let content = if name.ends_with("categories")
+                || name == "live-channels"
+                || name == "catalog-posters"
+            {
+                rect.shrink(6.0 * scale(ui.ctx()))
+            } else {
+                rect
+            };
             let mut child = Ui::new(
                 ui.ctx().clone(),
                 layer,
                 layer.id,
-                rect,
+                content,
                 rect.intersect(ui.clip_rect()),
             );
             render(&mut child)

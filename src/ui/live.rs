@@ -378,13 +378,7 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     let s = super::desktop::scale(ui.ctx());
     if heading {
         if desktop {
-            super::desktop::heading(
-                ui,
-                app.settings.language.text(
-                    app.settings.language.text("Kategorien", "Categories"),
-                    "Categories",
-                ),
-            );
+            super::desktop::heading(ui, app.settings.language.text("Kategorien", "Categories"));
         } else {
             ui.label(
                 RichText::new(app.settings.language.text("Kategorien", "Categories"))
@@ -449,7 +443,6 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
             app.live_cat = id;
             app.live_page = 0;
             app.scroll_to = None;
-            app.close_preview();
         }
     }
 }

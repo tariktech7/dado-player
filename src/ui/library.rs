@@ -606,15 +606,24 @@ fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
             );
             job.wrap.max_rows = 2;
             ui.label(job);
-            if button(
-                ui,
-                if app.is_favorite(&key) {
-                    "★ Favorit"
-                } else {
-                    "☆ Merken"
-                },
-                tv,
-            ) {
+            let response = ui.button(if app.is_favorite(&key) {
+                "★ Favorit"
+            } else {
+                "☆ Merken"
+            });
+            if series && app.catalog_focus_play && app.series_episodes_for(entry.id).is_none() {
+                let key = ui
+                    .id()
+                    .with(("loading-series-focus", app.series_open_revision));
+                if !ui.data(|data| data.get_temp::<bool>(key).unwrap_or(false)) {
+                    ui.data_mut(|data| data.insert_temp(key, true));
+                    response.request_focus();
+                    if tv {
+                        focus::request_id(response.id);
+                    }
+                }
+            }
+            if hit(ui, &response, tv) {
                 app.toggle_favorite(&key);
             }
         });

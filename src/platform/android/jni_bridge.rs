@@ -689,6 +689,7 @@ pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativeOnKey(
         // every keycode Java consumes must land here, otherwise the key is
         // swallowed and a remote user sees nothing happen.
         23 | 66 | 160 => RemoteKey::Ok, // DPAD_CENTER / ENTER / NUMPAD_ENTER
+        7 | 144 => RemoteKey::Recall,   // KEYCODE_0 / KEYCODE_NUMPAD_0
         85 | 126 | 127 => RemoteKey::PlayPause, // MEDIA_PLAY_PAUSE / PLAY / PAUSE
         // BACK is not forwarded by Java today: it goes through the existing
         // onBackPressed() -> nativeRequestBack() -> App::mobile_back() chain

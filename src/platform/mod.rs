@@ -138,6 +138,7 @@ pub enum RemoteKey {
     Ok,
     Back,
     PlayPause,
+    Recall,
 }
 
 /// Is this a television device?

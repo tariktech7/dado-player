@@ -754,6 +754,28 @@ test("catalogues keep seasons, favorites and independent section positions; live
     .toBe(1200);
 });
 
+test("changing live categories leaves the preview open and zero recalls the previous channel in preview", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator('.channel[data-channel="1"]').click();
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  const decoderCalls = () => page.evaluate(() => (window as any).__avLog.filter(([action]: string[]) => ["open","stop","close"].includes(action)));
+  const before = await decoderCalls();
+  const category = page.locator(".category-list");
+  await category.getByRole("button", {name: "Favoriten", exact: true}).click();
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  await category.getByRole("button", {name: "Alle Sender", exact: true}).click();
+  expect(await decoderCalls()).toEqual(before);
+  await page.locator('.channel[data-channel="2"]').click();
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0002");
+  await page.keyboard.press("0");
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  await page.keyboard.press("Numpad0");
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0002");
+  await expect(page.locator(".fullscreen")).toHaveCount(0);
+});
+
 test("live remote up/down zaps and zero toggles the last two channels", async ({
   page,
 }) => {
@@ -1146,6 +1168,35 @@ async function openSettingsSection(page: Page, id: string) {
   await page.locator(`.settings-sections [data-focus-key="${id}"]`).click();
 }
 
+test("rounded list focus stays inside the first row at the scroll boundary", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  for (const listName of [".category-list", ".channel-list"]) {
+    const list = page.locator(listName).first();
+    const row = list.getByRole("button").first();
+    await row.evaluate((element: HTMLElement) => element.focus({preventScroll: true}));
+    const geometry = await row.evaluate((element: HTMLElement) => {
+      const style = getComputedStyle(element);
+      const clip = element.closest(".category-list,.channel-list")!.getBoundingClientRect();
+      const bounds = element.getBoundingClientRect();
+      return {
+        inset: style.boxShadow.includes("inset"),
+        outline: style.outlineStyle,
+        top: bounds.top - clip.top,
+        left: bounds.left - clip.left,
+        right: clip.right - bounds.right,
+      };
+    });
+    expect(geometry.inset).toBe(true);
+    expect(geometry.outline).toBe("none");
+    expect(geometry.top).toBeGreaterThanOrEqual(4);
+    expect(geometry.left).toBeGreaterThanOrEqual(4);
+    expect(geometry.right).toBeGreaterThanOrEqual(4);
+  }
+  await page.screenshot({path:"test-results/tizen-rounded-live-075.png"});
+});
+
 test("settings remote navigation moves between sections and the selected panel", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
@@ -1223,6 +1274,8 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   const movie=page.getByRole('button',{name:/Demo Film/});await movie.focus();await page.keyboard.press('Enter');
   await expect(page.locator('.catalog-details button.primary')).toBeFocused();
   await page.keyboard.press('ArrowLeft');await expect(movie).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.catalog-details button.primary')).toBeFocused();
   await page.getByRole('button',{name:'▤ Serien',exact:true}).click();
   await page.getByRole('button',{name:'Demo Serie',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(page.locator('.series-play')).toBeFocused();

@@ -171,6 +171,7 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
                     s.pending_ok = true;
                     s.active = true;
                 }
+                RemoteKey::Recall => {}
                 RemoteKey::Back => {
                     // BACK is already handled by the Java -> nativeRequestBack()
                     // -> App::mobile_back() chain. Popping here would fire twice.

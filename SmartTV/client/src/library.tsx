@@ -332,13 +332,29 @@ export function CatalogBrowser({
   }, [items, category, query, favorites]);
   const item = detail?.id === selected?.id ? detail : selected;
   const preview = useRef<HTMLElement>(null);
-  const activated = useRef<string | null>(null);
-  const activate = (value: Item) => { activated.current = itemKey(value); select(value); };
+  const [activation, setActivation] = useState(0);
+  const activated = useRef<{key: string; origin: Element | null; waiting: HTMLElement | null} | null>(null);
+  const activate = (value: Item) => {
+    activated.current = {key: itemKey(value), origin: document.activeElement, waiting: null};
+    select(value);
+    setActivation((revision) => revision + 1);
+  };
   useLayoutEffect(() => {
-    if (!item || activated.current !== itemKey(item)) return;
-    const primary = preview.current?.querySelector<HTMLButtonElement>('.series-play,button.primary');
-    if (primary) { primary.focus({preventScroll:true}); activated.current = null; }
-  }, [item, episodes]);
+    const request = activated.current;
+    if (!item || request?.key !== itemKey(item)) return;
+    if (document.activeElement !== request.origin && document.activeElement !== request.waiting) {
+      activated.current = null;
+      return;
+    }
+    const primary = preview.current?.querySelector<HTMLButtonElement>(".series-play,button.primary");
+    if (primary) {
+      primary.focus({preventScroll: true});
+      activated.current = null;
+    } else if (!request.waiting) {
+      request.waiting = preview.current?.querySelector<HTMLButtonElement>("button") || null;
+      request.waiting?.focus({preventScroll: true});
+    }
+  }, [activation, item, episodes]);
   return (
     <div class="catalog-browser">
       <section class="categories" data-focus-zone="categories">

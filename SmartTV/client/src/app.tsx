@@ -181,6 +181,7 @@ function App() {
     >
   >({});
   const previousLive = useRef<Item | null>(null);
+  const latestLive = useRef<Item | null>(null);
   const [selectedTitle, setSelectedTitle] = useState<Item | null>(null);
   const [epg, setEpg] = useState<Record<string, Epg[]>>({}),
     [resume, setResume] = useState<{ item: Item; position: number } | null>(
@@ -288,6 +289,7 @@ function App() {
     loadToken.current++;
     record();
     playerRef.current?.stop();
+    previewRef.current = null;
     setPreview(null);
     setFull(false);
     setTracks(false);
@@ -311,6 +313,7 @@ function App() {
     detailRequest.current++;
     setNavCollapsed(false);
     previousLive.current = null;
+    latestLive.current = null;
     setSelectedTitle(null);
     setEpg({});
     epgPending.current.clear();
@@ -410,12 +413,10 @@ function App() {
       return;
     }
     record();
-    if (
-      item.kind === "live" &&
-      previewRef.current?.kind === "live" &&
-      previewRef.current.id !== item.id
-    )
-      previousLive.current = previewRef.current;
+    if (item.kind === "live" && latestLive.current?.id !== item.id) {
+      previousLive.current = latestLive.current;
+      latestLive.current = item;
+    }
     setPreview(item);
     previewRef.current = item;
     setFull(fullscreen);
@@ -572,7 +573,7 @@ function App() {
     const list = view === "live" ? filteredLive : catalog.live;
     if (!list.length) return;
     const index = list.findIndex((item) => item.id === previewRef.current?.id);
-    const next = (index + delta + list.length) % list.length;
+    const next = index < 0 ? (delta < 0 ? list.length - 1 : 0) : (index + delta + list.length) % list.length;
     void start(list[next], fullRef.current);
   };
   keyHandler.current = (e: KeyboardEvent) => {
@@ -591,24 +592,27 @@ function App() {
       back();
       return;
     }
-    if (
-      fullRef.current &&
-      previewRef.current?.kind === "live" &&
-      !tracksRef.current &&
-      !document.querySelector(".modal") &&
-      (e.key === "ArrowUp" ||
-        e.key === "ArrowDown" ||
-        e.key === "0" ||
-        code === 48 ||
-        code === 96)
-    ) {
+    const livePlayer = fullRef.current && previewRef.current?.kind === "live";
+    const editingText = (e.target as HTMLElement | null)?.matches(
+      'input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]',
+    );
+    if ((livePlayer || view === "live") && !tracksRef.current && !parental.open
+      && !document.querySelector(".modal") && !editingText
+      && (e.key === "0" || e.code === "Numpad0" || code === 48 || code === 96)) {
+      e.preventDefault();
+      if (e.repeat) return;
+      const item = previousLive.current || (!previewRef.current ? latestLive.current : null);
+      if (item && item.id !== previewRef.current?.id) {
+        showControls();
+        void start(item, livePlayer);
+      }
+      return;
+    }
+    if (livePlayer && !tracksRef.current && !document.querySelector(".modal")
+      && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       showControls();
-      if (e.key === "0" || code === 48 || code === 96) {
-        if (previousLive.current) void start(previousLive.current, true);
-      } else {
-        stepLive(e.key === "ArrowUp" ? 1 : -1);
-      }
+      stepLive(e.key === "ArrowUp" ? 1 : -1);
       return;
     }
     if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !document.querySelector(".modal")) {
@@ -1478,7 +1482,6 @@ function App() {
                     <button
                       class={category === "all" ? "selected" : ""}
                       onClick={() => {
-                        stop();
                         setCategory("all");
                       }}
                     >
@@ -1487,7 +1490,6 @@ function App() {
                     <button
                       class={category === "favorites" ? "selected" : ""}
                       onClick={() => {
-                        stop();
                         setCategory("favorites");
                       }}
                     >
@@ -1497,7 +1499,6 @@ function App() {
                       <button
                         class={category === c.id ? "selected" : ""}
                         onClick={() => {
-                          stop();
                           setCategory(c.id);
                         }}
                       >

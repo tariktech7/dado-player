@@ -129,3 +129,10 @@ EPG-Uhrzeiten verwenden lokale Gerätezeit, Laufzeiten bleiben Minuten und Sekun
 Windows und Samsung teilen Maße der Playerleisten und die Sprungweite von zehn
 Sekunden. Windows verwendet libmpv und Windows-spezifische Audio- und Vollbildregler;
 Samsung verwendet AVPlay und die Tizen-Steuerung für Bildformat und Fernbedienung.
+
+
+Beim Wechsel der Live-Kategorie bleibt der Stream in der Vorschau aktiv,
+auch wenn der Sender zu einer anderen Kategorie gehört. Die 0-Taste wechselt
+zwischen den letzten beiden Live-Sendern im aktuellen Profil, in der Vorschau
+und im Vollbild. Beim Auswählen eines Films oder einer Serie springt der
+Fernbedienungsfokus in die Details und auf die Wiedergabe, sobald sie bereit ist.

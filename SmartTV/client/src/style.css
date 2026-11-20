@@ -1570,3 +1570,15 @@ hr {
 .settings-options .field .tv-select { display: flex; margin-bottom: 0; }
 .settings-options .field > .select-control { max-width: none; }
 .settings-options .field > input:not([type="checkbox"]) { max-width: none; }
+
+
+/* Keep rounded focus rings inside the rows that scroll against a clip edge. */
+.category-list { padding: 8px; }
+.channel-list, .catalog-title-list { padding: 8px; }
+.category-list button:focus,
+.channel-list .channel:focus,
+.catalog-title-list .catalog-poster:focus,
+.navigation nav button:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 4px var(--accent);
+}

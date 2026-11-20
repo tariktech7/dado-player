@@ -639,6 +639,12 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
          * fall through to the framework instead.
          */
         switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_0:
+            case KeyEvent.KEYCODE_NUMPAD_0:
+                if (event.getRepeatCount() == 0) {
+                    nativeOnKey(event.getKeyCode(), event.getAction());
+                }
+                break; // Keep the printable key available to text fields.
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT:

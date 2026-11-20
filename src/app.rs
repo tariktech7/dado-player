@@ -958,6 +958,35 @@ impl App {
         // Drain unconditionally so the native key queue never backs up on the
         // desktop UI, where there is nothing to focus.
         let mut keys = crate::platform::drain_remote_keys();
+        let recall = keys.contains(&crate::platform::RemoteKey::Recall)
+            || ctx.input(|input| {
+                input.events.iter().any(|event| {
+                    matches!(
+                        event,
+                        egui::Event::Key {
+                            key: egui::Key::Num0,
+                            pressed: true,
+                            repeat: false,
+                            ..
+                        }
+                    )
+                })
+            });
+        keys.retain(|key| *key != crate::platform::RemoteKey::Recall);
+        if recall
+            && !ctx.wants_keyboard_input()
+            && !self.parental.open
+            && !self.audio_menu_open
+            && !self.sub_menu_open
+            && (self.view == View::Live
+                || (self.view == View::Player
+                    && self
+                        .current_play
+                        .as_ref()
+                        .is_some_and(|item| item.kind == PlayKind::Live)))
+        {
+            self.recall_channel();
+        }
         if self.view == View::Player
             && self
                 .current_play
@@ -2201,6 +2230,7 @@ impl App {
                 let n = (p as i32 + delta).rem_euclid(len);
                 order[n as usize]
             }
+            None if delta < 0 => *order.last().unwrap_or(&order[0]),
             None => order[0],
         };
         if Some(next) == cur {
@@ -2228,24 +2258,29 @@ impl App {
         if item.kind != PlayKind::Live {
             return;
         }
-        let old = self
-            .current_play
-            .as_ref()
-            .filter(|p| p.kind == PlayKind::Live)
-            .or(self.preview.as_ref())
-            .cloned();
-        if let Some(old) = old {
-            if old.progress_key != item.progress_key {
-                self.previous_live = Some(old);
-            }
-        }
-        self.live_selected = item
+        let id = item
             .progress_key
             .strip_prefix("live:")
-            .and_then(|v| v.parse().ok());
+            .and_then(|value| value.parse().ok());
+        if let Some(last) = self.live_selected.filter(|last| Some(*last) != id) {
+            self.previous_live = self.resolve_play(&format!("live:{last}"));
+        }
+        self.live_selected = id;
     }
+
     pub fn recall_channel(&mut self) {
-        if let Some(item) = self.previous_live.clone() {
+        let item = self
+            .previous_live
+            .as_ref()
+            .and_then(|previous| self.resolve_play(&previous.progress_key))
+            .or_else(|| {
+                if self.current_live_id().is_some() {
+                    return None;
+                }
+                self.live_selected
+                    .and_then(|id| self.resolve_play(&format!("live:{id}")))
+            });
+        if let Some(item) = item {
             if self.view == View::Player {
                 self.play(item);
             } else {
@@ -2367,9 +2402,6 @@ impl App {
             }
             if down {
                 self.step_channel(-1);
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::Num0)) {
-                self.recall_channel();
             }
         }
 
@@ -3464,6 +3496,32 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn previous_channel_is_retained_across_category_changes_and_preview_close() {
+        let mut app = App::test_app();
+        app.load_demo();
+        let first = app
+            .resolve_play(&format!("live:{}", app.library.channels[0].id))
+            .unwrap();
+        let second = app
+            .resolve_play(&format!("live:{}", app.library.channels[1].id))
+            .unwrap();
+        app.remember_live(&first);
+        app.preview = Some(first.clone());
+        app.live_cat = "favorites".into();
+        app.close_preview();
+        app.remember_live(&second);
+        assert_eq!(
+            app.previous_live.as_ref().map(|item| &item.progress_key),
+            Some(&first.progress_key)
+        );
+        app.remember_live(&first);
+        assert_eq!(
+            app.previous_live.as_ref().map(|item| &item.progress_key),
+            Some(&second.progress_key)
+        );
+    }
+
     #[test]
     fn parental_gate_covers_play_preview_and_series_without_starting_media() {
         let mut app = App::test_app();
