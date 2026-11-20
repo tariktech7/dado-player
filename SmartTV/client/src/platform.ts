@@ -4,6 +4,10 @@ export const samsung = () =>
 export function registerKeys(): void {
   const input = (window as any).tizen?.tvinputdevice;
   for (const key of [
+    "ColorF0Red",
+    "ColorF1Green",
+    "ColorF2Yellow",
+    "ColorF3Blue",
     "MediaPlayPause",
     "MediaPlay",
     "MediaPause",

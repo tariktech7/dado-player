@@ -317,6 +317,118 @@ fn navigation_is_collapsed(app: &App, ctx: &Context, compact: Rect, expanded: Re
     app.nav_collapsed && matches!(next, NavigationHover::Closed)
 }
 
+#[cfg(windows)]
+pub(crate) fn remember_favorite_target(response: &egui::Response, key: &str) {
+    if response.has_focus() {
+        response.ctx.data_mut(|data| {
+            data.insert_temp(
+                Id::new("desktop-favorite-target"),
+                (response.id, key.to_owned()),
+            );
+        });
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
+    let Some(key) = ctx.input(|input| {
+        input.events.iter().find_map(|event| match event {
+            egui::Event::Key {
+                key,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+                ..
+            } if matches!(
+                key,
+                egui::Key::F1 | egui::Key::F2 | egui::Key::F3 | egui::Key::F4
+            ) =>
+            {
+                Some(*key)
+            }
+            _ => None,
+        })
+    }) else {
+        return false;
+    };
+    if crate::licensing::enabled() && !crate::licensing::allowed() {
+        return false;
+    }
+    let player = app.view == View::Player;
+    if !player && (app.active_profile.is_none() || !active(ctx)) {
+        return false;
+    }
+    if app.pending_resume.is_some() || app.description_open.is_some() {
+        if key == egui::Key::F1 {
+            app.clear_resume();
+            app.description_open = None;
+        }
+        return true;
+    }
+    let focus_navigation = |app: &mut App| {
+        app.nav_collapsed = false;
+        ctx.data_mut(|data| data.insert_temp(Id::new("desktop-navigation-focus"), true));
+    };
+    match key {
+        egui::Key::F1 => {
+            if player {
+                if !super::player_desktop::dismiss_menus(app, ctx) {
+                    app.stop_play();
+                }
+            } else {
+                focus_navigation(app);
+            }
+        }
+        egui::Key::F2 => {
+            if player {
+                app.stop_play();
+                if app.view == View::Live {
+                    return true;
+                }
+                app.desktop_return_item = None;
+            }
+            app.navigate(View::Live);
+            focus_navigation(app);
+        }
+        egui::Key::F3 => {
+            let focused = ctx.memory(|memory| memory.focused());
+            let target = if player {
+                app.current_play
+                    .as_ref()
+                    .map(|item| item.progress_key.clone())
+            } else {
+                ctx.data(|data| data.get_temp::<(Id, String)>(Id::new("desktop-favorite-target")))
+                    .filter(|(id, _)| Some(*id) == focused)
+                    .map(|(_, key)| key)
+                    .or_else(|| match app.view {
+                        View::Live => app.live_selected.map(|id| format!("live:{id}")),
+                        View::Movies => app.selected_movie.map(|id| format!("vod:{id}")),
+                        View::Series => app.selected_series.map(|id| format!("series:{id}")),
+                        _ => None,
+                    })
+            };
+            if let Some(target) = target {
+                app.toggle_favorite(&target);
+                if player {
+                    app.ui_activity = ctx.input(|input| input.time);
+                    app.player_reveal = false;
+                }
+            }
+        }
+        egui::Key::F4 => {
+            if player {
+                super::player_desktop::toggle_options_shortcut(app, ctx);
+            } else {
+                app.navigate(View::Settings);
+                focus_navigation(app);
+            }
+        }
+        _ => unreachable!(),
+    }
+    ctx.request_repaint();
+    true
+}
+
 pub fn show(app: &mut App, ctx: &Context) {
     if app.view == View::Player && app.current_play.is_some() {
         egui::CentralPanel::default()
@@ -407,6 +519,12 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
     let text = nav.visuals().text_color();
     let muted = theme::muted(&nav);
     let label_alpha = visibility.clamp(0.0, 1.0);
+    let focus_requested = ui.data_mut(|data| {
+        let id = Id::new("desktop-navigation-focus");
+        let requested = data.get_temp::<bool>(id).unwrap_or(false);
+        data.remove::<bool>(id);
+        requested
+    });
     let mark = Rect::from_center_size(
         pos2(rect.left() + 40.0 * s, rect.top() + 53.0 * s),
         vec2(44.0 * s, 44.0 * s),
@@ -504,10 +622,14 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                     Sense::click(),
                 );
                 let selected = view == Some(app.view);
+                if focus_requested && selected {
+                    response.request_focus();
+                    response.scroll_to_me(None);
+                }
                 let color = if selected { theme::accent(nav) } else { text };
                 let hover = nav.ctx().animate_bool_with_time(
                     response.id.with("hover"),
-                    selected || response.hovered(),
+                    selected || response.hovered() || response.has_focus(),
                     if reduced_motion(nav.ctx()) { 0.0 } else { 0.12 },
                 );
                 if hover > 0.0 {

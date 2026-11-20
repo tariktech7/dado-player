@@ -669,6 +669,12 @@ function App() {
     }
     setExit(true);
   };
+  const goShortcut = (next: View) => {
+    go(next);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`.navigation button[data-focus-key="${next}"]`)?.focus();
+    });
+  };
   const stepLive = (delta: number) => {
     const list = view === "live" ? filteredLive : catalog.live;
     if (!list.length) return;
@@ -696,6 +702,37 @@ function App() {
     const editingText = (e.target as HTMLElement | null)?.matches(
       'input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]',
     );
+    if (code >= 403 && code <= 406) {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (code === 403) {
+        back();
+        return;
+      }
+      if (!session || editingText || tracksRef.current || parental.open || document.querySelector(".modal")) return;
+      if (code === 404) {
+        if (view === "live" && fullRef.current) leavePlayer();
+        else goShortcut("live");
+      } else if (code === 405) {
+        const key = document.activeElement?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
+        const matches = (i: Item) => key === itemKey(i);
+        const item = fullRef.current ? previewRef.current
+          : (key ? catalog.live.find(matches) || catalog.vod.find(matches) ||
+            catalog.series.find(matches) || episodes.find(matches) ||
+            history.find(h => matches(h.item))?.item || favorites.find(matches) : undefined) ||
+            (view === "live" ? previewRef.current : selectedTitle);
+        if (item) {
+          toggleFavorite(item);
+          if (fullRef.current) showControls();
+        }
+      } else if (fullRef.current) {
+        showControls();
+        setPlayerOptions(playerOptionsRef.current ? null : "options");
+      } else {
+        goShortcut("settings");
+      }
+      return;
+    }
     if ((livePlayer || view === "live") && !tracksRef.current && !playerOptionsRef.current && !parental.open
       && !document.querySelector(".modal") && !editingText
       && (e.key === "0" || e.code === "Numpad0" || code === 48 || code === 96)) {

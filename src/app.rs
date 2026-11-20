@@ -2497,6 +2497,10 @@ impl App {
             }
             return;
         }
+        #[cfg(windows)]
+        if crate::ui::desktop::handle_color_shortcut(self, ctx) {
+            return;
+        }
         // Never steal keys while a text field has focus.
         if ctx.wants_keyboard_input() && self.view != View::Player {
             return;
@@ -4644,6 +4648,57 @@ mod tests {
             assert_eq!(app.images.pending.len(), 9 - total);
         }
         assert_eq!(app.images.textures.len(), 9);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn color_shortcuts_use_focused_rows_and_do_not_repeat_favorites() {
+        let mut app = App::test_app();
+        app.load_demo();
+        app.favorites.clear();
+        let ctx = egui::Context::default();
+        let keypress = |app: &mut App, key, repeat| {
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events: vec![egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                    ..Default::default()
+                },
+                |ctx| app.handle_keys(ctx),
+            );
+        };
+        keypress(&mut app, egui::Key::F2, false);
+        assert_eq!(app.view, View::Live);
+        let channel = app.library.channels[0].id;
+        let focused_key = format!("live:{}", app.library.channels[1].id);
+        let focused = egui::Id::new("fixture-focused-row");
+        app.live_selected = Some(channel);
+        ctx.memory_mut(|memory| memory.request_focus(focused));
+        ctx.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("desktop-favorite-target"),
+                (focused, focused_key.clone()),
+            )
+        });
+        keypress(&mut app, egui::Key::F3, false);
+        assert!(app.is_favorite(&focused_key));
+        assert!(!app.is_favorite(&format!("live:{channel}")));
+        keypress(&mut app, egui::Key::F3, true);
+        assert!(app.is_favorite(&focused_key));
+        app.nav_collapsed = true;
+        keypress(&mut app, egui::Key::F1, false);
+        assert!(!app.nav_collapsed);
+        keypress(&mut app, egui::Key::F4, false);
+        assert_eq!(app.view, View::Settings);
     }
 
     #[test]

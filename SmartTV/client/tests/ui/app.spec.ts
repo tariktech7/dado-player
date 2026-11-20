@@ -703,6 +703,38 @@ test("Live TV, movies and series use the same category column", async ({ page })
   }
 });
 
+test("colored remote keys act on the focused title or current player", async ({ page }) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  const color = (keyCode: number, repeat = false) => page.evaluate(({keyCode, repeat}) => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { keyCode, repeat, bubbles: true }));
+  }, {keyCode, repeat});
+  await color(404);
+  await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
+  const first = page.locator(".channel").first();
+  await first.click();
+  const second = page.locator('.channel[data-channel="2"]');
+  await second.focus();
+  await color(405);
+  await color(405, true);
+  await page.getByRole("button", { name: "Favoriten", exact: true }).click();
+  await expect(page.locator(".channel")).toHaveCount(1);
+  await expect(second).toBeVisible();
+  await second.click();
+  await second.click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await color(406);
+  await expect(page.locator(".player-options")).toBeVisible();
+  await color(403);
+  await expect(page.locator(".player-options")).toHaveCount(0);
+  await color(403);
+  await expect(second).toBeFocused();
+  await color(403);
+  await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
+  await color(406);
+  await expect(page.getByRole("button", { name: "⚙ Einstellungen", exact: true })).toBeFocused();
+});
+
 test("Back restores focus to the watched channel, movie and episode", async ({ page }) => {
   await fixture(page, true, true);
   await page.goto("/");

@@ -87,7 +87,10 @@ pub fn fav_button(app: &mut App, ui: &mut Ui, key: &str) {
     if is {
         b = b.fill(Color32::TRANSPARENT);
     }
-    if ui.add(b).on_hover_text("Favorit").clicked() {
+    let response = ui.add(b).on_hover_text("Favorit");
+    #[cfg(windows)]
+    desktop::remember_favorite_target(&response, key);
+    if response.clicked() {
         app.toggle_favorite(key);
     }
 }

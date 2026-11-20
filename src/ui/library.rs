@@ -522,6 +522,14 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                             response.request_focus();
                             app.desktop_return_item = None;
                         }
+                        #[cfg(windows)]
+                        if response.has_focus() {
+                            let kind = if series { "series" } else { "vod" };
+                            super::desktop::remember_favorite_target(
+                                &response,
+                                &format!("{kind}:{}", entry.id),
+                            );
+                        }
                         if ui.is_rect_visible(rect) {
                             ui.painter().rect_filled(
                                 rect.shrink(1.0),
@@ -836,6 +844,10 @@ fn series_details(app: &mut App, ui: &mut Ui, sid: u32, touch: bool) {
                 ui.scroll_to_rect(r.rect, Some(Align::Center));
             } else if scroll_to == Some(e.id) {
                 ui.scroll_to_rect(r.rect, Some(Align::Min));
+            }
+            #[cfg(windows)]
+            if r.has_focus() {
+                super::desktop::remember_favorite_target(&r, &format!("ep:{sid}:{}", e.id));
             }
             if hit(ui, &r, tv) {
                 play = Some(e.clone());

@@ -160,6 +160,16 @@ fn popup_row(
     pane(ctx, name, rect, scale, |ui| {
         let mut x = rect.left() + pad;
         let mut selection = None;
+        if name == "options"
+            && ctx.data_mut(|data| {
+                let id = Id::new("desktop-options-focus");
+                let requested = data.get_temp::<bool>(id).unwrap_or(false);
+                data.remove::<bool>(id);
+                requested
+            })
+        {
+            ui.memory_mut(|memory| memory.request_focus(ui.id().with(0_usize)));
+        }
         for (index, &(label, width, selected)) in entries.iter().enumerate() {
             let bounds = Rect::from_min_size(pos2(x, y + pad), vec2(width * scale, height));
             if button(
@@ -184,6 +194,20 @@ pub(crate) fn menus_open(ctx: &Context) -> bool {
             .iter()
             .any(|key| data.get_temp::<bool>(Id::new(key)).unwrap_or(false))
     })
+}
+
+pub(crate) fn toggle_options_shortcut(app: &mut App, ctx: &Context) {
+    let id = Id::new("desktop-player-options-menu");
+    let open = !ctx.data(|data| data.get_temp::<bool>(id).unwrap_or(false));
+    dismiss_menus(app, ctx);
+    if open {
+        ctx.data_mut(|data| {
+            data.insert_temp(id, true);
+            data.insert_temp(Id::new("desktop-options-focus"), true);
+        });
+    }
+    app.ui_activity = ctx.input(|input| input.time);
+    app.player_reveal = false;
 }
 
 pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {

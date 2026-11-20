@@ -642,6 +642,8 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     r.request_focus();
                     app.desktop_return_item = None;
                 }
+                #[cfg(windows)]
+                super::desktop::remember_favorite_target(&r, &key);
                 if app.scroll_to == Some(id) {
                     ui.scroll_to_rect(r.rect, Some(Align::Center));
                     app.scroll_to = None;

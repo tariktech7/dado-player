@@ -271,6 +271,8 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
             .fill(theme::accent_fill(&info))
             .rounding(20.0),
     );
+    #[cfg(windows)]
+    super::desktop::remember_favorite_target(&play_response, &item.progress_key);
     let play_hit = if app.tv {
         crate::ui::mobile::focus::clicked(&info, &play_response)
     } else {
@@ -535,6 +537,8 @@ fn poster_rail(
 fn home_poster(app: &mut App, ui: &mut Ui, key: &str, url: &str, title: &str) -> egui::Response {
     let size = Vec2::new(POSTER_W, POSTER_H);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    #[cfg(windows)]
+    super::desktop::remember_favorite_target(&resp, key);
     ui.painter().rect_filled(rect, 7.0, theme::WIDGET_DARK);
     if !url.is_empty() {
         let image_key = format!("home-poster:{}", key);
@@ -666,6 +670,8 @@ fn live_rail(
                     let mut child = ui.child_ui(text_rect, Layout::top_down(Align::Min));
                     ui::one_line(&mut child, name, 12.0, true);
                     child.label(RichText::new("Live-TV").size(10.0).color(theme::muted(ui)));
+                    #[cfg(windows)]
+                    super::desktop::remember_favorite_target(&resp, key);
                     if hit(app, ui, &resp) {
                         play = Some(PlayItem {
                             title: name.clone(),
