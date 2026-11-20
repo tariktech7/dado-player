@@ -1025,18 +1025,27 @@ test("refresh in the left rail reloads the open library and keeps the live previ
   let requests = 0;
   await page.route(/action=get_live_streams/, async (route) => {
     requests++;
+    await new Promise(resolve => setTimeout(resolve, 250));
     await route.fulfill({json:[{stream_id: 1001, name: "Neuer Sender", category_id: "1"}]});
   });
   const refresh = page.getByRole("button", {name: "Liste aktualisieren"});
+  const navLabel = page.getByRole("button", {name: "▣ Live TV", exact: true}).locator(".nav-label");
+  await expect(refresh.locator(".nav-label")).toHaveCSS("font-size", await navLabel.evaluate(el => getComputedStyle(el).fontSize));
+  expect(await refresh.locator(".nav-label").evaluate(el => el.scrollWidth <= el.clientWidth && el.clientHeight <= el.parentElement!.clientHeight)).toBe(true);
   await refresh.focus();
   await page.keyboard.press("Enter");
+  await expect(refresh).toHaveAttribute("data-refresh-status", "loading");
+  await expect(refresh.locator(".refresh-icon .refresh")).toHaveCSS("animation-name", "refresh-spin");
+  await expect(refresh).toHaveAttribute("data-refresh-status", "success");
   await expect(page.locator(".channel-list")).toContainText("Neuer Sender");
   await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
   expect(await streamOpenCount()).toBe(before);
   expect(requests).toBe(1);
   await page.route(/action=get_live_streams/, (route) => route.fulfill({status:503, body:""}));
   await refresh.click();
-  await expect(page.getByRole("alert")).toContainText("Liste teilweise aktualisiert");
+  await expect(refresh).toHaveAttribute("data-refresh-status", "error");
+  await expect(page.locator(".notification")).toHaveCount(0);
+  await expect(refresh).toHaveAttribute("data-refresh-status", "idle", { timeout: 3500 });
   await expect(page.locator(".channel-list")).toContainText("Neuer Sender");
   await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
   await page.screenshot({path:"test-results/tizen-refresh-076.png"});

@@ -4677,7 +4677,7 @@ mod tests {
             );
         };
         keypress(&mut app, egui::Key::F2, false);
-        assert_eq!(app.view, View::Live);
+        assert!(app.view == View::Live);
         let channel = app.library.channels[0].id;
         let focused_key = format!("live:{}", app.library.channels[1].id);
         let focused = egui::Id::new("fixture-focused-row");
@@ -4698,7 +4698,7 @@ mod tests {
         keypress(&mut app, egui::Key::F1, false);
         assert!(!app.nav_collapsed);
         keypress(&mut app, egui::Key::F4, false);
-        assert_eq!(app.view, View::Settings);
+        assert!(app.view == View::Settings);
     }
 
     #[test]

@@ -1640,5 +1640,50 @@ hr {
 
 
 .navigation nav button > span:first-child svg { width: 30px; height: 30px; display: block; }
-.navigation .refresh-library .nav-label { font-size: 24px; }
-.navigation .refresh-library[aria-busy="true"] .nav-label { opacity: 0.65; }
+.navigation .refresh-library .nav-label {
+  max-width: calc(100% - 78px);
+  white-space: normal;
+  line-height: 1.05;
+}
+.refresh-icon {
+  position: relative;
+  flex: 0 0 30px;
+  height: 30px;
+}
+.refresh-icon svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: opacity 180ms ease, transform 240ms ease;
+}
+.refresh-icon .success, .refresh-icon .error {
+  opacity: 0;
+  transform: rotate(-25deg) scale(.55);
+}
+.refresh-icon .success { color: #85d9a0; }
+.refresh-icon .error { color: #ff9b9b; }
+[data-refresh-status="loading"] .refresh-icon .refresh {
+  animation: refresh-spin .9s linear infinite;
+}
+[data-refresh-status="success"] .refresh-icon .refresh,
+[data-refresh-status="error"] .refresh-icon .refresh {
+  opacity: 0;
+  transform: rotate(35deg) scale(.55);
+}
+[data-refresh-status="success"] .refresh-icon .success,
+[data-refresh-status="error"] .refresh-icon .error {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .refresh-icon svg { transition: none; }
+  [data-refresh-status="loading"] .refresh-icon .refresh { animation: none; opacity: .55; }
+}
+.refresh-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

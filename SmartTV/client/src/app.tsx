@@ -51,15 +51,17 @@ import {ParentalPanel} from './parental-ui';
 import shellAppearance,{installShellAppearance} from './shell-appearance';
 installShellAppearance();
 
-function RailIcon({kind}: {kind: "settings" | "refresh"}) {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+type RefreshStatus = "idle" | "loading" | "success" | "error";
+
+function RailIcon({kind}: {kind: "settings" | "refresh" | "success" | "error"}) {
+  return <svg class={kind} aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     {kind === "settings" ? <>
       <path d="M10 2h4l.6 3 2 .9 2.6-1.7 2.8 2.8-1.7 2.6.9 2 3 .6v4l-3 .6-.9 2 1.7 2.6-2.8 2.8-2.6-1.7-2 .9-.6 3h-4l-.6-3-2-.9-2.6 1.7L2 21.4l1.7-2.6-.9-2-3-.6v-4l3-.6.9-2L2 7l2.8-2.8 2.6 1.7 2-.9z" transform="translate(2 1) scale(.83)" />
       <circle cx="12" cy="13" r="3" />
-    </> : <>
-      <path d="M20 8a8 8 0 1 0-.8 9.1M20 3v5h-5" />
-    </>}
+    </> : kind === "refresh" ? <path d="M20 8a8 8 0 1 0-.8 9.1M20 3v5h-5" />
+      : kind === "success" ? <path d="m5 12 4.5 4.5L19 7" />
+      : <path d="m6 6 12 12M18 6 6 18" />}
   </svg>;
 }
 
@@ -427,14 +429,20 @@ function App() {
       if (gen === generation.current) setBusy(false);
     }
   }
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>("idle");
+  const refreshing = refreshStatus === "loading";
   const refreshRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (refreshStatus !== "success" && refreshStatus !== "error") return;
+    const timer = setTimeout(() => setRefreshStatus("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [refreshStatus]);
   async function refreshCatalog() {
     if (!session || busy || refreshRequest.current === generation.current) return;
     const request = generation.current;
     refreshRequest.current = request;
-    setRefreshing(true);
-    setMessage("");
+    setRefreshStatus("loading");
+    let outcome: RefreshStatus = "idle";
     try {
       const provider = new Provider(session, savedRef.current.settings);
       const library = await provider.catalog(catalog);
@@ -448,18 +456,13 @@ function App() {
       setEpg({});
       if (previewRef.current?.kind === "live") void getEpg(previewRef.current);
       if (selectedTitle?.kind === "series") void openDetail(selectedTitle);
-      setMessage(library.issues.length
-        ? t("Liste teilweise aktualisiert.", "Library partially refreshed.")
-        : t("Liste aktualisiert.", "Library refreshed."));
-    } catch (error) {
-      if (request === generation.current) {
-        setMessage(t("Liste konnte nicht aktualisiert werden. Die bisherigen Inhalte sind weiter verfügbar.",
-          "The library could not be refreshed. Existing titles are still available."));
-      }
+      outcome = library.issues.length ? "error" : "success";
+    } catch {
+      if (request === generation.current) outcome = "error";
     } finally {
       if (refreshRequest.current === request) {
         refreshRequest.current = null;
-        setRefreshing(false);
+        setRefreshStatus(outcome);
       }
     }
   }
@@ -1653,10 +1656,18 @@ function App() {
                 <button class="refresh-library" data-focus-key="refresh-library"
                   aria-label={t("Liste aktualisieren", "Refresh library")}
                   title={t("Liste aktualisieren", "Refresh library")}
-                  aria-busy={refreshing} onClick={() => void refreshCatalog()}>
-                  <span><RailIcon kind="refresh" /></span>
-                  <span class="nav-label">{refreshing ? t("Wird aktualisiert …", "Refreshing …") : t("Liste aktualisieren", "Refresh library")}</span>
+                  aria-busy={refreshing} data-refresh-status={refreshStatus} onClick={() => void refreshCatalog()}>
+                  <span class="refresh-icon">
+                    <RailIcon kind="refresh" /><RailIcon kind="success" /><RailIcon kind="error" />
+                  </span>
+                  <span class="nav-label">{t("Liste aktualisieren", "Refresh library")}</span>
                 </button>
+                <span class="refresh-announcement" role="status">
+                  {refreshStatus === "loading" ? t("Liste wird aktualisiert", "Refreshing library")
+                    : refreshStatus === "success" ? t("Liste aktualisiert", "Library refreshed")
+                    : refreshStatus === "error" ? t("Aktualisierung unvollständig oder fehlgeschlagen", "Refresh incomplete or failed")
+                    : ""}
+                </span>
               </nav>
               <footer>
                 <span>{session?.name}</span>
