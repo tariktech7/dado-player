@@ -782,11 +782,7 @@ fn favorite_epg(app: &mut App, ui: &mut Ui) {
         ui::one_line(&mut child, &channel.name, 13.0, true);
         if let Some(entry) = current {
             ui::one_line(&mut child, &entry.title, 13.0, false);
-            let local = |ts| {
-                chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|dt| dt.with_timezone(&chrono::Local).format("%H:%M").to_string())
-                    .unwrap_or_default()
-            };
+            let local = |ts| app.settings.clock_format.format(ts);
             child.label(
                 RichText::new(format!("{} – {}", local(entry.start), local(entry.end)))
                     .size(11.0)

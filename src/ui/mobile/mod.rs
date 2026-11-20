@@ -19,9 +19,9 @@ mod movies;
 mod player;
 mod search;
 mod series;
-mod settings;
+pub(super) mod settings;
 #[cfg(any(target_os = "ios", target_os = "android"))]
-mod update;
+pub(super) mod update;
 
 use egui::{Align, Layout as EguiLayout, Rect};
 use egui::{Context, Frame, TopBottomPanel};
@@ -407,7 +407,11 @@ fn shell(app: &mut App, ctx: &Context, l: &Layout) {
                 View::Search => search::show(app, ui, l),
                 View::Favorites => favorites::show(app, ui, l),
                 View::Continue => continue_watching::show(app, ui, l),
-                View::Settings => settings::show(app, ui, l),
+                View::Settings => {
+                    Frame::none()
+                        .inner_margin(egui::Margin::symmetric(l.pad, 4.0))
+                        .show(ui, |ui| super::settings::show(app, ui));
+                }
                 View::Player => {}
                 View::Login => {}
             });
@@ -439,12 +443,45 @@ fn bar_content(app: &App) -> (String, bool, Option<(Icon, &'static str)>) {
     match app.view {
         View::Live => ("Live TV".to_string(), false, search_action),
         View::Movies => ("Filme".into(), false, search_action),
-        View::Series => ("Serien".to_string(), false, search_action),
-        View::Home => ("Startseite".to_string(), false, search_action),
-        View::Search => ("Suche".to_string(), true, None),
-        View::Favorites => ("Favoriten".to_string(), false, None),
-        View::Continue => ("Fortsetzen".to_string(), false, None),
-        View::Settings => ("Einstellungen".to_string(), false, None),
+        View::Series => (
+            app.settings.language.text("Serien", "Series").to_string(),
+            false,
+            search_action,
+        ),
+        View::Home => (
+            app.settings.language.text("Startseite", "Home").to_string(),
+            false,
+            search_action,
+        ),
+        View::Search => (
+            app.settings.language.text("Suche", "Search").to_string(),
+            true,
+            None,
+        ),
+        View::Favorites => (
+            app.settings
+                .language
+                .text("Favoriten", "Favorites")
+                .to_string(),
+            false,
+            None,
+        ),
+        View::Continue => (
+            app.settings
+                .language
+                .text("Fortsetzen", "Continue")
+                .to_string(),
+            false,
+            None,
+        ),
+        View::Settings => (
+            app.settings
+                .language
+                .text("Einstellungen", "Settings")
+                .to_string(),
+            false,
+            None,
+        ),
         View::Player | View::Login => (String::new(), false, None),
     }
 }

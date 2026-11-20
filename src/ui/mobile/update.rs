@@ -150,7 +150,8 @@ pub fn show(ui: &mut egui::Ui) {
     let mut s = state().lock().unwrap();
     ui.heading("App-Updates");
     ui.label(format!("Installierter Build {}", PACKAGE.2));
-    if ui.button("GitHub-Releases öffnen").clicked() {
+    let releases = ui.button("GitHub-Releases öffnen");
+    if super::focus::clicked(ui, &releases) {
         if let Err(e) = native(false) {
             s.message = e.to_string();
         }
@@ -163,10 +164,8 @@ pub fn show(ui: &mut egui::Ui) {
             crate::platform::seed_ime(token);
         }
     });
-    if ui
-        .add_enabled(!s.busy, egui::Button::new("Update prüfen und laden"))
-        .clicked()
-    {
+    let check = ui.add_enabled(!s.busy, egui::Button::new("Update prüfen und laden"));
+    if super::focus::clicked(ui, &check) && !s.busy {
         s.busy = true;
         s.ready = false;
         s.message = "GitHub-Release wird geprüft …".into();
@@ -196,7 +195,10 @@ pub fn show(ui: &mut egui::Ui) {
     let action = "IPA teilen / in Dateien sichern";
     #[cfg(target_os = "android")]
     let action = "Android-Installer öffnen";
-    if s.ready && ui.button(action).clicked() {
+    if s.ready && {
+        let install = ui.button(action);
+        super::focus::clicked(ui, &install)
+    } {
         if let Err(e) = native(true) {
             s.message = e.to_string();
         }

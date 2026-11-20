@@ -1,0 +1,42 @@
+[
+  {
+    "id": "general",
+    "de": "Allgemein",
+    "en": "General"
+  },
+  {
+    "id": "playback",
+    "de": "Wiedergabe",
+    "en": "Playback"
+  },
+  {
+    "id": "audio",
+    "de": "Ton & Untertitel",
+    "en": "Audio & subtitles"
+  },
+  {
+    "id": "profiles",
+    "de": "Profile",
+    "en": "Profiles"
+  },
+  {
+    "id": "parental",
+    "de": "Elternsperre",
+    "en": "Parental controls"
+  },
+  {
+    "id": "updates",
+    "de": "App-Updates",
+    "en": "App updates"
+  },
+  {
+    "id": "license",
+    "de": "Lizenz & Gerät",
+    "en": "License & device"
+  },
+  {
+    "id": "advanced",
+    "de": "Erweitert",
+    "en": "Advanced"
+  }
+]

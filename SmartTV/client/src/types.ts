@@ -46,6 +46,8 @@ export interface Watched {
   at: number;
 }
 export interface Settings {
+  language: "de" | "en";
+  clockFormat: "H24" | "H12";
   theme: "warm" | "dark" | "light" | "system";
   appearanceVersion?: number;
   autoplayLast: boolean;

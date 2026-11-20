@@ -28,6 +28,9 @@ pub struct Appearance {
     pub epg_font: f32,
     pub navigation_duration_ms: f32,
     pub navigation_easing: [f32; 4],
+    pub player_top_height: f32,
+    pub player_controls_height: f32,
+    pub player_corner_radius: f32,
 }
 pub fn appearance() -> &'static Appearance {
     static A: OnceLock<Appearance> = OnceLock::new();
@@ -347,14 +350,42 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
         .show(&mut list, |nav| {
             nav.spacing_mut().item_spacing.y = 8.0 * s;
             for (label, view, symbol) in [
-                ("Startseite", View::Home, Icon::Home),
+                (
+                    app.settings.language.text("Startseite", "Home"),
+                    View::Home,
+                    Icon::Home,
+                ),
                 ("Live TV", View::Live, Icon::Tv),
-                ("Filme", View::Movies, Icon::Film),
-                ("Serien", View::Series, Icon::Series),
-                ("Fortsetzen", View::Continue, Icon::Play),
-                ("Favoriten", View::Favorites, Icon::Star),
-                ("Suche", View::Search, Icon::Search),
-                ("Einstellungen", View::Settings, Icon::Sliders),
+                (
+                    app.settings.language.text("Filme", "Movies"),
+                    View::Movies,
+                    Icon::Film,
+                ),
+                (
+                    app.settings.language.text("Serien", "Series"),
+                    View::Series,
+                    Icon::Series,
+                ),
+                (
+                    app.settings.language.text("Fortsetzen", "Continue"),
+                    View::Continue,
+                    Icon::Play,
+                ),
+                (
+                    app.settings.language.text("Favoriten", "Favorites"),
+                    View::Favorites,
+                    Icon::Star,
+                ),
+                (
+                    app.settings.language.text("Suche", "Search"),
+                    View::Search,
+                    Icon::Search,
+                ),
+                (
+                    app.settings.language.text("Einstellungen", "Settings"),
+                    View::Settings,
+                    Icon::Sliders,
+                ),
             ] {
                 let (r, _) = nav.allocate_exact_size(
                     vec2(

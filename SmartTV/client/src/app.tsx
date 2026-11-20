@@ -23,6 +23,8 @@ import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
 import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
+import playbackLanguages from "../../../shared/playback-languages.json" with { type: "json" };
+import settingsSections from "../../../shared/settings-sections.json" with { type: "json" };
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 import { Home } from "./home";
 import {licenseClient} from './licensing';
@@ -49,14 +51,14 @@ import shellAppearance,{installShellAppearance} from './shell-appearance';
 installShellAppearance();
 
 const nav = [
-  ["home", "⌂", "Startseite"],
-  ["live", "▣", "Live TV"],
-  ["vod", "▷", "Filme"],
-  ["series", "▤", "Serien"],
-  ["history", "↻", "Fortsetzen"],
-  ["favorites", "☆", "Favoriten"],
-  ["search", "⌕", "Suche"],
-  ["settings", "⚙", "Einstellungen"],
+  ["home", "⌂", "Startseite", "Home"],
+  ["live", "▣", "Live TV", "Live TV"],
+  ["vod", "▷", "Filme", "Movies"],
+  ["series", "▤", "Serien", "Series"],
+  ["history", "↻", "Fortsetzen", "Continue watching"],
+  ["favorites", "☆", "Favoriten", "Favorites"],
+  ["search", "⌕", "Suche", "Search"],
+  ["settings", "⚙", "Einstellungen", "Settings"],
 ] as const;
 type View = (typeof nav)[number][0];
 const EMPTY_ITEMS: Item[] = [];
@@ -75,11 +77,15 @@ const time = (n: number) =>
   Number.isFinite(n)
     ? `${Math.floor(n / 3600) ? Math.floor(n / 3600) + ":" : ""}${String(Math.floor((n % 3600) / 60)).padStart(2, "0")}:${String(Math.floor(n % 60)).padStart(2, "0")}`
     : "00:00";
-const clock = (n: number) =>
-  new Date(n * 1000).toLocaleTimeString("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const clock = (n: number, format: Settings["clockFormat"]) => {
+  const date = new Date(n * 1000);
+  if (!Number.isFinite(date.getTime())) return "–";
+  const hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return format === "H12"
+    ? `${String(hours % 12 || 12).padStart(2, "0")}:${minutes} ${hours < 12 ? "AM" : "PM"}`
+    : `${String(hours).padStart(2, "0")}:${minutes}`;
+};
 const currentNext = (rows: Epg[]) => {
   const now = Date.now() / 1000;
   return [
@@ -138,6 +144,8 @@ function App() {
     [editing, setEditing] = useState(false);
   const [favoriteKind, setFavoriteKind] = useState("live");
   const [historyKind, setHistoryKind] = useState("live");
+  const [settingsSection, setSettingsSection] = useState<string | null>("general");
+  const t = (de: string, en: string) => saved.settings.language === "en" ? en : de;
   const navCollapsed = useRef(false);
   const setNavCollapsed = (collapsed: boolean) => {
     if (navCollapsed.current === collapsed) return;
@@ -560,6 +568,13 @@ function App() {
     }
     setExit(true);
   };
+  const stepLive = (delta: number) => {
+    const list = view === "live" ? filteredLive : catalog.live;
+    if (!list.length) return;
+    const index = list.findIndex((item) => item.id === previewRef.current?.id);
+    const next = (index + delta + list.length) % list.length;
+    void start(list[next], fullRef.current);
+  };
   keyHandler.current = (e: KeyboardEvent) => {
     const code = e.keyCode;
     if (!licenseClient.state.allowed) {
@@ -592,16 +607,7 @@ function App() {
       if (e.key === "0" || code === 48 || code === 96) {
         if (previousLive.current) void start(previousLive.current, true);
       } else {
-        const list = view === "live" ? filteredLive : catalog.live;
-        const index = list.findIndex((i) => i.id === previewRef.current?.id);
-        if (list.length)
-          void start(
-            list[
-              (index + (e.key === "ArrowUp" ? 1 : -1) + list.length) %
-                list.length
-            ],
-            true,
-          );
+        stepLive(e.key === "ArrowUp" ? 1 : -1);
       }
       return;
     }
@@ -611,7 +617,7 @@ function App() {
         playerMenuNavigation.current = true;
       } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !playerMenuNavigation.current) {
         e.preventDefault();
-        safe(() => playerRef.current?.seek(e.key === "ArrowLeft" ? -10 : 10));
+        safe(() => playerRef.current?.seek(e.key === "ArrowLeft" ? -policy.seekStepSeconds : policy.seekStepSeconds));
         showControls();
         return;
       }
@@ -632,8 +638,8 @@ function App() {
       e.preventDefault();
       const p = playerRef.current;
       if (code === 413) stop();
-      else if (code === 417) safe(() => p?.seek(30));
-      else if (code === 412) safe(() => p?.seek(-10));
+      else if (code === 417) safe(() => p?.seek(policy.seekStepSeconds));
+      else if (code === 412) safe(() => p?.seek(-policy.seekStepSeconds));
       else if (code === 427 || code === 428) {
         const list = view === "live" ? filteredLive : catalog.live;
         const index = list.findIndex((i) => i.id === previewRef.current?.id);
@@ -874,51 +880,51 @@ function App() {
     value: string,
     onChange: (v: string) => void,
     options: [string, string][],
-  ) => <TVSelect value={value} onChange={onChange} options={options} />;
-  const settingsView = () => (
-    <div class="settings-page">
-      <header>
-        <span class="eyebrow">DADO PLAYER · TIZEN {APP_VERSION}</span>
-        <h1>Dein Fernseher. Dein Bild.</h1>
-        <p>
-          Samsung AVPlay mit der Dado-Steuerung. Einstellungen bleiben auf
-          diesem Gerät gespeichert.
-        </p>
-      </header>
-      <div class="settings-grid">
-        <section class="glass" data-license-status data-focus-zone="settings-license">
-          <h2>Lizenz & Gerät</h2>
-          <p><strong>{license.text}</strong></p>
-          <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
-          <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
-          <p class="muted">{license.identitySource}. Die Geräte-ID bleibt die Kennung für deine Freischaltung.</p>
-          {license.error && <p role="status">{license.error}</p>}
-          {!license.claims && <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.startTrial()}>7 Tage kostenlos testen</button>}
-          <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
-            {license.busy?'Wird abgerufen …':license.claims?.kind==='permanent'?'Lizenz wiederherstellen':'Freischaltung abrufen'}
-          </button>
-          <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
-        </section>
-        <section class="glass" data-focus-zone="settings-appearance">
-          <h2>Darstellung</h2>
-          <Field label="Expertenmodus">
-            <TVInput type="checkbox" checked={saved.settings.expertMode}
-              onChange={(e) => setting("expertMode", e.currentTarget.checked)} />
+    label?: string,
+  ) => <TVSelect value={value} onChange={onChange} options={options} label={label} />;
+  const [customLanguage, setCustomLanguage] = useState<"audioLanguage" | "subtitleLanguage" | null>(null);
+  const playbackLanguage = (key: "audioLanguage" | "subtitleLanguage", label: string) => {
+    const value = saved.settings[key];
+    const custom = customLanguage === key || !playbackLanguages.some((option) => option.code === value);
+    const options: [string, string][] = playbackLanguages.map((option) => [option.code, option[saved.settings.language]]);
+    options.push(["custom", t("Andere …", "Other …")]);
+    return <>
+      <Field label={label}>
+        {choose(custom ? "custom" : value, (next) => {
+          setCustomLanguage(next === "custom" ? key : null);
+          if (next !== "custom") setting(key, next);
+        }, options, label)}
+      </Field>
+      {custom && <Field label={t("Eigener Sprachcode", "Custom language code")}>
+        <TVInput value={value} placeholder="ISO 639" onInput={(event) => setting(key, event.currentTarget.value)} />
+      </Field>}
+    </>;
+  };
+  useEffect(() => { document.documentElement.lang = saved.settings.language; }, [saved.settings.language]);
+  const settingsView = () => {
+    const active = settingsSections.find((section) => section.id === settingsSection);
+    const renderSection = (id: string) => {
+      switch (id) {
+        case "general": return <>
+<Field label={t("App-Sprache", "App language")}>
+            {choose(saved.settings.language, (value) => setting("language", value as Settings["language"]), [["de", "Deutsch"], ["en", "English"]], t("App-Sprache", "App language"))}
           </Field>
-          <p class="muted">Standard: automatische Wiedergabe mit Dado-Steuerung. Zusätzliche Player- und Netzwerkoptionen im Expertenmodus.</p>
-          <Field label="Farbschema">
+          <Field label={t("Zeitformat", "Time format")}>
+            {choose(saved.settings.clockFormat, (value) => setting("clockFormat", value as Settings["clockFormat"]), [["H24", "24 h · 18:30"], ["H12", "12 h · 06:30 PM"]], t("Zeitformat", "Time format"))}
+          </Field>
+          <Field label={t("Farbschema", "Appearance")}>
             {choose(
               saved.settings.theme,
               (v) => setting("theme", v as Settings["theme"]),
               [
-                ["warm", "Blau"],
-                ["dark", "Dunkel"],
-                ["light", "Hell"],
+                ["warm", t("Blau", "Blue")],
+                ["dark", t("Dunkel", "Dark")],
+                ["light", t("Hell", "Light")],
                 ["system", "System"],
               ],
             )}
           </Field>
-          <Field label="Senderdichte">
+          <Field label={t("Senderdichte", "Channel density")}>
             {choose(
               saved.settings.density,
               (v) => setting("density", v as Settings["density"]),
@@ -928,49 +934,10 @@ function App() {
               ],
             )}
           </Field>
-          <p class="muted">
-            Die Oberfläche skaliert mit Full HD und 4K. Logos behalten ihr
-            Seitenverhältnis.
-          </p>
-        </section>
-        <section class="glass" data-focus-zone="settings-playback">
-          <h2>Wiedergabe</h2>
-          {saved.settings.expertMode && <>
-          <Field label="Wiedergabe-Engine">
-            {choose(
-              saved.settings.player,
-              (v) => setting("player", v as Settings["player"]),
-              [
-                ["auto", "Automatisch · empfohlen"],
-                ["avplay", "Samsung AVPlay"],
-                ["html", "HTML-Video · Alternative"],
-              ],
-            )}
-          </Field>
-          <Field label="Live-Streamformat">
-            {choose(
-              saved.settings.liveFormat,
-              (v) => {
-                setting("liveFormat", v as Settings["liveFormat"]);
-                setCatalog((old) => ({
-                  ...old,
-                  live: old.live.map((i) => ({
-                    ...i,
-                    url:
-                      session?.kind === "Xtream"
-                        ? providerRef.current!.stream("live", i.id, v)
-                        : i.url,
-                  })),
-                }));
-              },
-              [
-                ["m3u8", "HLS (.m3u8)"],
-                ["ts", "MPEG-TS (.ts)"],
-              ],
-            )}
-          </Field>
-          </>}
-          <Field label="Bildformat">
+
+        </>;
+        case "playback": return <>
+          <Field label={t("Bildformat", "Aspect ratio")}>
             {choose(
               saved.settings.aspect,
               (v) => {
@@ -984,40 +951,25 @@ function App() {
               ],
             )}
           </Field>
-          <Field label="Letzten Titel beim Start abspielen">
+          <Field label={t("Letzten Titel beim Start abspielen", "Open the last channel at startup")}>
             <TVInput
               type="checkbox"
               checked={saved.settings.autoplayLast}
               onChange={(e) => setting("autoplayLast", e.currentTarget.checked)}
             />
           </Field>
-        </section>
-        <section class="glass" data-focus-zone="settings-audio">
-          <h2>Ton & Untertitel</h2>
-          <Field label="Bevorzugte Audiosprache">
-            <TVInput
-              placeholder="z. B. deu oder ger"
-              value={saved.settings.audioLanguage}
-              onInput={(e) => setting("audioLanguage", e.currentTarget.value)}
-            />
-          </Field>
-          <Field label="Untertitelsprache">
-            <TVInput
-              placeholder="z. B. deu"
-              value={saved.settings.subtitleLanguage}
-              onInput={(e) =>
-                setting("subtitleLanguage", e.currentTarget.value)
-              }
-            />
-          </Field>
-          <Field label="Untertitel automatisch">
+        </>;
+        case "audio": return <>
+          {playbackLanguage("audioLanguage", t("Bevorzugte Audiosprache", "Preferred audio language"))}
+          {playbackLanguage("subtitleLanguage", t("Untertitelsprache", "Subtitle language"))}
+          <Field label={t("Untertitel automatisch", "Enable subtitles automatically")}>
             <TVInput
               type="checkbox"
               checked={saved.settings.subtitles}
               onChange={(e) => setting("subtitles", e.currentTarget.checked)}
             />
           </Field>
-          <Field label="Untertitelgröße">
+          <Field label={t("Untertitelgröße", "Subtitle size")}>
             {choose(
               String(saved.settings.subtitleSize),
               (v) => setting("subtitleSize", Number(v)),
@@ -1033,85 +985,8 @@ function App() {
             Spuren hängen vom Stream ab und sind im Player auswählbar.
             Tonausgabe und Passthrough verwaltet der Fernseher.
           </p>
-        </section>
-        <section class="glass" data-focus-zone="settings-network">
-          <h2>Netzwerk</h2>
-          {saved.settings.expertMode && <>
-          <Field label="Stream-Puffer">
-            {choose(
-              String(saved.settings.bufferSeconds),
-              (v) => setting("bufferSeconds", Number(v)),
-              [
-                ["5", "5 Sekunden"],
-                ["10", "10 Sekunden"],
-                ["20", "20 Sekunden"],
-                ["45", "45 Sekunden"],
-              ],
-            )}
-          </Field>
-          <Field label="Zeitlimit">
-            {choose(
-              String(saved.settings.timeoutSeconds),
-              (v) => setting("timeoutSeconds", Number(v)),
-              [
-                ["10", "10 Sekunden"],
-                ["20", "20 Sekunden"],
-                ["40", "40 Sekunden"],
-                ["60", "60 Sekunden"],
-              ],
-            )}
-          </Field>
-          <Field label="Player User-Agent">
-            <TVInput
-              value={saved.settings.userAgent}
-              onInput={(e) => setting("userAgent", e.currentTarget.value)}
-              placeholder="Standard des Fernsehers"
-            />
-          </Field>
-          </>}
-          <Field label="Anbieterzugriff">
-            {choose(
-              saved.settings.networkMode,
-              (v) => setting("networkMode", v as Settings["networkMode"]),
-              [
-                ["direct", "Direkt"],
-                ["companion", "Companion im Heimnetz (API/EPG)"],
-              ],
-            )}
-          </Field>
-          {saved.settings.networkMode === "companion" && (
-            <>
-              <Field label="Companion-Adresse">
-                <TVInput
-                  value={saved.settings.companionUrl}
-                  onInput={(e) =>
-                    setting("companionUrl", e.currentTarget.value)
-                  }
-                  placeholder="http://192.168.178.x:18498"
-                />
-              </Field>
-              <Field label="Companion-Zugangsschlüssel">
-                <TVInput
-                  type="password"
-                  value={saved.settings.companionToken}
-                  onInput={(e) =>
-                    setting("companionToken", e.currentTarget.value)
-                  }
-                />
-              </Field>
-            </>
-          )}
-          <p class="muted">
-            TLS-Zertifikate werden geprüft. Ein deaktivierter TLS-Schutz oder
-            MPV-/Direct3D-Filter stehen auf Tizen nicht zur Verfügung.
-            Netzwerkänderungen greifen beim erneuten Laden.
-          </p>
-          <button onClick={() => session && void login(session)}>
-            Bibliothek neu laden
-          </button>
-        </section>
-        <section class="glass" data-focus-zone="settings-profiles">
-          <h2>Profile & Updates</h2>
+        </>;
+        case "profiles": return <>
           <p>
             {session?.name} · {samsung() ? "Samsung-TV" : "Browser-Vorschau"}
           </p>
@@ -1124,6 +999,14 @@ function App() {
             Profil hinzufügen
           </button>
           <button onClick={logout}>Profil wechseln / Abmelden</button>
+
+          <ConnectPanel importProfiles={importCloudProfiles} />
+        </>;
+        case "parental": return <>
+          <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
+          <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
+        </>;
+        case "updates": return <>
           <button onClick={() => void checkUpdates()}>
             GitHub-Update prüfen
           </button>
@@ -1149,16 +1032,162 @@ function App() {
             <p class="muted">github.com/tariktech7/dado-player/releases</p>
           )}
           <p class="muted">{APP_VERSION} · Tizen 6.5+ · D7</p>
-        </section>
-        <section class="glass" data-focus-zone="settings-parental">
-          <h2>Elternsperre</h2>
-          <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
-          <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
-        </section>
-        <ConnectPanel importProfiles={importCloudProfiles} />
+        </>;
+        case "license": return <>
+          <p><strong>{license.text}</strong></p>
+          <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
+          <p>MAC-Adresse: <strong>{license.mac || 'Nicht verfügbar'}</strong></p>
+          <p class="muted">{license.identitySource}. Die Geräte-ID bleibt die Kennung für deine Freischaltung.</p>
+          {license.error && <p role="status">{license.error}</p>}
+          {!license.claims && <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.startTrial()}>7 Tage kostenlos testen</button>}
+          <button disabled={license.busy || !license.ready} onClick={()=>void licenseClient.refresh()}>
+            {license.busy?'Wird abgerufen …':license.claims?.kind==='permanent'?'Lizenz wiederherstellen':'Freischaltung abrufen'}
+          </button>
+          <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
+        </>;
+        case "advanced": return <>
+          <Field label={t("Expertenmodus", "Expert mode")}>
+            <TVInput type="checkbox" checked={saved.settings.expertMode}
+              onChange={(e) => setting("expertMode", e.currentTarget.checked)} />
+          </Field>
+
+          {saved.settings.expertMode && <>
+
+          <Field label={t("Wiedergabe-Engine", "Playback engine")}>
+            {choose(
+              saved.settings.player,
+              (v) => setting("player", v as Settings["player"]),
+              [
+                ["auto", "Automatisch · empfohlen"],
+                ["avplay", "Samsung AVPlay"],
+                ["html", "HTML-Video · Alternative"],
+              ],
+            )}
+          </Field>
+          <Field label={t("Live-Streamformat", "Live stream format")}>
+            {choose(
+              saved.settings.liveFormat,
+              (v) => {
+                setting("liveFormat", v as Settings["liveFormat"]);
+                setCatalog((old) => ({
+                  ...old,
+                  live: old.live.map((i) => ({
+                    ...i,
+                    url:
+                      session?.kind === "Xtream"
+                        ? providerRef.current!.stream("live", i.id, v)
+                        : i.url,
+                  })),
+                }));
+              },
+              [
+                ["m3u8", "HLS (.m3u8)"],
+                ["ts", "MPEG-TS (.ts)"],
+              ],
+            )}
+          </Field>
+
+          <Field label={t("Stream-Puffer", "Stream buffer")}>
+            {choose(
+              String(saved.settings.bufferSeconds),
+              (v) => setting("bufferSeconds", Number(v)),
+              [
+                ["5", "5 Sekunden"],
+                ["10", "10 Sekunden"],
+                ["20", "20 Sekunden"],
+                ["45", "45 Sekunden"],
+              ],
+            )}
+          </Field>
+          <Field label={t("Zeitlimit", "Timeout")}>
+            {choose(
+              String(saved.settings.timeoutSeconds),
+              (v) => setting("timeoutSeconds", Number(v)),
+              [
+                ["10", "10 Sekunden"],
+                ["20", "20 Sekunden"],
+                ["40", "40 Sekunden"],
+                ["60", "60 Sekunden"],
+              ],
+            )}
+          </Field>
+          <Field label={t("Player User-Agent", "Player user agent")}>
+            <TVInput
+              value={saved.settings.userAgent}
+              onInput={(e) => setting("userAgent", e.currentTarget.value)}
+              placeholder="Standard des Fernsehers"
+            />
+          </Field>
+
+          <Field label={t("Anbieterzugriff", "Provider access")}>
+            {choose(
+              saved.settings.networkMode,
+              (v) => setting("networkMode", v as Settings["networkMode"]),
+              [
+                ["direct", "Direkt"],
+                ["companion", "Companion im Heimnetz (API/EPG)"],
+              ],
+            )}
+          </Field>
+          {saved.settings.networkMode === "companion" && (
+            <>
+              <Field label={t("Companion-Adresse", "Companion address")}>
+                <TVInput
+                  value={saved.settings.companionUrl}
+                  onInput={(e) =>
+                    setting("companionUrl", e.currentTarget.value)
+                  }
+                  placeholder="http://192.168.178.x:18498"
+                />
+              </Field>
+              <Field label={t("Companion-Zugangsschlüssel", "Companion access key")}>
+                <TVInput
+                  type="password"
+                  value={saved.settings.companionToken}
+                  onInput={(e) =>
+                    setting("companionToken", e.currentTarget.value)
+                  }
+                />
+              </Field>
+            </>
+          )}
+          <p class="muted">
+            TLS-Zertifikate werden geprüft. Ein deaktivierter TLS-Schutz oder
+            MPV-/Direct3D-Filter stehen auf Tizen nicht zur Verfügung.
+            Netzwerkänderungen greifen beim erneuten Laden.
+          </p>
+          <button onClick={() => session && void login(session)}>
+            Bibliothek neu laden
+          </button>
+          </>}
+        </>;
+        default: return null;
+      }
+    };
+    return (
+      <div class="settings-page">
+        <h1>{t("Einstellungen", "Settings")}</h1>
+        <div class="settings-grid">
+          <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
+            {settingsSections.map((section) => (
+              <button key={section.id} data-focus-key={section.id}
+                aria-expanded={settingsSection === section.id} aria-controls="settings-options"
+                class={settingsSection === section.id ? "selected" : ""}
+                onClick={() => setSettingsSection(section.id)}>
+                <span>{section[saved.settings.language]}</span><span aria-hidden="true">›</span>
+              </button>
+            ))}
+          </nav>
+          {active && <section key={active.id} id="settings-options" class="glass settings-options"
+              data-focus-zone="settings-options" data-settings-section={active.id}
+              data-license-status={active.id === "license" ? "" : undefined}>
+            <h2>{active[saved.settings.language]}</h2>
+            {renderSection(active.id)}
+          </section>}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
   const modal = (title: string, children: ComponentChildren) => (
     <div class="scrim">
       <section
@@ -1423,16 +1452,16 @@ function App() {
               </div>
               {license.claims?.kind==='trial' && <small class="trial-badge-compact" title={license.text}>Trial · {license.text.match(/\d+/)?.[0]} T</small>}
               <nav>
-                {nav.map(([id, icon, label]) => (
+                {nav.map(([id, icon, de, en]) => (
                   <button
-                    aria-label={`${icon} ${label}`}
-                    title={label}
+                    aria-label={`${icon} ${t(de, en)}`}
+                    title={t(de, en)}
                     data-focus-key={id}
                     class={view === id ? "selected" : ""}
                     onClick={() => go(id)}
                   >
                     <span>{icon}</span>
-                    <span class="nav-label">{label}</span>
+                    <span class="nav-label">{t(de, en)}</span>
                   </button>
                 ))}
               </nav>
@@ -1444,7 +1473,7 @@ function App() {
             {view === "live" ? (
               <>
                 <section class="categories" data-focus-zone="categories">
-                  <h1>Kategorien</h1>
+                  <h1>{t("Kategorien", "Categories")}</h1>
                   <div class="category-list">
                     <button
                       class={category === "all" ? "selected" : ""}
@@ -1492,7 +1521,7 @@ function App() {
                   <TVInput
                     class="channel-search"
                     type="search"
-                    placeholder="Sender suchen"
+                    placeholder={t("Sender suchen", "Find a channel")}
                     aria-label="Sender suchen"
                     value={query}
                     onInput={(e) => setQuery(e.currentTarget.value)}
@@ -1507,12 +1536,12 @@ function App() {
                 {!preview && (
                   <aside class="preview-panel" data-focus-zone="details">
                     <header>
-                      <h2>Vorschau</h2>
+                      <h2>{t("Vorschau", "Preview")}</h2>
                     </header>
                     <div class="preview-surface empty-preview">
                       <span>▷</span>
                     </div>
-                    <h2>Sender auswählen</h2>
+                    <h2>{t("Sender auswählen", "Choose a channel")}</h2>
                     <p>
                       Hier erscheinen Vorschau, Programm und
                       Senderinformationen.
@@ -1522,7 +1551,7 @@ function App() {
                 {preview && (
                   <aside class="preview-panel" data-focus-zone="details">
                     <header>
-                      <h2>Vorschau</h2>
+                      <h2>{t("Vorschau", "Preview")}</h2>
                       <button
                         class="icon-button"
                         aria-label="Sender als Favorit"
@@ -1544,7 +1573,7 @@ function App() {
                       {now ? (
                         <>
                           <small>
-                            Jetzt · {clock(now.start)} — {clock(now.end)}
+                            {t("Jetzt", "Now")} · {clock(now.start, saved.settings.clockFormat)} — {clock(now.end, saved.settings.clockFormat)}
                           </small>
                           <h3>{now.title}</h3>
                           <p>{now.description}</p>
@@ -1556,7 +1585,7 @@ function App() {
                         <>
                           <hr />
                           <small>
-                            Danach · {clock(next.start)} — {clock(next.end)}
+                            {t("Danach", "Next")} · {clock(next.start, saved.settings.clockFormat)} — {clock(next.end, saved.settings.clockFormat)}
                           </small>
                           <h3>{next.title}</h3>
                           <p>{next.description}</p>
@@ -1605,7 +1634,7 @@ function App() {
                   settingsView()
                 ) : view === "history" ? (
                   <>
-                    <h1>Fortsetzen</h1>
+                    <h1>{t("Fortsetzen", "Continue watching")}</h1>
                     <div
                       class="kind-tabs"
                       role="tablist"
@@ -1672,7 +1701,7 @@ function App() {
                   </>
                 ) : view === "favorites" ? (
                   <>
-                    <h1>Favoriten</h1>
+                    <h1>{t("Favoriten", "Favorites")}</h1>
                     <div
                       class="kind-tabs"
                       role="tablist"
@@ -1778,7 +1807,7 @@ function App() {
             >
               <div ref={surface} class="full-surface" />
               <div class="player-top glass">
-                <button onClick={() => previewRef.current?.kind === "live" ? setFull(false) : stop()}>← Zurück</button>
+                <button onClick={() => previewRef.current?.kind === "live" ? setFull(false) : stop()}>{t("← Zurück", "← Back")}</button>
                 <span>
                   <small>
                     {preview.kind === "live"
@@ -1790,7 +1819,7 @@ function App() {
                   <strong>{preview.name}</strong>
                 </span>
                 <button onClick={() => toggleFavorite(preview)}>
-                  {isFavorite(preview) ? "★ Favorit" : "☆ Favorit"}
+                  {isFavorite(preview) ? t("★ Favorit", "★ Favorite") : t("☆ Favorit", "☆ Favorite")}
                 </button>
               </div>
               <div class="player-feedback">
@@ -1811,20 +1840,14 @@ function App() {
               )}
               <div class="player-controls glass">
                 <div class="transport">
-                  <button
-                    disabled={preview.kind === "live"}
-                    onClick={() => safe(() => p?.seek(-10))}
-                  >
-                    ↶ 10 s
+                  <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
+                    {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
                   </button>
                   <button class="primary" onClick={() => p?.toggle()}>
-                    {status?.state === "paused" ? "▷ Abspielen" : "Ⅱ Pause"}
+                    {status?.state === "paused" ? t("▷ Abspielen", "▷ Play") : t("Ⅱ Pause", "Ⅱ Pause")}
                   </button>
-                  <button
-                    disabled={preview.kind === "live"}
-                    onClick={() => safe(() => p?.seek(30))}
-                  >
-                    30 s ↷
+                  <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
+                    {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
                   </button>
                   <button
                     onClick={() => {
@@ -1832,7 +1855,7 @@ function App() {
                       setTracks(true);
                     }}
                   >
-                    Ton & Untertitel
+                    {t("Ton & Untertitel", "Audio & subtitles")}
                   </button>
                   {choose(
                     saved.settings.aspect,
@@ -1846,7 +1869,7 @@ function App() {
                       ["stretch", "Strecken"],
                     ],
                   )}
-                  <button onClick={stop}>Beenden</button>
+                  <button onClick={stop}>{t("Beenden", "Stop")}</button>
                 </div>
                 <div class="timeline">
                   <span>
@@ -1854,10 +1877,20 @@ function App() {
                       ? "● LIVE"
                       : time(status?.time || 0)}
                   </span>
-                  <progress
-                    value={status?.time || 0}
-                    max={status?.duration || 1}
-                  />
+                  {preview.kind === "live" ? (
+                    <progress value={now ? Math.max(0, Date.now() / 1000 - now.start) : 0}
+                      max={now ? Math.max(1, now.end - now.start) : 1} />
+                  ) : (
+                    <div class="seek-bar" onClick={(event) => {
+                      const duration = status?.duration || 0;
+                      const bounds = event.currentTarget.getBoundingClientRect();
+                      if (duration > 0 && bounds.width > 0) {
+                        safe(() => p?.seekTo(((event.clientX - bounds.left) / bounds.width) * duration));
+                      }
+                    }}>
+                      <progress value={status?.time || 0} max={status?.duration || 1} />
+                    </div>
+                  )}
                   <span>
                     {preview.kind === "live"
                       ? now?.title || ""

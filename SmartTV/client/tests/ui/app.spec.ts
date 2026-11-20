@@ -68,6 +68,7 @@ test('parental controls protect movies, every series episode and home continue',
 test('parental controls persist, block live previews and require PIN for every new playback',async({page})=>{
   await fixture(page,true,true);await page.goto('/');
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'parental');
   await page.getByRole('button',{name:'Eltern-PIN einrichten',exact:true}).click();
   await parentalPin(page,'0123',true);await parentalPin(page,'0123',true);
   const modal=page.locator('[data-parental]');
@@ -86,6 +87,7 @@ test('parental controls persist, block live previews and require PIN for every n
   await page.locator('.channel').first().click();await expect(modal).toBeVisible();
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'parental');
   await page.getByRole('button',{name:'Elternsperre verwalten',exact:true}).click();
   await expect(modal.getByRole('button',{name:'Elternsperre ausschalten'})).toHaveCount(0);
   await parentalPin(page,'0123');await modal.getByRole('button',{name:'Elternsperre ausschalten'}).click();
@@ -329,11 +331,13 @@ test('license settings show real MAC and Unlimited, and paid restarts never quer
   await page.goto('/');
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
   const section=page.locator('[data-license-status]');
+  await openSettingsSection(page, 'license');
   await expect(section.getByText('Unlimited',{exact:true})).toBeVisible();
   await expect(section).toContainText('AA:BB:CC:DD:EE:10');
   await expect(section).toContainText('D7-');
   await page.reload();
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'license');
   await expect(section.getByText('Unlimited',{exact:true})).toBeVisible();
   expect(requests).toBe(0);
 });
@@ -403,6 +407,7 @@ test('activation cannot start a trial; explicit start shows remaining days and p
   await page.screenshot({path:test.info().outputPath('trial-indicator.png')});
   approved=true;
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'license');
   const status=page.locator('[data-license-status]');
   await status.getByRole('button',{name:'Freischaltung abrufen',exact:true}).click();
   await expect(status.getByText('Unlimited',{exact:true})).toBeVisible();
@@ -546,6 +551,7 @@ test("favorites remain separate from history; series and settings work with remo
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
   await expect(page.getByRole("combobox", { name: "Live-Streamformat" })).toHaveCount(0);
+  await openSettingsSection(page, "advanced");
   await page.getByLabel("Expertenmodus", {exact:true}).click();
   await page.getByRole("combobox", { name: "Live-Streamformat" }).click();
   await page.getByRole("option", { name: "MPEG-TS (.ts)" }).click();
@@ -553,6 +559,7 @@ test("favorites remain separate from history; series and settings work with remo
   await page
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
+  await openSettingsSection(page, "advanced");
   await expect(
     page.getByRole("combobox", { name: "Live-Streamformat" }),
   ).toContainText("MPEG-TS (.ts)");
@@ -646,6 +653,7 @@ test("bundled test video decodes in HTML preview and controls hide then return w
   await page
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
+  await openSettingsSection(page, "updates");
   await page
     .getByRole("button", { name: "Integriertes Testvideo abspielen" })
     .click();
@@ -1134,32 +1142,49 @@ test("automatic playback tries HTML once after AVPlay failure and retains the or
   await expect(page.locator(".fullscreen [role=alert]")).toBeVisible();
 });
 
-test("settings move through adjacent panels before the main rail; Back returns to the rail then asks to exit", async ({page}) => {
+async function openSettingsSection(page: Page, id: string) {
+  await page.locator(`.settings-sections [data-focus-key="${id}"]`).click();
+}
+
+test("settings remote navigation moves between sections and the selected panel", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
   const navigation = page.getByRole("button", {name: "⚙ Einstellungen", exact: true});
   await navigation.click();
-  const expert = page.getByLabel("Expertenmodus", {exact:true});
-  await expert.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(page.locator('[data-focus-zone="settings-license"] button').first()).toBeFocused();
+  const general = page.locator('.settings-sections [data-focus-key="general"]');
+  await general.focus();
+  await page.keyboard.press("ArrowDown");
+  const playback = page.locator('.settings-sections [data-focus-key="playback"]');
+  await expect(playback).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-settings-section="playback"]')).toBeVisible();
   await page.keyboard.press("ArrowRight");
-  await expect(expert).toBeFocused();
+  await expect(page.locator('[data-settings-section="playback"]').getByRole("combobox")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(playback).toBeFocused();
+  await page.screenshot({path:"test-results/tizen-settings-075.png"});
   await page.keyboard.press("Escape");
   await expect(navigation).toBeFocused();
-  await expect(page.locator(".settings-grid")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", {name:"Dado Player beenden?"})).toBeVisible();
-  await page.getByRole("button", {name:"Weitersehen", exact:true}).click();
-  await expert.focus();
-  await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowLeft");
-  await expect(navigation).toBeFocused();
-  // Lower settings panels remain reachable vertically in their own column.
-  const appearanceLast = page.locator('[data-focus-zone="settings-appearance"] button').last();
-  await appearanceLast.focus();
-  await page.keyboard.press("ArrowDown");
-  await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[data-focus-zone]')?.getAttribute('data-focus-zone'))).toBe('settings-audio');
+});
+
+test("language and time format persist and the live guide uses the selected time format", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
+  await page.getByRole("combobox", {name: "Zeitformat"}).click();
+  await page.getByRole("option", {name: "12 h · 06:30 PM"}).click();
+  await page.getByRole("combobox", {name: "App-Sprache"}).click();
+  await page.getByRole("option", {name: "English"}).click();
+  await expect(page.getByRole("heading", {name: "Settings", exact: true})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Time format"})).toContainText("12 h");
+  await page.reload();
+  await page.getByRole("button", {name: "⚙ Settings", exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Time format"})).toContainText("12 h");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel-list button").first().click();
+  await expect(page.locator(".epg-detail")).toContainText(/\d{2}:\d{2} (AM|PM)/);
 });
 
 test("rail motion keeps layout widths fixed while only transform offsets animate", async ({page}) => {
@@ -1243,6 +1268,19 @@ test('rapid seeks serialize AVPlay and exiting a file closes the decoder',async(
   for(let i=0;i<8;i++)await page.keyboard.press('ArrowRight');
   await expect.poll(()=>page.evaluate(()=> (window as any).webapis.avplay.getCurrentTime())).toBe(80000);
   expect(await page.evaluate(()=> (window as any).__maxSeeks)).toBe(1);
+  const duration = await page.evaluate(() => (window as any).webapis.avplay.getDuration());
+  const timeline = page.locator(".seek-bar");
+  await timeline.hover();
+  const bounds = await timeline.boundingBox();
+  if (!bounds) throw new Error("Missing seek bar");
+  await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect.poll(async () => Math.abs(
+    await page.evaluate(() => (window as any).webapis.avplay.getCurrentTime()) - duration / 2,
+  )).toBeLessThan(2000);
+  const before = await page.evaluate(() => (window as any).webapis.avplay.getCurrentTime());
+  await page.getByRole("button", {name:"10 s ↷", exact: true}).click();
+  await expect.poll(() => page.evaluate(() => (window as any).webapis.avplay.getCurrentTime())).toBe(before + 10000);
+
   await expect(page.locator('.fullscreen [role=alert]')).toHaveCount(0);
   await page.keyboard.press('Escape');await expect(page.locator('.fullscreen')).toHaveCount(0);
   expect(await page.evaluate(()=> (window as any).webapis.avplay.getState())).toBe('NONE');
@@ -1359,6 +1397,7 @@ test('cloud inbox persists before ack and retry never duplicates profiles',async
   await route.fulfill({headers:{'Access-Control-Allow-Origin':'*','Content-Type':'application/json'},json:action==='pairing'?{...state,pairingCode:'TEST123456',pairingExpires:Date.now()/1000+600}:action==='pull'?{...state,messages:[{id:cloudId,profile:{name:'Familienzugang',kind:'Xtream',host:'https://provider.invalid',username:'demo',password:'demo'}}]}:state});
  });
  await page.goto('/');await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+ await openSettingsSection(page, 'profiles');
  const panel=page.locator('.connect-panel');await expect.poll(()=>calls.filter(c=>c==='register').length).toBe(1);expect(calls).toEqual(['register']);
  await expect(page.getByText('Kopplungscode:',{exact:false})).toHaveCount(0);await expect(page.getByText('Verbunden mit:',{exact:false})).toHaveCount(0);
  await page.evaluate(()=>{const old=Storage.prototype.setItem;(window as any).__restoreStorage=()=>{Storage.prototype.setItem=old;};Storage.prototype.setItem=function(k,v){if(k==='dado.tv.v1')throw Error('fixture full storage');return old.call(this,k,v);};});

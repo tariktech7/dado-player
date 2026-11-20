@@ -4,13 +4,16 @@ export function TVSelect({
   value,
   onChange,
   options,
+  label: explicitLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: [string, string][];
+  label?: string;
 }) {
   const [open, setOpen] = useState(false),
-    [label, setLabel] = useState("Auswahl");
+    [inferredLabel, setLabel] = useState("Auswahl");
+  const label = explicitLabel || inferredLabel;
   const trigger = useRef<HTMLButtonElement>(null),
     popup = useRef<HTMLElement>(null);
   const close = () => {

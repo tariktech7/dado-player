@@ -402,7 +402,11 @@ pub fn epg_sheet(app: &mut App, ctx: &Context, l: &Layout) {
                                         theme::selection_surface(ui),
                                     );
                                 }
-                                let t = format!("{}–{}", fmt_hhmm(e.start), fmt_hhmm(e.end));
+                                let t = format!(
+                                    "{}–{}",
+                                    app.settings.clock_format.format(e.start),
+                                    app.settings.clock_format.format(e.end)
+                                );
                                 ui.add_sized(
                                     vec2(84.0, row_h),
                                     egui::Label::new(
@@ -458,11 +462,4 @@ pub fn epg_sheet(app: &mut App, ctx: &Context, l: &Layout) {
                 }
             }
         });
-}
-
-/// Format an EPG timestamp as `HH:MM` in UTC (EPG times are UTC).
-fn fmt_hhmm(ts: i64) -> String {
-    chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
-        .map(|d| d.format("%H:%M").to_string())
-        .unwrap_or_default()
 }

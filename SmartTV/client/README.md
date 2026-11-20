@@ -1,6 +1,6 @@
 # Dado Player für Samsung Tizen
 
-Eigenständige TV-Web-App, gemeinsamer Beta-Stand **0.7.4**. Standardziel: Tizen **6.5+**
+Eigenständige TV-Web-App, gemeinsamer Beta-Stand **0.7.5**. Standardziel: Tizen **6.5+**
 (Chromium 85). Für 2019-Geräte mit Tizen 5.0/Chromium 63 gibt es ein separates Buildprofil.
 Der Standard-Test-TV GQ77S94CATXZG meldet Tizen 9.0; ein GQ55Q60RGTXZG mit Tizen 5.0
 wurde am 18. November 2026 mit dem älteren Profil erfolgreich installiert und gestartet.
@@ -19,7 +19,7 @@ npm run package -- --profile DEIN_SAMSUNG_TV_PROFIL
 
 `TIZEN_CLI` muss wie beim Standardbuild auf die SDK-CLI zeigen. Das Samsung-Distributor-
 Zertifikat muss diesen TV enthalten; bestehende Autorenzertifikate und andere Geräteprofile
-behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.4.wgt -- PAKETORDNER`
+behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.5.wgt -- PAKETORDNER`
 installieren und `tizen run -s TV_IP:26101 -p DadoPlayTV.Player` starten.
 
 Das Profil setzt die deklarierte Mindestversion auf 5.0 und übersetzt JavaScript für Chrome 63.
@@ -180,9 +180,9 @@ Offizielle Grundlagen:
 Default playback uses AVPlay and Dado controls, with one HTML-video attempt on
 native playback failure using the unchanged original URL and resume position.
 The expert switch reveals forced engines/live format/buffer/network overrides.
-Settings groups are spatial focus zones: Left crosses the neighboring settings
-column before reaching navigation, Up/Down reaches the next group in the same
-column. Back returns to navigation, then asks before exiting (open inputs,
+Settings use a section list and one active options panel. Select a section with OK,
+then press Right to enter its controls. Left returns to the remembered section,
+then to navigation. Back returns to navigation, then asks before exiting (open inputs,
 dialogs and playback stages close first).
 
 `navigation-motion.ts` applies one grid layout change and animates only visual

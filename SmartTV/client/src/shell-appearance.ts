@@ -10,6 +10,9 @@ export function installShellAppearance() {
     '--live-preview-width':appearance.livePreviewWidth+'px',
     '--catalog-preview-width':appearance.catalogPreviewWidth+'px',
     '--navigation-font':appearance.navigationFont+'px',
+    '--player-top-height':appearance.playerTopHeight+'px',
+    '--player-controls-height':appearance.playerControlsHeight+'px',
+    '--player-corner-radius':appearance.playerCornerRadius+'px',
   }))style.setProperty(key,value);
 }
 export default appearance;

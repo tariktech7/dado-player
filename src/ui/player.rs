@@ -25,8 +25,6 @@ use crate::types::{PlayKind, StreamInfo, Track};
 use crate::ui;
 use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Rounding, Sense, Stroke, Ui};
 
-const TOP_H: f32 = 56.0;
-const BOT_H: f32 = 120.0;
 /// Seconds of inactivity before the chrome fades out.
 const HIDE_AFTER: f64 = crate::release_info::CONTROLS_HIDE_SECONDS;
 
@@ -36,6 +34,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let full = ui.available_rect_before_wrap();
     ui.painter().rect_filled(full, 0.0, Color32::BLACK);
 
+    let language = app.settings.language;
+    let t = |de, en| language.text(de, en);
+    let seek_step = crate::release_info::SEEK_STEP_SECONDS;
+    let appearance = super::desktop::appearance();
+    let scale = super::desktop::scale(ui.ctx());
+    let top_height = (appearance.player_top_height * scale).max(56.0);
+    let bottom_height = (appearance.player_controls_height * scale).max(120.0);
+    let radius = appearance.player_corner_radius * scale;
     let now = ctx.input(|i| i.time);
     if app.ui_activity < 0.0 {
         app.ui_activity = now;
@@ -102,8 +108,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     } else {
         0.0
     };
-    let top_h = if show_ui { TOP_H } else { 0.0 };
-    let bot_h = if show_ui { BOT_H + popover_h } else { 0.0 };
+    let top_h = if show_ui { top_height } else { 0.0 };
+    let bot_h = if show_ui {
+        bottom_height + popover_h
+    } else {
+        0.0
+    };
     // FIXED geometry: identical in every player state, and it only changes
     // when the window itself is resized. `position_video()` is still called
     // exactly once per frame (a second call would reintroduce the resize
@@ -174,8 +184,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .as_ref()
         .map(|p| match p.kind {
             PlayKind::Live => "Live-TV".to_string(),
-            PlayKind::Vod => "Film".to_string(),
-            PlayKind::Episode => "Serie".to_string(),
+            PlayKind::Vod => t("Film", "Movie").to_string(),
+            PlayKind::Episode => t("Serie", "Series").to_string(),
         })
         .unwrap_or_default();
 
@@ -205,33 +215,58 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     // ---------------- top bar ----------------
     let top = Rect::from_min_max(
         pos2(full.left(), full.top()),
-        pos2(full.right(), full.top() + TOP_H),
+        pos2(full.right(), full.top() + top_height),
     );
-    glass(ui, top, 0.0, 0.0);
+    glass(ui, top, 0.0, radius);
 
     let mut do_back = false;
-    let back_rect =
-        Rect::from_min_size(pos2(top.left() + 16.0, top.top() + 12.0), vec2(104.0, 32.0));
-    if pill_button(ui, back_rect, "◀  Zurück").clicked() {
+    let back_rect = Rect::from_min_size(
+        pos2(top.left() + 16.0, top.center().y - 16.0),
+        vec2(104.0, 32.0),
+    );
+    if pill_button(ui, back_rect, t("← Zurück", "← Back")).clicked() {
         do_back = true;
     }
 
-    let right = pos2(top.right() - 20.0, top.center().y);
-    ui.painter().text(
-        pos2(right.x, right.y - 7.0),
-        Align2::RIGHT_CENTER,
-        &title,
-        FontId::proportional(15.0),
-        text_color(ui),
+    let favorite_rect = Rect::from_min_size(
+        pos2(top.right() - 144.0, top.center().y - 16.0),
+        vec2(128.0, 32.0),
     );
-    let sub_txt = sub;
-    ui.painter().text(
-        pos2(right.x, right.y + 11.0),
-        Align2::RIGHT_CENTER,
-        sub_txt,
-        FontId::proportional(11.0),
-        muted(ui),
-    );
+    if let Some(key) = app
+        .current_play
+        .as_ref()
+        .map(|item| item.progress_key.clone())
+    {
+        let favorite = app.is_favorite(&key);
+        let label = if favorite {
+            t("★ Favorit", "★ Favorite")
+        } else {
+            t("☆ Favorit", "☆ Favorite")
+        };
+        if pill_button(ui, favorite_rect, label).clicked() {
+            app.toggle_favorite(&key);
+        }
+    }
+    let text_x = top.left() + 136.0;
+    let text_width = (favorite_rect.left() - text_x - 16.0).max(0.0);
+    if text_width > 0.0 {
+        crate::ui::mobile::components::draw_line(
+            ui,
+            pos2(text_x, top.center().y - 10.0),
+            &sub,
+            FontId::proportional(11.0),
+            muted(ui),
+            text_width,
+        );
+        crate::ui::mobile::components::draw_line(
+            ui,
+            pos2(text_x, top.center().y + 10.0),
+            &title,
+            crate::ui::mobile::tokens::bold(17.0),
+            text_color(ui),
+            text_width,
+        );
+    }
 
     // ---------------- bottom bar ----------------
     let bot = Rect::from_min_max(
@@ -242,8 +277,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     // taller, but drawing glass over the extra strip turns half the picture
     // into a big opaque box. Leaving that strip unframed keeps the extra area
     // as plain black and the video jump barely noticeable.
-    let glass_bar = Rect::from_min_max(pos2(full.left(), full.bottom() - BOT_H), bot.max);
-    glass(ui, glass_bar, 0.0, 0.0);
+    let glass_bar = Rect::from_min_max(pos2(full.left(), full.bottom() - bottom_height), bot.max);
+    glass(ui, glass_bar, radius, 0.0);
 
     // Reserve the right edge for the stream-info / audio cluster so the
     // progress bar and transport never slide under it.
@@ -259,10 +294,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let mut step: i32 = 0;
 
     // ---- progress row ----
-    // Controls stay strictly anchored at the bottom (relative to BOT_H), so
+    // Controls stay strictly anchored at the bottom (relative to bottom_height), so
     // opening the audio/subtitle popover never makes the transport jump.
-    let ctrl_top = full.bottom() - BOT_H;
-    let row_y = ctrl_top + 30.0;
+    let ctrl_top = full.bottom() - bottom_height;
+    let row_y = full.bottom() - 28.0;
     if is_live {
         let badge = Rect::from_center_size(pos2(bot.left() + 58.0, row_y), vec2(74.0, 22.0));
         ui.painter()
@@ -323,7 +358,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
     // ---- transport row: play/pause is the centre of the area left of the
     // cluster (so it never sits under the info/audio panel on the right). ----
-    let cy = ctrl_top + 78.0;
+    let cy = ctrl_top + 40.0;
     let cx = (bot.left() + right_edge) / 2.0;
 
     let play_rect = Rect::from_center_size(pos2(cx, cy), vec2(58.0, 58.0));
@@ -362,7 +397,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if is_live {
             step = -1;
         } else {
-            seek_rel = -10.0;
+            seek_rel = -seek_step;
         }
     }
     if pill_button(ui, fwd_rect, fwd_label)
@@ -372,7 +407,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         if is_live {
             step = 1;
         } else {
-            seek_rel = 10.0;
+            seek_rel = seek_step;
         }
     }
 
@@ -686,7 +721,7 @@ fn track_popover_height(app: &App) -> f32 {
 fn glass(ui: &Ui, rect: Rect, top_round: f32, bot_round: f32) {
     let dark = ui.visuals().dark_mode;
     let fill = if dark {
-        Color32::from_rgba_unmultiplied(12, 15, 21, 216)
+        ui.visuals().window_fill
     } else {
         Color32::from_rgba_unmultiplied(248, 250, 253, 224)
     };

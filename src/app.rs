@@ -1012,8 +1012,11 @@ impl App {
                     self.ui_activity = ctx.input(|i| i.time);
                     self.player_reveal = false;
                     if let Some(pl) = &self.player {
-                        pl.mpv
-                            .seek_relative(if *key == RemoteKey::Left { -10.0 } else { 10.0 });
+                        pl.mpv.seek_relative(if *key == RemoteKey::Left {
+                            -crate::release_info::SEEK_STEP_SECONDS
+                        } else {
+                            crate::release_info::SEEK_STEP_SECONDS
+                        });
                     }
                 }
             }
@@ -2459,7 +2462,8 @@ impl App {
                 && !self.sub_menu_open
             {
                 if let Some(pl) = &self.player {
-                    pl.mpv.seek_relative(delta as f64 * 10.0);
+                    pl.mpv
+                        .seek_relative(delta as f64 * crate::release_info::SEEK_STEP_SECONDS);
                 }
                 self.ui_activity = ctx.input(|i| i.time);
                 ctx.input_mut(|i| {

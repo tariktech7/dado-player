@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.7.4
+# Gemeinsamer Produktstand 0.7.5
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-23 und iOS-Buildnummer 18 bleiben eigenständig monoton steigend. Nach Änderungen
+24 und iOS-Buildnummer 19 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -116,3 +116,16 @@ Beide lesen Spaltenmaße und Bewegung aus `shared/shell-appearance.json`.
 Normale steel-blue Palette in `shared/normal-palette.json`; Dunkel ist weiches Mitternachtsblau,
 Hell weiß mit blauen Akzenten. Kein Lavendel-Modus. Alte gespeicherte `Warm`/`warm`-Werte
 bleiben lesbar und wählen nun Blau. Mobile Tabs und volle Detailseiten bleiben eigenständig.
+
+
+## Einstellungen und Player ab 0.7.5
+
+Die Reihenfolge der Bereiche stammt aus `shared/settings-sections.json`. Die Liste
+der Ton- und Untertitelsprachen kommt aus `shared/playback-languages.json`; vorhandene
+eigene Sprachcodes bleiben verfügbar. UI-Sprache und 12/24-Stunden-Anzeige werden
+je Gerät gespeichert. Bestehende Einstellungen starten mit Deutsch und 24 Stunden.
+EPG-Uhrzeiten verwenden lokale Gerätezeit, Laufzeiten bleiben Minuten und Sekunden.
+
+Windows und Samsung teilen Maße der Playerleisten und die Sprungweite von zehn
+Sekunden. Windows verwendet libmpv und Windows-spezifische Audio- und Vollbildregler;
+Samsung verwendet AVPlay und die Tizen-Steuerung für Bildformat und Fernbedienung.

@@ -26,7 +26,7 @@ use super::focus;
 use super::tokens;
 use super::Layout;
 use crate::app::App;
-use crate::types::{Channel, LiveFormat, Series, Theme, TvMode, VodMovie};
+use crate::types::{Channel, Series, VodMovie};
 
 /// Left-hand navigation. The third field is the description shown in the hero
 /// while the header itself holds focus.
@@ -127,12 +127,6 @@ enum Act {
     Letter(char),
     SearchBackspace,
     SearchClear,
-    Theme(Theme),
-    TvMode(TvMode),
-    #[cfg(target_os = "android")]
-    Player(crate::types::PlayerBackend),
-    LiveFmt(LiveFormat),
-    Logout,
 }
 
 #[derive(Clone)]
@@ -223,6 +217,11 @@ pub fn show(app: &mut App, ctx: &Context, l: &Layout) {
             if app.tv_nav == 7 {
                 app.view = crate::app::View::Home;
                 crate::ui::home::show(app, &mut cui);
+                return;
+            }
+            if app.tv_nav == 6 {
+                app.view = crate::app::View::Settings;
+                crate::ui::settings::show(app, &mut cui);
                 return;
             }
             let hero_rect = draw_content(app, &mut cui, &g, &mut metas);
@@ -333,7 +332,22 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
             components::draw_line(
                 ui,
                 pos2(rect.left() + 32.0, rect.center().y),
-                if narrow { SHORT_HEADERS[i] } else { label },
+                if app.settings.language == crate::types::AppLanguage::En {
+                    [
+                        "Live TV",
+                        "Movies",
+                        "Series",
+                        "Continue",
+                        "Favorites",
+                        "Search",
+                        "Settings",
+                        "Home",
+                    ][i]
+                } else if narrow {
+                    SHORT_HEADERS[i]
+                } else {
+                    label
+                },
                 if selected {
                     tokens::bold(fs)
                 } else {
@@ -636,7 +650,7 @@ fn build_rails(app: &mut App) -> Vec<Rail> {
         3 => continue_rails(app),
         4 => favorite_rails(app),
         5 => search_rails(app),
-        _ => settings_rail(app),
+        _ => Vec::new(),
     }
 }
 
@@ -1032,99 +1046,6 @@ fn search_rails(app: &mut App) -> Vec<Rail> {
     ]
 }
 
-fn option_card(label: &str, selected: bool, act: Act) -> Card {
-    Card {
-        key: String::new(),
-        url: String::new(),
-        title: label.to_string(),
-        sub: if selected {
-            "Aktiv".to_string()
-        } else {
-            String::new()
-        },
-        meta: "Mit OK übernehmen".to_string(),
-        progress: None,
-        act,
-    }
-}
-
-fn settings_rail(app: &mut App) -> Vec<Rail> {
-    let mut tv_opts = Vec::new();
-    for m in TvMode::all() {
-        tv_opts.push(option_card(
-            m.label(),
-            app.settings.tv_mode == m,
-            Act::TvMode(m),
-        ));
-    }
-    let mut theme_opts = Vec::new();
-    for t in Theme::all() {
-        theme_opts.push(option_card(
-            t.label(),
-            app.settings.theme == t,
-            Act::Theme(t),
-        ));
-    }
-    // A TV often has no MX Player at all. Without a rail here the new default
-    // would be a dead end on exactly the device class this shell targets; the
-    // user must be able to pick VLC / the system chooser / the built-in player
-    // with the remote they actually hold.
-    #[cfg(target_os = "android")]
-    let mut player_opts = Vec::new();
-    #[cfg(target_os = "android")]
-    for p in crate::types::PlayerBackend::all() {
-        player_opts.push(option_card(
-            p.label(),
-            app.settings.player_backend == p,
-            Act::Player(p),
-        ));
-    }
-    let mut fmt_opts = Vec::new();
-    for f in LiveFormat::all() {
-        fmt_opts.push(option_card(
-            f.label(),
-            app.settings.live_format == f,
-            Act::LiveFmt(f),
-        ));
-    }
-    vec![
-        #[cfg(target_os = "android")]
-        Rail {
-            title: "Player · integriert oder installierte Android-App".to_string(),
-            wide: true,
-            cards: player_opts,
-        },
-        Rail {
-            title: "Live-Format (nur Xtream)".to_string(),
-            wide: true,
-            cards: fmt_opts,
-        },
-        Rail {
-            title: "TV-Modus (Fernseh-Oberfläche)".to_string(),
-            wide: true,
-            cards: tv_opts,
-        },
-        Rail {
-            title: "Design".to_string(),
-            wide: true,
-            cards: theme_opts,
-        },
-        Rail {
-            title: "Profil".to_string(),
-            wide: true,
-            cards: vec![Card {
-                key: String::new(),
-                url: String::new(),
-                title: "Abmelden".to_string(),
-                sub: String::new(),
-                meta: "Zurück zur Anbieter-Anmeldung".to_string(),
-                progress: None,
-                act: Act::Logout,
-            }],
-        },
-    ]
-}
-
 fn apply_action(app: &mut App, act: Act) {
     match act {
         Act::PlayKey(key) => {
@@ -1141,32 +1062,5 @@ fn apply_action(app: &mut App, act: Act) {
             app.tv_search.pop();
         }
         Act::SearchClear => app.tv_search.clear(),
-        Act::Theme(t) => {
-            app.settings.theme = t;
-            app.save_settings_now();
-        }
-        Act::TvMode(m) => {
-            app.settings.tv_mode = m;
-            app.save_settings_now();
-            // `App::update` resolves this again next frame; doing it here too
-            // keeps BACK and canGoBack correct on the frame of the change.
-            app.tv = m.resolve(crate::platform::tv_device());
-        }
-        #[cfg(target_os = "android")]
-        Act::Player(p) => {
-            app.settings.player_backend = p;
-            app.settings.settings_mode = crate::types::SettingsMode::Expert;
-            app.save_settings_now();
-        }
-        Act::LiveFmt(f) => {
-            if app.settings.live_format != f {
-                app.settings.live_format = f;
-                // Rebuild the already-loaded Xtream channel URLs in place;
-                // M3U links are tokenised and must never be rewritten.
-                app.apply_live_format();
-                app.save_settings_now();
-            }
-        }
-        Act::Logout => app.logout(),
     }
 }

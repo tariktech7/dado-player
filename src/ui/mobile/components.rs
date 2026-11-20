@@ -430,15 +430,12 @@ pub fn app_bar(
 
 // ------------------------------------------------------------ bottom nav ----
 
-const TABS: [(Icon, &str, View); 4] = [
-    (Icon::Tv, "Live", View::Live),
-    (Icon::Film, "Filme", View::Movies),
-    (Icon::Series, "Serien", View::Series),
-    // Fortsetzen is a daily destination; Favoriten is a shelf you visit now and
-    // then, so it moved into the "Mehr" sheet (MOBILE-BAUPLAN §20).
-    (Icon::Home, "Start", View::Home),
+const TABS: [(Icon, &str, &str, View); 4] = [
+    (Icon::Tv, "Live", "Live", View::Live),
+    (Icon::Film, "Filme", "Movies", View::Movies),
+    (Icon::Series, "Serien", "Series", View::Series),
+    (Icon::Home, "Start", "Home", View::Home),
 ];
-
 /// Bottom navigation. Returns true when the "Mehr" sheet should open.
 // The index is deliberately numeric: it positions the cell, indexes `TABS` and
 // is the stable egui widget ID for that tab. Iterating `TABS` would lose the
@@ -464,9 +461,14 @@ pub fn nav_bar(app: &mut App, ui: &mut Ui) -> bool {
             vec2(cell_w, rect.height()),
         );
         let (ic, label, view) = if i < 4 {
-            TABS[i]
+            let (icon, de, en, view) = TABS[i];
+            (icon, app.settings.language.text(de, en), view)
         } else {
-            (Icon::More, "Mehr", View::Settings)
+            (
+                Icon::More,
+                app.settings.language.text("Mehr", "More"),
+                View::Settings,
+            )
         };
         let selected = if i < 4 {
             app.view == view

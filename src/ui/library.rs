@@ -232,7 +232,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     let desktop = super::desktop::active(ui.ctx());
     let scale = super::desktop::scale(ui.ctx());
     if desktop {
-        super::desktop::catalog_heading(ui, "Kategorien");
+        super::desktop::catalog_heading(ui, app.settings.language.text("Kategorien", "Categories"));
     } else {
         ui.label(RichText::new("Kategorien").strong().size(15.0));
     }
@@ -411,12 +411,23 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     let tv = app.tv;
     if !touch {
         if super::desktop::active(ui.ctx()) {
-            super::desktop::catalog_heading(ui, if series { "Serien" } else { "Filme" });
+            super::desktop::catalog_heading(
+                ui,
+                if series {
+                    app.settings.language.text("Serien", "Series")
+                } else {
+                    app.settings.language.text("Filme", "Movies")
+                },
+            );
         } else {
             ui.label(
-                RichText::new(if series { "Serien" } else { "Filme" })
-                    .strong()
-                    .size(18.0),
+                RichText::new(if series {
+                    app.settings.language.text("Serien", "Series")
+                } else {
+                    app.settings.language.text("Filme", "Movies")
+                })
+                .strong()
+                .size(18.0),
             );
         }
         if super::desktop::active(ui.ctx()) {

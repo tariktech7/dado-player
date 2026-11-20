@@ -1,9 +1,9 @@
 # Dado Player
 
-Gemeinsamer Beta-Quellstand: **0.7.4** für Windows, Android (Build 23), iOS (Build 18) und Samsung Tizen.
-[Alle 0.7.4-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.4-beta).
+Gemeinsamer Beta-Quellstand: **0.7.5** für Windows, Android (Build 24), iOS (Build 19) und Samsung Tizen.
+[Alle 0.7.5-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.5-beta).
 Diese Vorabversion wird direkt über den Release-Link geladen; die bisherigen stabilen
-Updatekanäle werden damit nicht automatisch umgestellt. [Prüfstand und offene Gerätetests](docs/reports/0.7.4-ui-parity-blue-2026-11-20.md).
+Updatekanäle werden damit nicht automatisch umgestellt. [Funktions- und Plattformabgleich](docs/PLATFORM-PARITY.md).
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
 [Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
@@ -24,7 +24,7 @@ und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Fa
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der iOS-Stand **0.7.4 / Build 18** wird lokal unter Windows/WSL mit
+Der iOS-Stand **0.7.5 / Build 19** wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
 mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
 Der lokale Buildweg steht in [ios/README.md](ios/README.md).
@@ -124,3 +124,13 @@ Gemeinsame Geometrie: `shared/shell-appearance.json`; normale Blaupalette:
 Hell bleibt weiß. Logos und Online-Portale verwenden dieselbe blaue D7-Marke.
 Einstellungen stehen in gleich hohen Karten pro Zeile; lange Live-EPG-Texte bleiben in der Vorschau.
 Telefon-/Tablet-Ansichten behalten ihre eigene Touch-Navigation.
+
+
+### Einstellungen ab 0.7.5
+
+Allgemein öffnet sich mit App-Sprache, Zeitformat und Farbschema. Wiedergabe, Ton und
+Untertitel, Profile, Elternsperre, Updates und Lizenz haben getrennte Bereiche.
+Technische Regler erscheinen unter Erweitert nach Einschalten des Expertenmodus.
+Das Zeitformat gilt für Uhrzeiten im EPG, Wiedergabepositionen bleiben Laufzeiten.
+Englisch ist für Navigation, die neue Einstellungsstruktur und zentrale Player- und
+Live-Texte verfügbar. Ältere Dialoge und technische Meldungen können deutsch bleiben.

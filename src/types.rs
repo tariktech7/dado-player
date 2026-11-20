@@ -341,8 +341,51 @@ impl VideoSync {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppLanguage {
+    #[default]
+    De,
+    En,
+}
+
+impl AppLanguage {
+    pub fn text<'a>(self, german: &'a str, english: &'a str) -> &'a str {
+        match self {
+            Self::De => german,
+            Self::En => english,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClockFormat {
+    #[default]
+    H24,
+    H12,
+}
+
+impl ClockFormat {
+    pub fn format(self, timestamp: i64) -> String {
+        chrono::DateTime::from_timestamp(timestamp, 0)
+            .map(|date| {
+                date.with_timezone(&chrono::Local)
+                    .format(match self {
+                        Self::H24 => "%H:%M",
+                        Self::H12 => "%I:%M %p",
+                    })
+                    .to_string()
+            })
+            .unwrap_or_else(|| "–".into())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    #[serde(default)]
+    pub language: AppLanguage,
+    #[serde(default)]
+    pub clock_format: ClockFormat,
     #[serde(default)]
     pub audio_language: String,
     #[serde(default)]
@@ -434,6 +477,8 @@ fn default_sub_size() -> f32 {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            language: AppLanguage::default(),
+            clock_format: ClockFormat::default(),
             audio_language: String::new(),
             subtitle_language: String::new(),
             subtitles_enabled: false,
@@ -841,5 +886,29 @@ mod session_tests {
         assert_eq!(s.startup_profile(&both).unwrap().name, "b");
         s.signed_out = true;
         assert!(s.startup_profile(&both).is_none());
+    }
+}
+
+#[cfg(test)]
+mod clock_format_tests {
+    use super::*;
+
+    #[test]
+    fn settings_keep_the_old_format_and_format_local_midnight_and_afternoon() {
+        use chrono::{Local, TimeZone};
+        assert_eq!(Settings::default().clock_format, ClockFormat::H24);
+        let midnight = Local
+            .with_ymd_and_hms(2025, 1, 15, 0, 5, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let afternoon = Local
+            .with_ymd_and_hms(2025, 1, 15, 16, 9, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        assert_eq!(ClockFormat::H24.format(midnight), "00:05");
+        assert_eq!(ClockFormat::H12.format(midnight), "12:05 AM");
+        assert_eq!(ClockFormat::H12.format(afternoon), "04:09 PM");
     }
 }

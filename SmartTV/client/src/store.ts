@@ -1,6 +1,8 @@
 import { Saved, Settings, Item, Watched, itemKey } from "./types";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 export const defaults: Settings = {
+  language: "de",
+  clockFormat: "H24",
   theme: "warm",
   appearanceVersion: 1,
   autoplayLast: policy.autoplayLast,
@@ -37,6 +39,8 @@ export function load(storage: Pick<Storage, "getItem"> = localStorage): Saved {
     const settings = { ...defaults, ...s.settings };
     if (!s.settings?.appearanceVersion && settings.theme === "system") settings.theme = "warm";
     settings.appearanceVersion = 1;
+    settings.language = settings.language === "en" ? "en" : "de";
+    settings.clockFormat = settings.clockFormat === "H12" ? "H12" : "H24";
     return {
       ...fresh(),
       ...s,

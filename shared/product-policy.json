@@ -2,5 +2,6 @@
   "resumeEndMarginSeconds": 60,
   "controlsHideMs": 2000,
   "historyLimit": 150,
-  "autoplayLast": false
+  "autoplayLast": false,
+  "seekStepSeconds": 10
 }

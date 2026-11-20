@@ -92,7 +92,12 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
             .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
             .map(play_item)
     });
-    let header = super::desktop::heading(ui, "Vorschau");
+    let header = super::desktop::heading(
+        ui,
+        app.settings
+            .language
+            .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
+    );
     if let Some(item) = &item {
         let bounds = Rect::from_min_max(pos2(header.right() - 42.0 * s, header.top()), header.max);
         let mut favorite = ui.child_ui(bounds, Layout::top_down(Align::Min));
@@ -114,7 +119,14 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
     }
     let Some(item) = item else {
         ui.add_space(16.0 * s);
-        ui.heading("Sender auswählen");
+        ui.heading(
+            app.settings.language.text(
+                app.settings
+                    .language
+                    .text("Sender auswählen", "Choose a channel"),
+                "Choose a channel",
+            ),
+        );
         ui.label("Hier erscheinen Vorschau, Programm und Senderinformationen.");
         return;
     };
@@ -161,13 +173,16 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
                         "Jetzt",
                         entries.iter().find(|e| e.start <= now && now < e.end),
                     ),
-                    ("Danach", entries.iter().find(|e| e.start > now)),
+                    (
+                        app.settings.language.text("Danach", "Next"),
+                        entries.iter().find(|e| e.start > now),
+                    ),
                 ] {
                     if let Some(e) = entry {
                         ui.small(format!(
                             "{label} · {} – {}",
-                            fmt_clock(e.start),
-                            fmt_clock(e.end)
+                            app.settings.clock_format.format(e.start),
+                            app.settings.clock_format.format(e.end)
                         ));
                         ui.label(RichText::new(&e.title).strong());
                         ui.label(&e.description);
@@ -363,10 +378,16 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     let s = super::desktop::scale(ui.ctx());
     if heading {
         if desktop {
-            super::desktop::heading(ui, "Kategorien");
+            super::desktop::heading(
+                ui,
+                app.settings.language.text(
+                    app.settings.language.text("Kategorien", "Categories"),
+                    "Categories",
+                ),
+            );
         } else {
             ui.label(
-                RichText::new("Kategorien")
+                RichText::new(app.settings.language.text("Kategorien", "Categories"))
                     .size(if tv { 20.0 } else { 22.0 })
                     .strong(),
             );
@@ -751,12 +772,20 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
         .map(play_item);
     let Some(item) = app.preview.clone().or(remembered) else {
-        ui.heading("Vorschau");
+        ui.heading(
+            app.settings
+                .language
+                .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
+        );
         let w = ui.available_width();
         let (rect, _) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::hover());
         ui.painter()
             .rect_filled(rect, 10.0, ui.visuals().faint_bg_color);
-        ui.label("Sender auswählen");
+        ui.label(
+            app.settings
+                .language
+                .text("Sender auswählen", "Choose a channel"),
+        );
         ui.label("Hier erscheinen Vorschau, Programm und Senderinformationen.");
         return;
     };
@@ -788,7 +817,11 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
             app.toggle_favorite(&item.progress_key);
         }
     } else {
-        ui.heading("Vorschau");
+        ui.heading(
+            app.settings
+                .language
+                .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
+        );
     }
     let w = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
@@ -875,9 +908,10 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                     ui.separator();
                     ui.label(
                         RichText::new(format!(
-                            "Jetzt · {} – {}",
-                            fmt_clock(current.start),
-                            fmt_clock(current.end)
+                            "{} · {} – {}",
+                            app.settings.language.text("Jetzt", "Now"),
+                            app.settings.clock_format.format(current.start),
+                            app.settings.clock_format.format(current.end)
                         ))
                         .size(if tv { 16.0 } else { 14.0 })
                         .strong(),
@@ -893,11 +927,11 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                     .min_by_key(|e| e.start)
                 {
                     ui.separator();
-                    ui.label(RichText::new("Danach").strong());
+                    ui.label(RichText::new(app.settings.language.text("Danach", "Next")).strong());
                     ui.label(format!(
                         "{} – {}",
-                        fmt_clock(next.start),
-                        fmt_clock(next.end)
+                        app.settings.clock_format.format(next.start),
+                        app.settings.clock_format.format(next.end)
                     ));
                     ui.label(&next.title);
                     if !next.description.is_empty() {
@@ -943,11 +977,6 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
         .request_repaint_after(std::time::Duration::from_millis(100));
 }
 
-fn fmt_clock(ts: i64) -> String {
-    chrono::DateTime::from_timestamp(ts, 0)
-        .map(|d| d.with_timezone(&chrono::Local).format("%H:%M").to_string())
-        .unwrap_or_default()
-}
 fn number_jump(app: &mut App, ui: &mut Ui) {
     let typing_elsewhere = ui.ctx().memory(|m| m.focused().is_some());
     let (digits, enter, now) = ui.input(|i| {

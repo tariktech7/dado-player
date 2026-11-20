@@ -13,5 +13,13 @@
   "channelNameFont": 26,
   "epgFont": 20,
   "navigationDurationMs": 220,
-  "navigationEasing": [0.22, 1, 0.36, 1]
+  "navigationEasing": [
+    0.22,
+    1,
+    0.36,
+    1
+  ],
+  "playerTopHeight": 86,
+  "playerControlsHeight": 132,
+  "playerCornerRadius": 20
 }

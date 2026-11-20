@@ -454,8 +454,12 @@ export class Player {
     if(!Number.isFinite(delta) || !this.current || this.current.kind==='live')return;
     if(this.status.state==='loading'){this.pendingSeekDelta+=delta;return;}
     if(!['playing','paused'].includes(this.status.state))return;
-    const base=this.seekTarget ?? this.status.time;
-    this.seekTarget=Math.max(0,Math.min(base+delta,this.status.duration>0?Math.max(0,this.status.duration-1):Infinity));
+    this.seekTo((this.seekTarget ?? this.status.time) + delta);
+  }
+  seekTo(seconds: number): void {
+    if (!Number.isFinite(seconds) || !this.current || this.current.kind === "live") return;
+    if (!["playing", "paused"].includes(this.status.state)) return;
+    this.seekTarget = Math.max(0, Math.min(seconds, this.status.duration > 0 ? Math.max(0, this.status.duration - 1) : Infinity));
     if(!this.seekBusy)this.flushSeek();
   }
   private flushSeek(): void {
