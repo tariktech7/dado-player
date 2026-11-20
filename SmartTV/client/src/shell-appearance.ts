@@ -22,6 +22,9 @@ export function installShellAppearance() {
     '--player-focus-color':appearance.playerFocusColor,
     '--player-text-color':appearance.playerTextColor,
     '--player-muted-color':appearance.playerMutedColor,
+    '--player-top-max-width':appearance.playerTopMaxWidth+'px',
+    '--player-controls-max-width':appearance.playerControlsMaxWidth+'px',
+    '--player-border-color':appearance.playerBorderColor,
     '--player-corner-radius':appearance.playerCornerRadius+'px',
   }))style.setProperty(key,value);
 }

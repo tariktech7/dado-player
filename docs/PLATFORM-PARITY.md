@@ -14,7 +14,7 @@
 | Favoriten / Fortsetzen | Live-TV, Filme und Serien getrennt anzeigen. |
 | Kataloge | Filme/Serien: Favoriten zuerst; Poster und eigene Detailansicht. Live-TV: alle Sender und Favoriten. |
 | Seitenleiste (Windows und Samsung) | Öffnet sich beim Überfahren mit der Maus. Ohne Auswahl klappt sie 700 ms nach dem Verlassen ein. Ein Klick auf einen Menüpunkt lässt sie geöffnet. |
-| Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und übereinstimmender Reihenfolge der Transportsteuerung. Windows behält die native Vollbild- und Lautstärkesteuerung. |
+| Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und vier Elementen in der Hauptleiste. Ton, Untertitel, Bildformat und Beenden stehen unter Optionen. Windows behält die native Vollbild- und Lautstärkesteuerung. |
 | Live-Vorschau (Windows und Samsung) | Gemeinsame Breite von 640 Einheiten bei 1920 × 1080, 16:9-Fläche und vollständiges Streambild mit erhaltenem Seitenverhältnis. Die Programmdetails bleiben separat scrollbar. |
 | Liste aktualisieren | Sender, Filme und Serien des aktiven Profils neu laden. Bei einem Teilfehler bleiben die bisherigen Einträge des betroffenen Bereichs verfügbar. |
 | Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |

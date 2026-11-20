@@ -2534,6 +2534,10 @@ impl App {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
         }
         if esc {
+            #[cfg(target_os = "windows")]
+            if in_player && crate::ui::player_desktop::dismiss_menus(self, ctx) {
+                return;
+            }
             if self.fullscreen {
                 self.fullscreen = false;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));

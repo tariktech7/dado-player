@@ -1565,28 +1565,54 @@ hr {
   padding-top: 16px;
   padding-bottom: 16px;
 }
-/* Use the same palette for player chrome in each application theme. */
+/* Compact floating chrome and a separate panel for secondary controls. */
 #app .fullscreen .player-top,
-#app .fullscreen .player-controls {
+#app .fullscreen .player-controls,
+#app .fullscreen .player-options {
   background: var(--player-panel-color);
   color: var(--player-text-color);
-  border: 1px solid var(--player-focus-color);
-  box-shadow: 0 6px 16px #0005;
+  border: 1px solid var(--player-border-color);
+  border-radius: var(--player-corner-radius);
+  box-shadow: 0 6px 16px #0004;
 }
-.player-top { left: var(--player-top-inset-x); right: var(--player-top-inset-x); top: var(--player-top-inset-y); }
-.player-controls { left: var(--player-controls-inset-x); right: var(--player-controls-inset-x); bottom: var(--player-controls-inset-y); }
+.player-top {
+  left: var(--player-top-inset-x); right: var(--player-top-inset-x); top: var(--player-top-inset-y);
+  max-width: var(--player-top-max-width);
+  margin: 0 auto; padding: 8px 12px; gap: 18px;
+}
+.player-top strong { font-size: 25px; }
+#app .fullscreen .player-top small { font-size: 15px; }
+.player-controls {
+  left: var(--player-controls-inset-x); right: var(--player-controls-inset-x); bottom: var(--player-controls-inset-y);
+  max-width: var(--player-controls-max-width);
+  margin: 0 auto; padding: 10px 14px;
+}
+.player-options {
+  position: absolute; left: 24px; right: 24px;
+  bottom: calc(var(--player-controls-inset-y) + var(--player-controls-height) + 10px);
+  max-width: 550px; margin: 0 auto; padding: 15px 18px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  z-index: 34;
+}
+.player-options .tv-select { margin: 0; min-width: 0; }
+.transport { gap: 8px; }
+.transport .player-options-toggle { margin-left: 10px; }
+.timeline { gap: 12px; margin-top: 8px; font-size: 20px; }
 #app .fullscreen .player-top small, #app .fullscreen .timeline { color: var(--player-muted-color); }
-#app .fullscreen .player-top button, #app .fullscreen .player-controls button {
+#app .fullscreen .player-top button, #app .fullscreen .player-controls button, #app .fullscreen .player-options button {
+  min-height: 40px; padding: 5px 12px;
   background: var(--player-button-color);
   color: var(--player-text-color);
-  border: 1px solid var(--player-focus-color);
-  border-radius: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 22px;
 }
+#app .fullscreen .player-top button[aria-pressed] { min-width: 42px; text-align: center; }
 #app .fullscreen .player-controls button.primary { background: var(--player-primary-color); }
-#app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus,
-#app .fullscreen .player-top button:hover, #app .fullscreen .player-controls button:hover {
-  outline: 3px solid var(--player-focus-color);
-  outline-offset: 2px;
+#app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus, #app .fullscreen .player-options button:focus,
+#app .fullscreen .player-top button:hover, #app .fullscreen .player-controls button:hover, #app .fullscreen .player-options button:hover {
+  outline: 2px solid var(--player-focus-color);
+  outline-offset: 1px;
 }
 .timeline > span:last-child { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline .seek-bar { flex: 1 1 0; min-width: 0; cursor: pointer; padding: 8px 0; }

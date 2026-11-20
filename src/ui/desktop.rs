@@ -51,6 +51,12 @@ pub struct Appearance {
     pub player_text_color: String,
     #[cfg(target_os = "windows")]
     pub player_muted_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_top_max_width: f32,
+    #[cfg(target_os = "windows")]
+    pub player_controls_max_width: f32,
+    #[cfg(target_os = "windows")]
+    pub player_border_color: String,
     pub player_corner_radius: f32,
 }
 pub fn appearance() -> &'static Appearance {

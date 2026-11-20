@@ -225,6 +225,7 @@ function App() {
     ),
     [exit, setExit] = useState(false),
     [tracks, setTracks] = useState(false),
+    [playerOptions, setPlayerOptions] = useState(false),
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
     [updateUrl, setUpdateUrl] = useState("");
@@ -240,6 +241,7 @@ function App() {
     detailRef = useRef(detail),
     exitRef = useRef(exit),
     tracksRef = useRef(tracks),
+    playerOptionsRef = useRef(playerOptions),
     controlsRef = useRef(true),
     playerMenuNavigation = useRef(false),
     lastInteraction = useRef(Date.now()),
@@ -250,6 +252,7 @@ function App() {
   detailRef.current = detail;
   exitRef.current = exit;
   tracksRef.current = tracks;
+  playerOptionsRef.current = playerOptions;
   controlsRef.current = controlsVisible;
   const showControls = () => {
     lastInteraction.current = Date.now();
@@ -611,6 +614,11 @@ function App() {
       setTracks(false);
       return;
     }
+    if (playerOptionsRef.current) {
+      setPlayerOptions(false);
+      document.querySelector<HTMLElement>(".player-options-toggle")?.focus();
+      return;
+    }
     if (resumeRef.current) {
       setResume(null);
       return;
@@ -668,7 +676,7 @@ function App() {
     const editingText = (e.target as HTMLElement | null)?.matches(
       'input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]',
     );
-    if ((livePlayer || view === "live") && !tracksRef.current && !parental.open
+    if ((livePlayer || view === "live") && !tracksRef.current && !playerOptionsRef.current && !parental.open
       && !document.querySelector(".modal") && !editingText
       && (e.key === "0" || e.code === "Numpad0" || code === 48 || code === 96)) {
       e.preventDefault();
@@ -680,14 +688,14 @@ function App() {
       }
       return;
     }
-    if (livePlayer && !tracksRef.current && !document.querySelector(".modal")
+    if (livePlayer && !tracksRef.current && !playerOptionsRef.current && !document.querySelector(".modal")
       && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       showControls();
       stepLive(e.key === "ArrowUp" ? 1 : -1);
       return;
     }
-    if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !document.querySelector(".modal")) {
+    if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !playerOptionsRef.current && !document.querySelector(".modal")) {
       if (!controlsRef.current) playerMenuNavigation.current = false;
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         playerMenuNavigation.current = true;
@@ -744,6 +752,7 @@ function App() {
       moveFocus(
         e.key,
         [...document.querySelectorAll(".modal")].pop() ||
+          document.querySelector(".player-options") ||
           document.querySelector(".fullscreen") ||
           document,
       );
@@ -856,10 +865,14 @@ function App() {
     status = p?.status;
   useEffect(() => {
     showControls();
-    if (!full) return;
+    if (!full) {
+      setPlayerOptions(false);
+      return;
+    }
     const timer = setInterval(() => {
       if (
         !tracksRef.current &&
+        !playerOptionsRef.current &&
         !document.querySelector(".modal") &&
         playerRef.current?.status.state === "playing" &&
         Date.now() - lastInteraction.current > policy.controlsHideMs
@@ -870,6 +883,9 @@ function App() {
     }, 100);
     return () => clearInterval(timer);
   }, [full]);
+  useEffect(() => {
+    if (playerOptions) document.querySelector<HTMLElement>(".player-options button")?.focus();
+  }, [playerOptions]);
   const [now, next] = preview ? currentNext(epg[preview.id] || []) : [];
   const favoriteRows = favorites.filter((i) => i.kind === "live");
   useEffect(() => {
@@ -1908,8 +1924,9 @@ function App() {
                   </small>
                   <strong>{preview.name}</strong>
                 </span>
-                <button onClick={() => toggleFavorite(preview)}>
-                  {isFavorite(preview) ? t("★ Favorit", "★ Favorite") : t("☆ Favorit", "☆ Favorite")}
+                <button aria-label={t("Favorit", "Favorite")} aria-pressed={isFavorite(preview)}
+                  onClick={() => toggleFavorite(preview)}>
+                  {isFavorite(preview) ? "★" : "☆"}
                 </button>
               </div>
               <div class="player-feedback">
@@ -1928,19 +1945,11 @@ function App() {
                   {p.subtitle}
                 </div>
               )}
-              <div class="player-controls glass">
-                <div class="transport">
-                  <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
-                    {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
-                  </button>
-                  <button class="primary" onClick={() => p?.toggle()}>
-                    {status?.state === "paused" ? t("▷ Abspielen", "▷ Play") : t("Ⅱ Pause", "Ⅱ Pause")}
-                  </button>
-                  <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
-                    {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
-                  </button>
+              {playerOptions && (
+                <div class="player-options glass" aria-label={t("Player-Optionen", "Player options")}>
                   <button
                     onClick={() => {
+                      setPlayerOptions(false);
                       p?.refreshTracks();
                       setTracks(true);
                     }}
@@ -1960,6 +1969,23 @@ function App() {
                     ],
                   )}
                   <button onClick={stop}>{t("Beenden", "Stop")}</button>
+                </div>
+              )}
+              <div class="player-controls glass">
+                <div class="transport">
+                  <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
+                    {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
+                  </button>
+                  <button class="primary" onClick={() => p?.toggle()}>
+                    {status?.state === "paused" ? t("▷ Abspielen", "▷ Play") : t("Ⅱ Pause", "Ⅱ Pause")}
+                  </button>
+                  <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
+                    {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
+                  </button>
+                  <button class="player-options-toggle" aria-expanded={playerOptions}
+                    onClick={() => setPlayerOptions(!playerOptions)}>
+                    {t("Optionen", "Options")}
+                  </button>
                 </div>
                 <div class="timeline">
                   <span>

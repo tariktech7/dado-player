@@ -14,6 +14,7 @@ struct Palette {
     panel: Color32,
     button: Color32,
     primary: Color32,
+    border: Color32,
     focus: Color32,
     text: Color32,
     muted: Color32,
@@ -29,6 +30,7 @@ impl Palette {
                 panel: parse(&a.player_panel_color),
                 button: parse(&a.player_button_color),
                 primary: parse(&a.player_primary_color),
+                border: parse(&a.player_border_color),
                 focus: parse(&a.player_focus_color),
                 text: parse(&a.player_text_color),
                 muted: parse(&a.player_muted_color),
@@ -59,7 +61,7 @@ fn pane<R>(
                 rect.shrink(1.0),
                 super::desktop::appearance().player_corner_radius * scale,
                 p.panel,
-                Stroke::new(1.0_f32, p.focus),
+                Stroke::new(1.0_f32, p.border),
             );
             render(area)
         })
@@ -84,14 +86,11 @@ fn button(
         rect,
         size * 0.48,
         if primary { p.primary } else { p.button },
-        Stroke::new(
-            if response.hovered() || response.has_focus() {
-                2.5
-            } else {
-                1.0_f32
-            },
-            p.focus,
-        ),
+        if response.hovered() || response.has_focus() {
+            Stroke::new(2.0_f32, p.focus)
+        } else {
+            Stroke::NONE
+        },
     );
     ui.painter()
         .with_clip_rect(rect.shrink2(vec2(4.0, 0.0)))
@@ -137,6 +136,20 @@ fn aspect_label(value: DesktopAspect, english: bool) -> &'static str {
     }
 }
 
+pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
+    let mut active = app.audio_menu_open || app.sub_menu_open;
+    app.audio_menu_open = false;
+    app.sub_menu_open = false;
+    ctx.data_mut(|data| {
+        for key in ["desktop-player-aspect-menu", "desktop-player-options-menu"] {
+            let id = Id::new(key);
+            active |= data.get_temp::<bool>(id).unwrap_or(false);
+            data.insert_temp(id, false);
+        }
+    });
+    active
+}
+
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
     let full = ui.available_rect_before_wrap();
@@ -150,22 +163,28 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let s = (full.width() / a.reference_width)
         .clamp(0.66, 1.25)
         .min(full.width() / 610.0)
-        .min(full.height() / 700.0);
-    let compact = full.width() < 1260.0 * s;
-    let transport_height = a.player_controls_height + if compact { 64.0 } else { 0.0 };
-    let title = Rect::from_min_max(
-        full.min + vec2(a.player_top_inset_x, a.player_top_inset_y) * s,
-        pos2(
-            full.right() - a.player_top_inset_x * s,
-            full.top() + (a.player_top_inset_y + a.player_top_height) * s,
-        ),
+        .min(full.height() / 600.0);
+    let top_size = vec2(
+        (full.width() - 2.0 * a.player_top_inset_x * s).min(a.player_top_max_width * s),
+        a.player_top_height * s,
     );
-    let bottom = Rect::from_min_max(
+    let title = Rect::from_center_size(
         pos2(
-            full.left() + a.player_controls_inset_x * s,
-            full.bottom() - (a.player_controls_inset_y + transport_height) * s,
+            full.center().x,
+            full.top() + a.player_top_inset_y * s + top_size.y / 2.0,
         ),
-        full.max - vec2(a.player_controls_inset_x, a.player_controls_inset_y) * s,
+        top_size,
+    );
+    let bottom_size = vec2(
+        (full.width() - 2.0 * a.player_controls_inset_x * s).min(a.player_controls_max_width * s),
+        a.player_controls_height * s,
+    );
+    let bottom = Rect::from_center_size(
+        pos2(
+            full.center().x,
+            full.bottom() - a.player_controls_inset_y * s - bottom_size.y / 2.0,
+        ),
+        bottom_size,
     );
     let radio = app.is_radio(&item.progress_key);
     let video = app.player.as_ref().map(|p| p.surface.native_handle());
@@ -183,6 +202,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let time = ctx.input(|i| i.time);
     let keep = std::env::var_os("DADO_KEEP_UI").is_some();
     let aspect_menu = Id::new("desktop-player-aspect-menu");
+    let options_menu = Id::new("desktop-player-options-menu");
+    let mut options_open = ctx
+        .data(|data| data.get_temp(options_menu))
+        .unwrap_or(false);
     let mut aspect_open = ctx.data(|data| data.get_temp(aspect_menu)).unwrap_or(false);
     if app.ui_activity < 0.0
         || app.note_pointer_activity()
@@ -194,6 +217,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         || app.audio_menu_open
         || app.sub_menu_open
         || aspect_open
+        || options_open
     {
         app.ui_activity = time;
     }
@@ -207,7 +231,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         app.audio_menu_open = false;
         app.sub_menu_open = false;
         app.player_menu_navigation = false;
-        ctx.data_mut(|data| data.insert_temp(aspect_menu, false));
+        dismiss_menus(app, &ctx);
         ctx.set_cursor_icon(egui::CursorIcon::None);
         return;
     }
@@ -223,41 +247,36 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let center = title.center().y;
         let control = |offset: f32, width: f32| {
             Rect::from_min_size(
-                pos2(title.left() + offset * s, center - 26.0 * s),
-                vec2(width, 52.0) * s,
+                pos2(title.left() + offset * s, center - 20.0 * s),
+                vec2(width, 40.0) * s,
             )
         };
         let back = button(
             ui,
             "back",
-            control(24.0, 142.0),
+            control(12.0, 113.0),
             t("← Zurück", "← Back"),
-            26.0 * s,
+            22.0 * s,
             false,
         );
-        let favorite_width = 158.0;
-        let favorite_x = title.width() / s - favorite_width - 100.0;
+        let favorite_x = title.width() / s - 108.0;
         let favorite = app.is_favorite(&item.progress_key);
         if button(
             ui,
             "favorite",
-            control(favorite_x, favorite_width),
-            if favorite {
-                t("★ Favorit", "★ Favorite")
-            } else {
-                t("☆ Favorit", "☆ Favorite")
-            },
-            25.0 * s,
-            false,
+            control(favorite_x, 42.0),
+            if favorite { "★" } else { "☆" },
+            24.0 * s,
+            favorite,
         ) {
             app.toggle_favorite(&item.progress_key);
         }
         if button(
             ui,
             "fullscreen",
-            control(title.width() / s - 76.0, 52.0),
+            control(title.width() / s - 54.0, 42.0),
             "⛶",
-            26.0 * s,
+            22.0 * s,
             false,
         ) {
             app.fullscreen = !app.fullscreen;
@@ -270,28 +289,28 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         } else {
             t("FILM", "MOVIE")
         };
-        let left = title.left() + 194.0 * s;
-        let available = (favorite_x - 214.0) * s;
+        let left = title.left() + 144.0 * s;
+        let available = (favorite_x - 160.0) * s;
         line(
             ui,
-            pos2(left, center - 16.0 * s),
+            pos2(left, center - 12.0 * s),
             available,
             label,
-            19.0 * s,
+            15.0 * s,
             false,
         );
         line(
             ui,
-            pos2(left, center + 12.0 * s),
+            pos2(left, center + 9.0 * s),
             available,
             &item.title,
-            30.0 * s,
+            25.0 * s,
             true,
         );
         back
     });
     if back {
-        ctx.data_mut(|data| data.insert_temp(aspect_menu, false));
+        dismiss_menus(app, &ctx);
         app.stop_play();
         return;
     }
@@ -318,30 +337,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         } else {
             "+10 s"
         },
-        t("Ton & Untertitel", "Audio & subtitles"),
-        aspect_label(app.settings.desktop_aspect, is_english),
-        t("Beenden", "Stop"),
+        t("Optionen", "Options"),
     ];
     let (action, layer) = pane(&ctx, "transport", bottom, s, |ui| {
-        let widths = [152.0, 170.0, 152.0, 244.0, 174.0, 134.0];
-        let buttons_per_row = if compact { 3 } else { widths.len() };
+        let widths = [104.0, 132.0, 104.0, 112.0];
+        let mut x = bottom.center().x - (widths.iter().sum::<f32>() + 34.0) * s / 2.0;
         let mut action = None;
-        for (row, row_widths) in widths.chunks(buttons_per_row).enumerate() {
-            let gaps = (row_widths.len() - 1) as f32 * 16.0;
-            let mut x = bottom.center().x - (row_widths.iter().sum::<f32>() + gaps) * s / 2.0;
-            for (column, &width) in row_widths.iter().enumerate() {
-                let index = row * buttons_per_row + column;
-                let rect = Rect::from_min_size(
-                    pos2(x, bottom.top() + (16.0 + row as f32 * 64.0) * s),
-                    vec2(width, 54.0) * s,
-                );
-                if button(ui, index, rect, names[index], 25.0 * s, index == 1) {
-                    action = Some(index);
-                }
-                x += (width + 16.0) * s;
+        for (i, (name, width)) in names.into_iter().zip(widths).enumerate() {
+            let r = Rect::from_min_size(pos2(x, bottom.top() + 10.0 * s), vec2(width, 42.0) * s);
+            if button(ui, i, r, name, 22.0 * s, i == 1 || (i == 3 && options_open)) {
+                action = Some(i);
             }
+            x += (width + if i == 2 { 18.0 } else { 8.0 }) * s;
         }
-        let y = bottom.bottom() - 30.0 * s;
+        let y = bottom.bottom() - 22.0 * s;
         let guide = if live {
             let utc = chrono::Utc::now().timestamp();
             item.progress_key
@@ -371,7 +380,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let program_width = if live && !end.is_empty() {
             bottom.width() * 0.32
         } else {
-            120.0 * s
+            64.0 * s
         };
         line(
             ui,
@@ -390,7 +399,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             false,
         );
         let track = Rect::from_min_max(
-            pos2(bottom.left() + 146.0 * s, y - 3.0 * s),
+            pos2(bottom.left() + 92.0 * s, y - 3.0 * s),
             pos2(bottom.right() - program_width - 32.0 * s, y + 3.0 * s),
         );
         let fraction = guide
@@ -445,22 +454,51 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         }
         Some(3) => {
-            app.audio_menu_open = !app.audio_menu_open && !app.sub_menu_open;
+            options_open = !options_open;
+            app.audio_menu_open = false;
             app.sub_menu_open = false;
             aspect_open = false;
         }
-        Some(4) => {
-            aspect_open = !aspect_open;
-            app.audio_menu_open = false;
-            app.sub_menu_open = false;
-        }
-        Some(5) => {
-            ctx.data_mut(|data| data.insert_temp(aspect_menu, false));
-            app.stop_play();
-            return;
-        }
         _ => {}
     }
+    if options_open {
+        let rect = Rect::from_center_size(
+            pos2(bottom.center().x, bottom.top() - 47.0 * s),
+            vec2(550.0, 74.0) * s,
+        );
+        let (selection, layer) = pane(&ctx, "options", rect, s, |ui| {
+            let items = [
+                (t("Ton & Untertitel", "Audio & subtitles"), 202.0),
+                (t("Bildformat", "Aspect ratio"), 146.0),
+                (t("Beenden", "Stop"), 144.0),
+            ];
+            let mut x = rect.left() + 19.0 * s;
+            let mut action = None;
+            for (i, (label, width)) in items.into_iter().enumerate() {
+                let control =
+                    Rect::from_min_size(pos2(x, rect.top() + 16.0 * s), vec2(width, 42.0) * s);
+                if button(ui, i, control, label, 21.0 * s, false) {
+                    action = Some(i);
+                }
+                x += (width + 10.0) * s;
+            }
+            action
+        });
+        layers.push(layer);
+        if let Some(selection) = selection {
+            options_open = false;
+            match selection {
+                0 => app.audio_menu_open = true,
+                1 => aspect_open = true,
+                _ => {
+                    dismiss_menus(app, &ctx);
+                    app.stop_play();
+                    return;
+                }
+            }
+        }
+    }
+    ctx.data_mut(|data| data.insert_temp(options_menu, options_open));
     if aspect_open {
         let rect = Rect::from_center_size(
             pos2(bottom.center().x, bottom.top() - 70.0 * s),

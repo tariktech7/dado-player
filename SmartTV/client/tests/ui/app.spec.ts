@@ -162,6 +162,7 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
   expect(measurements.alpha).toBeGreaterThan(0.7);
   expect(measurements.alpha).toBeLessThan(0.95);
   expect(measurements.radius).toBeGreaterThan(12);
+  expect(await controls.evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(721);
   expect(measurements.guide).toBeGreaterThan(4.5);
   expect(measurements.buttons).toBeGreaterThan(4.5);
 });
@@ -635,6 +636,9 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     .toBe(1);
   await page.locator(".channel").first().click();
   await expect(page.locator(".fullscreen")).toBeVisible();
+  await expect(page.locator(".transport > button")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Ton & Untertitel" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Optionen", exact: true }).click();
   await page.getByRole("button", { name: "Ton & Untertitel" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "deu · AAC" }).click();
