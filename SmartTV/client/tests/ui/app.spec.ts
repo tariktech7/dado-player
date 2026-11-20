@@ -680,10 +680,29 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     ),
   ).toBe(1);
   await page.keyboard.press("Escape");
-  await expect(page.locator(".preview-panel")).toContainText(
-    "Sender auswählen",
-  );
+  await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
+  await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
+  await expect(page.locator(".preview-panel")).toContainText("Dado Kanal 0001");
+  expect(await page.evaluate(() => (window as any).__avLog.filter((a: any) => a[0] === "close"))).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Dado Player beenden?" })).toBeVisible();
 });
+test("Live TV, movies and series use the same category column", async ({ page }) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  const geometry = () => page.locator(".categories").evaluate(el => ({
+    width: el.clientWidth,
+    heading: (el.querySelector("h1") as HTMLElement).offsetHeight,
+    button: (el.querySelector("button") as HTMLElement).offsetWidth,
+  }));
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
+  const live = await geometry();
+  for (const name of ["▷ Filme", "▤ Serien"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    expect(await geometry()).toEqual(live);
+  }
+});
+
 test("Back restores focus to the watched channel, movie and episode", async ({ page }) => {
   await fixture(page, true, true);
   await page.goto("/");

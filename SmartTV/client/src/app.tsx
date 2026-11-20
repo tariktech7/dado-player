@@ -655,7 +655,7 @@ function App() {
       leavePlayer();
       return;
     }
-    if (previewRef.current) {
+    if (previewRef.current && view !== "live") {
       stop();
       return;
     }
@@ -1582,7 +1582,7 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
+            class={`shell ${navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""} ${view === "vod" || view === "series" ? "catalog-shell" : ""}`}
           >
             <aside
               class="navigation"
