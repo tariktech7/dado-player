@@ -30,7 +30,7 @@ use crate::types::{Channel, Series, VodMovie};
 
 /// Left-hand navigation. The third field is the description shown in the hero
 /// while the header itself holds focus.
-pub const HEADERS: [(Icon, &str, &str); 8] = [
+pub const HEADERS: [(Icon, &str, &str); 9] = [
     (Icon::Tv, "Live TV", "Sender, Logos und Jetzt / Danach"),
     (Icon::Film, "Filme", "Die Filmbibliothek des Anbieters"),
     (Icon::Series, "Serien", "Serien, Staffeln und Folgen"),
@@ -46,7 +46,7 @@ pub const HEADERS: [(Icon, &str, &str); 8] = [
         "Titel per Buchstaben ohne Tastatur finden",
     ),
     (
-        Icon::Sliders,
+        Icon::Settings,
         "Einstellungen",
         "Darstellung, TV-Modus und Profil",
     ),
@@ -55,14 +55,28 @@ pub const HEADERS: [(Icon, &str, &str); 8] = [
         "Startseite",
         "Fortsetzen und das Programm deiner Favoriten",
     ),
+    (
+        Icon::Refresh,
+        "Liste aktualisieren",
+        "Bibliothek des aktiven Anbieters neu laden",
+    ),
 ];
 pub const HEADER_COUNT: usize = HEADERS.len();
+const REFRESH_ROW: usize = HEADER_COUNT - 1;
 
 /// Compact labels for the narrow headers column (portrait / split-screen QA).
 /// A real TV is landscape and uses `HEADERS`, but forcing TV mode on a phone
 /// must not turn "Fortsetzen" into "Fort…".
 const SHORT_HEADERS: [&str; HEADER_COUNT] = [
-    "Live", "Filme", "Serien", "Weiter", "Favs", "Suche", "Setup", "Start",
+    "Live",
+    "Filme",
+    "Serien",
+    "Weiter",
+    "Favs",
+    "Suche",
+    "Setup",
+    "Start",
+    "Neu laden",
 ];
 
 // ---- 10-foot scale (§23.4 P1) ----
@@ -296,6 +310,11 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
     for (i, (ic, label, desc)) in HEADERS.iter().enumerate() {
         let (rect, resp) = ui.allocate_exact_size(vec2(w, HEADER_ROW_H), Sense::click());
         let selected = i == app.tv_nav;
+        let label = if i == REFRESH_ROW && app.catalog_refreshing {
+            "Wird geladen …"
+        } else {
+            label
+        };
         let focused = focus::next_is_focused();
         let inner = rect.shrink(2.0);
         if selected {
@@ -332,7 +351,13 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
             components::draw_line(
                 ui,
                 pos2(rect.left() + 32.0, rect.center().y),
-                if app.settings.language == crate::types::AppLanguage::En {
+                if i == REFRESH_ROW {
+                    if app.catalog_refreshing {
+                        app.settings.language.text("Lädt …", "Loading …")
+                    } else {
+                        app.settings.language.text("Neu laden", "Refresh")
+                    }
+                } else if app.settings.language == crate::types::AppLanguage::En {
                     [
                         "Live TV",
                         "Movies",
@@ -359,7 +384,13 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         }
         metas.push(Meta {
             title: label.to_string(),
-            sub: desc.to_string(),
+            sub: if i == REFRESH_ROW {
+                app.catalog_refresh_notice
+                    .clone()
+                    .unwrap_or_else(|| desc.to_string())
+            } else {
+                desc.to_string()
+            },
             detail: String::new(),
             progress: None,
         });
@@ -368,7 +399,11 @@ fn draw_headers(app: &mut App, ui: &mut Ui, metas: &mut Vec<Meta>) {
         }
     }
     if let Some(i) = activate {
-        app.tv_goto(i);
+        if i == REFRESH_ROW {
+            app.refresh_catalog();
+        } else {
+            app.tv_goto(i);
+        }
     }
 }
 

@@ -39,3 +39,9 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
   Live-Preview muss lange ungetrennte Metadaten umbrechen, Video behält 16:9 und nutzbare Höhe.
 - Isolierte native Sichtprüfung: IPTV_DEMO=1 plus absoluter DADO_QA_DATA_DIR. Windows-APPDATA
   überschreibt KnownFolder-Auflösung nicht. Demo registriert kein Dado-Connect-Gerät.
+
+- Nach abgeschlossenen Builds/Testläufen temporäre Debug-Ausgaben, entpackte
+  Testkopien und Testmedien entfernen. Release-Dateien vor dem Aufräumen
+  verifizieren. SDKs, Reproduktionsarchive, Quellcode und Signiermaterial erhalten.
+  Die Debugprofile verwenden Zeilentabellen statt vollständiger Debugsymbole
+  und erzeugen keine inkrementellen Zwischenstände.

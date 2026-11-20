@@ -70,6 +70,7 @@ pub enum AppEvent {
     /// few dozen bytes. Without the box, the enum (and every slot in the
     /// unbounded channel) is sized for the single largest variant.
     LoginDone(u64, Box<Result<(Profile, Library), String>>),
+    CatalogRefreshed(u64, Box<Result<Library, String>>),
     Epg(u64, u32, Result<Vec<EpgEntry>, String>),
     SeriesInfo(u64, u32, Result<Vec<Episode>, String>),
     Image(u64, String, Result<egui::ColorImage, String>),
@@ -214,6 +215,8 @@ pub struct App {
     pub busy: bool,
     /// Monotonic login request ID; stale completions after logout/new login are ignored.
     login_generation: u64,
+    pub catalog_refreshing: bool,
+    pub catalog_refresh_notice: Option<String>,
     pub error: Option<String>,
     pub info: Option<String>,
 
@@ -435,6 +438,8 @@ impl App {
             parental: crate::parental::Controls::load(),
             busy: false,
             login_generation: 0,
+            catalog_refreshing: false,
+            catalog_refresh_notice: None,
             error: None,
             info: None,
             login_kind: ProfileKind::Xtream,
@@ -1303,6 +1308,59 @@ impl App {
                     }
                 }
             }
+            AppEvent::CatalogRefreshed(generation, result) => {
+                if generation != self.login_generation {
+                    return;
+                }
+                self.catalog_refreshing = false;
+                let language = self.settings.language;
+                match *result {
+                    Ok(mut library) => {
+                        use crate::types::CatalogArea::*;
+                        for issue in &library.catalog_issues {
+                            match issue.area {
+                                LiveCategories => {
+                                    library.live_categories =
+                                        std::mem::take(&mut self.library.live_categories)
+                                }
+                                LiveStreams => {
+                                    library.channels = std::mem::take(&mut self.library.channels)
+                                }
+                                MovieCategories => {
+                                    library.vod_categories =
+                                        std::mem::take(&mut self.library.vod_categories)
+                                }
+                                Movies => library.movies = std::mem::take(&mut self.library.movies),
+                                SeriesCategories => {
+                                    library.series_categories =
+                                        std::mem::take(&mut self.library.series_categories)
+                                }
+                                Series => library.series = std::mem::take(&mut self.library.series),
+                            }
+                        }
+                        self.login_generation = self.login_generation.wrapping_add(1);
+                        self.library = library;
+                        self.clear_detail_caches();
+                        self.images = ImageState::default();
+                        self.live_order.clear();
+                        self.catalog_refresh_notice = Some(
+                            if self.library.catalog_issues.is_empty() {
+                                language.text("Liste aktualisiert", "Library refreshed")
+                            } else {
+                                language.text("Teilweise aktualisiert", "Partially refreshed")
+                            }
+                            .into(),
+                        );
+                    }
+                    Err(error) => {
+                        self.catalog_refresh_notice = Some(format!(
+                            "{}: {}",
+                            language.text("Aktualisierung fehlgeschlagen", "Refresh failed"),
+                            redact(&error)
+                        ));
+                    }
+                }
+            }
             AppEvent::Epg(generation, id, res) => {
                 // Ignore completions from a previous profile. IDs are provider-scoped,
                 // so accepting a late response can attach old EPG data to a new catalog.
@@ -1398,6 +1456,8 @@ impl App {
     }
 
     pub fn start_login(&mut self, profile: Profile) {
+        self.catalog_refreshing = false;
+        self.catalog_refresh_notice = None;
         if self.profiles.iter().any(|p| p.id == profile.id) {
             self.editing_profile = Some(profile.id.clone());
             self.login_kind = profile.kind;
@@ -1453,6 +1513,8 @@ impl App {
     }
 
     fn invalidate_login(&mut self) {
+        self.catalog_refreshing = false;
+        self.catalog_refresh_notice = None;
         self.login_generation = self.login_generation.wrapping_add(1);
         self.busy = false;
     }
@@ -2963,12 +3025,24 @@ impl App {
     /// Re-run the full catalogue load for the active profile after a partial
     /// failure. One tap replaces the "log out and back in ten times" workaround.
     pub fn refresh_catalog(&mut self) {
-        if self.busy {
+        if self.busy || self.catalog_refreshing {
             return;
         }
-        if let Some(profile) = self.active_profile.clone() {
-            self.start_login(profile);
-        }
+        let Some(profile) = self.active_profile.clone() else {
+            return;
+        };
+        self.catalog_refreshing = true;
+        self.catalog_refresh_notice = None;
+        let generation = self.login_generation;
+        let timeout = self.settings.network_timeout_s;
+        let extension = self.settings.live_format.extension().to_string();
+        let tx = self.tx.clone();
+        self.rt.spawn(async move {
+            let result = client::load_profile(&profile, timeout, &extension)
+                .await
+                .map_err(|error| error.to_string());
+            let _ = tx.send(AppEvent::CatalogRefreshed(generation, Box::new(result)));
+        });
     }
 
     /// Is the item behind this progress key a radio station (M3U
@@ -3496,6 +3570,41 @@ fn redact(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn refreshing_keeps_the_view_preview_and_unsuccessful_catalogue_areas() {
+        let mut app = App::test_app();
+        app.load_demo();
+        app.view = View::Live;
+        app.live_cat = "favorites".into();
+        let channel = app.library.channels[0].id;
+        app.preview = app.resolve_play(&format!("live:{channel}"));
+        let generation = app.catalog_generation();
+        let channels = app.library.channels.len();
+        app.catalog_refreshing = true;
+        app.handle_event(AppEvent::CatalogRefreshed(
+            generation.wrapping_add(1),
+            Box::new(Ok(Library::default())),
+        ));
+        assert!(app.catalog_refreshing);
+        let library = Library {
+            catalog_issues: vec![crate::types::CatalogIssue {
+                area: crate::types::CatalogArea::LiveStreams,
+                message: "API unavailable".into(),
+                elapsed_ms: 5,
+            }],
+            ..Library::default()
+        };
+        app.handle_event(AppEvent::CatalogRefreshed(
+            generation,
+            Box::new(Ok(library)),
+        ));
+        assert!(!app.catalog_refreshing);
+        assert_eq!(app.library.channels.len(), channels);
+        assert!(app.view == View::Live);
+        assert_eq!(app.live_cat, "favorites");
+        assert_eq!(app.current_live_id(), Some(channel));
+    }
+
     #[test]
     fn previous_channel_is_retained_across_category_changes_and_preview_close() {
         let mut app = App::test_app();

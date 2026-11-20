@@ -43,7 +43,7 @@ fn nav(ui: &mut Ui, app: &mut App, label: &str, v: View) {
         View::Search => Icon::Search,
         View::Favorites => Icon::Star,
         View::Continue => Icon::Play,
-        _ => Icon::Sliders,
+        _ => Icon::Settings,
     };
     draw_icon(
         ui,

@@ -42,10 +42,15 @@ pub const ROW_H: f32 = 58.0;
 /// offers a one-tap refresh instead of the "log out and back in ten times"
 /// workaround. It also shows the in-flight state while that refresh runs.
 pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
-    let summary = if app.busy {
+    let summary = if app.catalog_refreshing {
         "Katalog wird erneut geladen…".to_string()
     } else {
-        app.library.catalog_issue_summary()
+        let issues = app.library.catalog_issue_summary();
+        if issues.is_empty() {
+            app.catalog_refresh_notice.clone().unwrap_or_default()
+        } else {
+            issues
+        }
     };
     if summary.is_empty() {
         return;
@@ -60,7 +65,10 @@ pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("!").size(13.0).strong().color(theme::RATING));
                 ui.add(egui::Label::new(RichText::new(&summary).size(11.5)).wrap(true));
-                if !app.busy && ui.button("Erneut laden").clicked() {
+                if !app.catalog_refreshing
+                    && !app.library.catalog_issues.is_empty()
+                    && ui.button("Erneut laden").clicked()
+                {
                     app.refresh_catalog();
                     ui.ctx().request_repaint();
                 }

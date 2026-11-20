@@ -32,7 +32,8 @@ pub enum Icon {
     Back,
     Close,
     ChevronRight,
-    Sliders,
+    Settings,
+    Refresh,
     Volume,
     Fullscreen,
     SkipBack,
@@ -194,12 +195,36 @@ pub fn icon(ui: &Ui, rect: Rect, ic: Icon, color: Color32) {
                 );
             }
         }
-        Icon::Sliders => {
-            for (y, kx) in [(0.24_f32, 0.36_f32), (0.50, 0.66), (0.76, 0.44)] {
-                let yy = r.top() + r.height() * y;
-                p.line_segment([pos2(r.left(), yy), pos2(r.right(), yy)], s);
-                p.circle_filled(pos2(r.left() + r.width() * kx, yy), w * 2.0, color);
+        Icon::Settings => {
+            let radius = r.width().min(r.height()) * 0.5;
+            let mut outline = Vec::with_capacity(32);
+            for tooth in 0..8 {
+                let angle = tooth as f32 * std::f32::consts::TAU / 8.0;
+                for (offset, length) in [(-0.35, 0.73), (-0.18, 0.95), (0.18, 0.95), (0.35, 0.73)] {
+                    let theta = angle + offset;
+                    outline.push(c + vec2(theta.cos(), theta.sin()) * (radius * length));
+                }
             }
+            p.add(egui::Shape::closed_line(outline, s));
+            p.circle_stroke(c, radius * 0.30, s);
+        }
+        Icon::Refresh => {
+            let radius = r.width().min(r.height()) * 0.39;
+            let end = -0.67_f32;
+            let points = (0..=24)
+                .map(|step| {
+                    let angle = end + 0.80 + step as f32 * (std::f32::consts::TAU - 0.80) / 24.0;
+                    c + vec2(angle.cos(), angle.sin()) * radius
+                })
+                .collect();
+            line(points);
+            let tip = c + vec2(end.cos(), end.sin()) * radius;
+            let wing = radius * 0.58;
+            line(vec![
+                tip - vec2(wing, 0.0),
+                tip + vec2(wing * 0.15, 0.0),
+                tip + vec2(wing * 0.15, -wing),
+            ]);
         }
         Icon::Volume => {
             fill(poly(&[

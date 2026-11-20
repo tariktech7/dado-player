@@ -776,6 +776,34 @@ test("changing live categories leaves the preview open and zero recalls the prev
   await expect(page.locator(".fullscreen")).toHaveCount(0);
 });
 
+test("refresh in the left rail reloads the open library and keeps the live preview playing", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator('.channel[data-channel="1"]').click();
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  const streamOpenCount = () => page.evaluate(() => (window as any).__avLog.filter(([action]: string[]) => action === "open").length);
+  const before = await streamOpenCount();
+  let requests = 0;
+  await page.route(/action=get_live_streams/, async (route) => {
+    requests++;
+    await route.fulfill({json:[{stream_id: 1001, name: "Neuer Sender", category_id: "1"}]});
+  });
+  const refresh = page.getByRole("button", {name: "Liste aktualisieren"});
+  await refresh.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".channel-list")).toContainText("Neuer Sender");
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  expect(await streamOpenCount()).toBe(before);
+  expect(requests).toBe(1);
+  await page.route(/action=get_live_streams/, (route) => route.fulfill({status:503, body:""}));
+  await refresh.click();
+  await expect(page.getByRole("alert")).toContainText("Liste teilweise aktualisiert");
+  await expect(page.locator(".channel-list")).toContainText("Neuer Sender");
+  await expect(page.locator(".preview-panel h2").last()).toHaveText("Dado Kanal 0001");
+  await page.screenshot({path:"test-results/tizen-refresh-076.png"});
+});
+
 test("live remote up/down zaps and zero toggles the last two channels", async ({
   page,
 }) => {

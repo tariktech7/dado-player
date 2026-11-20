@@ -1582,3 +1582,8 @@ hr {
   outline: none;
   box-shadow: inset 0 0 0 4px var(--accent);
 }
+
+
+.navigation nav button > span:first-child svg { width: 30px; height: 30px; display: block; }
+.navigation .refresh-library .nav-label { font-size: 24px; }
+.navigation .refresh-library[aria-busy="true"] .nav-label { opacity: 0.65; }

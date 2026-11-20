@@ -13,12 +13,19 @@ pub fn sheet(app: &mut App, ctx: &Context, l: &Layout) {
     // order so OK cannot activate a hidden tab or list row behind this sheet.
     focus::begin_modal(0);
     let screen = ctx.screen_rect();
-    let rows: [(Icon, &str, View); 4] = [
-        (Icon::Play, "Fortsetzen", View::Continue),
-        (Icon::Search, "Suche", View::Search),
+    let rows: [(Icon, &str, Option<View>); 5] = [
+        (Icon::Play, "Fortsetzen", Some(View::Continue)),
+        (Icon::Search, "Suche", Some(View::Search)),
         // Fortsetzen is a tab now; Favoriten took its place here (§20).
-        (Icon::Star, "Favoriten", View::Favorites),
-        (Icon::Sliders, "Einstellungen", View::Settings),
+        (Icon::Star, "Favoriten", Some(View::Favorites)),
+        (Icon::Settings, "Einstellungen", Some(View::Settings)),
+        (
+            Icon::Refresh,
+            app.settings
+                .language
+                .text("Liste aktualisieren", "Refresh library"),
+            None,
+        ),
     ];
     let row_h = 56.0;
     let h = 44.0 + row_h * (rows.len() as f32 + 1.0) + l.bottom_inset + 28.0;
@@ -83,7 +90,11 @@ pub fn sheet(app: &mut App, ctx: &Context, l: &Layout) {
                     muted(ui),
                 );
                 if focus::clicked(ui, &resp) {
-                    app.view = view;
+                    if let Some(view) = view {
+                        app.view = view;
+                    } else {
+                        app.refresh_catalog();
+                    }
                     app.mobile_more = false;
                 }
                 y += row_h;

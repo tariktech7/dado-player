@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.7.5
+# Gemeinsamer Produktstand 0.7.6
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-24 und iOS-Buildnummer 19 bleiben eigenständig monoton steigend. Nach Änderungen
+25 und iOS-Buildnummer 20 bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -13,6 +13,7 @@
 | Startseite | Fortsetzen mit Artwork, kompakte Senderlogos, unabhängiges aktuelles Favoritenprogramm. |
 | Favoriten / Fortsetzen | Live-TV, Filme und Serien getrennt anzeigen. |
 | Kataloge | Filme/Serien: Favoriten zuerst; Poster und eigene Detailansicht. Live-TV: alle Sender und Favoriten. |
+| Liste aktualisieren | Sender, Filme und Serien des aktiven Profils neu laden. Bei einem Teilfehler bleiben die bisherigen Einträge des betroffenen Bereichs verfügbar. |
 | Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |
 | Fortsetzen | Direkt fortsetzen. Bei höchstens 60 Sekunden Rest die nächste Folge; fertige Filme neu beginnen. Noch fehlende Episodendaten asynchron laden und einen überholten Startauftrag verwerfen. |
 | Player | Eigene Dado-Steuerung; nach zwei Sekunden ausblenden. Live-TV: Hoch/Runter schaltet, 0 ruft letzten Sender auf, soweit das Eingabegerät diese Tasten liefert. |

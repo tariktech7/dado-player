@@ -357,7 +357,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
         .auto_shrink([false, false])
         .show(&mut list, |nav| {
             nav.spacing_mut().item_spacing.y = 8.0 * s;
-            for (label, view, symbol) in [
+            let rows = [
                 (
                     app.settings.language.text("Startseite", "Home"),
                     View::Home,
@@ -392,9 +392,20 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
                 (
                     app.settings.language.text("Einstellungen", "Settings"),
                     View::Settings,
-                    Icon::Sliders,
+                    Icon::Settings,
                 ),
-            ] {
+            ];
+            let language = app.settings.language;
+            let refresh_label = if app.catalog_refreshing {
+                language.text("Wird aktualisiert …", "Refreshing …")
+            } else {
+                language.text("Liste aktualisieren", "Refresh library")
+            };
+            for (label, view, symbol) in rows
+                .into_iter()
+                .map(|(label, view, icon)| (label, Some(view), icon))
+                .chain(std::iter::once((refresh_label, None, Icon::Refresh)))
+            {
                 let (r, _) = nav.allocate_exact_size(
                     vec2(
                         nav.available_width(),
@@ -402,8 +413,12 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
                     ),
                     Sense::hover(),
                 );
-                let response = nav.interact(r, nav.id().with(view as u64), Sense::click());
-                let selected = app.view == view;
+                let response = nav.interact(
+                    r,
+                    nav.id().with(view.map(|view| view as u64)),
+                    Sense::click(),
+                );
+                let selected = view == Some(app.view);
                 let color = if selected { theme::accent(nav) } else { text };
                 let hover = nav.ctx().animate_bool_with_time(
                     response.id.with("hover"),
@@ -432,17 +447,32 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
                     color,
                 );
                 if label_alpha > 0.01 {
-                    nav.painter().text(
-                        pos2(rect.left() + 70.0 * s, r.center().y),
-                        Align2::LEFT_CENTER,
+                    let label_x = rect.left() + 70.0 * s;
+                    ui::mobile::components::draw_line(
+                        nav,
+                        pos2(label_x, r.center().y),
                         label,
-                        FontId::proportional(appearance().navigation_font * s),
+                        FontId::proportional(if view.is_none() {
+                            24.0 * s
+                        } else {
+                            appearance().navigation_font * s
+                        }),
                         color.gamma_multiply(label_alpha),
+                        (r.right() - label_x - 8.0 * s).max(0.0),
                     );
                 }
-                if response.on_hover_text(label).clicked() {
-                    app.view = view;
-                    app.nav_collapsed = false;
+                let help = if view.is_none() {
+                    app.catalog_refresh_notice.as_deref().unwrap_or(label)
+                } else {
+                    label
+                };
+                if response.on_hover_text(help).clicked() {
+                    if let Some(view) = view {
+                        app.view = view;
+                        app.nav_collapsed = false;
+                    } else {
+                        app.refresh_catalog();
+                    }
                 }
             }
         });

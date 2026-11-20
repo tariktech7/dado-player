@@ -89,7 +89,7 @@ export class Provider {
     const p = this.profile;
     return `${hostUrl(p.host)}/${kind}/${encodeURIComponent(p.username)}/${encodeURIComponent(p.password)}/${encodeURIComponent(String(id))}.${streamExtension(extension)}`;
   }
-  async catalog(): Promise<Catalog> {
+  async catalog(previous?: Catalog): Promise<Catalog> {
     if (this.profile.kind === "M3u")
       return parseM3u(await this.request(this.profile.m3uUrl, true));
     const auth = await this.request(this.endpoint());
@@ -110,6 +110,7 @@ export class Provider {
                 name: String(c.category_name || "Ohne Kategorie"),
               }));
             } catch {
+              if (previous) result.categories[kind] = previous.categories[kind];
               result.issues.push(
                 `${kind}: Kategorien konnten nicht geladen werden.`,
               );
@@ -151,6 +152,7 @@ export class Provider {
                 description: String(row.plot || ""),
               }));
             } catch {
+              if (previous) result[kind] = previous[kind];
               result.issues.push(
                 `${kind}: Inhalte konnten nicht geladen werden.`,
               );
