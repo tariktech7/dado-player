@@ -2,6 +2,7 @@
 
 pub mod entry;
 pub mod identity;
+pub mod player_overlay;
 pub mod sys;
 pub mod update;
 pub mod video_surface;

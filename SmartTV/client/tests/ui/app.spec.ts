@@ -103,6 +103,68 @@ test("live preview fits the stream from prepare and follows fullscreen transitio
   expect((await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
   expect((await log()).filter(([event]) => event === "open")).toHaveLength(1);
 });
+test("hovering the collapsed navigation is temporary but clicking pins it open", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  const rail = page.locator(".navigation");
+  const shell = page.locator(".shell");
+  await rail.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  const allChannels = page.locator(".category-list button").first();
+  await allChannels.focus();
+  await expect(shell).toHaveClass(/nav-collapsed/);
+  const origin = (await rail.boundingBox())!;
+  const hover = () => page.mouse.move(origin.x + 32, origin.y + 28);
+  const leave = () => page.mouse.move(900, 80);
+  await leave();
+  await hover();
+  await expect(shell).not.toHaveClass(/nav-collapsed/);
+  await leave();
+  await expect(shell).not.toHaveClass(/nav-collapsed/);
+  await expect(shell).toHaveClass(/nav-collapsed/);
+
+  await hover();
+  await rail.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await leave();
+  await page.waitForTimeout(900);
+  await expect(shell).not.toHaveClass(/nav-collapsed/);
+});
+test("player chrome preserves contrast over dark, bright and colored video", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel").first().click();
+  await page.getByRole("button", {name: /Vollbild öffnen/}).click();
+  const controls = page.locator(".fullscreen .player-controls");
+  await expect(controls).toBeVisible();
+  const measurements = await controls.evaluate(node => {
+    const rgba = (value: string) => value.match(/[\d.]+/g)!.map(Number);
+    const linear = (channel: number) => {
+      const c = channel / 255;
+      return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, value, i) =>
+      sum + linear(value) * [0.2126, 0.7152, 0.0722][i], 0);
+    const contrast = (fg: number[], bg: number[]) => (luminance(fg) + 0.05) / (luminance(bg) + 0.05);
+    const panel = rgba(getComputedStyle(node).backgroundColor);
+    const label = rgba(getComputedStyle(node.querySelector(".timeline")!).color);
+    const buttons = [...node.querySelectorAll("button")].map(button => {
+      const style = getComputedStyle(button);
+      return contrast(rgba(style.color), rgba(style.backgroundColor));
+    });
+    return {
+      alpha: panel[3],
+      radius: parseFloat(getComputedStyle(node).borderRadius),
+      guide: Math.min(...[[0,0,0], [255,255,255], [255,160,25], [45,230,110]].map(frame =>
+        contrast(label, frame.map((value, i) => panel[i] * panel[3] + value * (1 - panel[3]))))),
+      buttons: Math.min(...buttons),
+    };
+  });
+  expect(measurements.alpha).toBeGreaterThan(0.7);
+  expect(measurements.alpha).toBeLessThan(0.95);
+  expect(measurements.radius).toBeGreaterThan(12);
+  expect(measurements.guide).toBeGreaterThan(4.5);
+  expect(measurements.buttons).toBeGreaterThan(4.5);
+});
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);
   const make=(kind:any,id:string)=>({kind,id,name:'Test',category:'1',logo:'',url:''});

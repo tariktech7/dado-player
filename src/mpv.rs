@@ -313,6 +313,8 @@ impl Mpv {
                 return Err(format!("mpv_initialize: {}", e));
             }
 
+            #[cfg(target_os = "windows")]
+            me.set_desktop_aspect(s.desktop_aspect);
             me.set_volume(100);
             Ok(me)
         }
@@ -378,7 +380,32 @@ impl Mpv {
         let _ = self.command(&["stop"]);
     }
 
+    #[cfg(target_os = "windows")]
+    pub fn set_desktop_aspect(&self, aspect: crate::types::DesktopAspect) {
+        use crate::types::DesktopAspect;
+        let _ = self.command(&[
+            "set",
+            "keepaspect",
+            if aspect == DesktopAspect::Stretch {
+                "no"
+            } else {
+                "yes"
+            },
+        ]);
+        let _ = self.command(&[
+            "set",
+            "panscan",
+            if aspect == DesktopAspect::Fill {
+                "1"
+            } else {
+                "0"
+            },
+        ]);
+    }
+
     pub fn configure(&self, settings: &Settings) {
+        #[cfg(target_os = "windows")]
+        self.set_desktop_aspect(settings.desktop_aspect);
         for (key, value) in [
             ("cache-secs", settings.cache_secs.clamp(5, 600).to_string()),
             (

@@ -27,9 +27,30 @@ pub struct Appearance {
     pub channel_name_font: f32,
     pub epg_font: f32,
     pub navigation_duration_ms: f32,
+    pub navigation_hover_close_ms: f64,
     pub navigation_easing: [f32; 4],
     pub player_top_height: f32,
     pub player_controls_height: f32,
+    #[cfg(target_os = "windows")]
+    pub player_top_inset_x: f32,
+    #[cfg(target_os = "windows")]
+    pub player_top_inset_y: f32,
+    #[cfg(target_os = "windows")]
+    pub player_controls_inset_x: f32,
+    #[cfg(target_os = "windows")]
+    pub player_controls_inset_y: f32,
+    #[cfg(target_os = "windows")]
+    pub player_panel_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_button_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_primary_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_focus_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_text_color: String,
+    #[cfg(target_os = "windows")]
+    pub player_muted_color: String,
     pub player_corner_radius: f32,
 }
 pub fn appearance() -> &'static Appearance {
@@ -227,11 +248,69 @@ fn style(ctx: &Context, s: f32) {
         }
     });
 }
+#[derive(Clone, Copy, Default)]
+enum NavigationHover {
+    #[default]
+    Closed,
+    Inside,
+    Leaving(f64),
+}
+
+impl NavigationHover {
+    fn update(self, inside: bool, now: f64) -> Self {
+        if inside {
+            return Self::Inside;
+        }
+        match self {
+            Self::Inside => Self::Leaving(now + appearance().navigation_hover_close_ms / 1000.0),
+            Self::Leaving(deadline) if now < deadline => self,
+            _ => Self::Closed,
+        }
+    }
+}
+
+fn navigation_is_collapsed(app: &App, ctx: &Context, compact: Rect, expanded: Rect) -> bool {
+    let id = Id::new("desktop-navigation-hover");
+    let previous = ctx
+        .data(|data| data.get_temp::<NavigationHover>(id))
+        .unwrap_or_default();
+    let next = if app.nav_collapsed {
+        let bounds = if matches!(previous, NavigationHover::Closed) {
+            compact
+        } else {
+            expanded
+        };
+        let (inside, now) = ctx.input(|input| {
+            (
+                input
+                    .pointer
+                    .hover_pos()
+                    .is_some_and(|pos| bounds.contains(pos)),
+                input.time,
+            )
+        });
+        let next = previous.update(inside, now);
+        if let NavigationHover::Leaving(deadline) = next {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(deadline - now));
+        }
+        next
+    } else {
+        NavigationHover::Closed
+    };
+    ctx.data_mut(|data| data.insert_temp(id, next));
+    app.nav_collapsed && matches!(next, NavigationHover::Closed)
+}
+
 pub fn show(app: &mut App, ctx: &Context) {
     if app.view == View::Player && app.current_play.is_some() {
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
-            .show(ctx, |ui| ui::player::show(app, ui));
+            .show(ctx, |ui| {
+                #[cfg(target_os = "windows")]
+                super::player_desktop::show(app, ui);
+                #[cfg(not(target_os = "windows"))]
+                ui::player::show(app, ui);
+            });
         return;
     }
     if app.active_profile.is_none() {
@@ -244,23 +323,12 @@ pub fn show(app: &mut App, ctx: &Context) {
     let screen = ctx.screen_rect();
     let expanded = a.navigation_expanded * s;
     let collapsed = a.navigation_collapsed * s;
-    if app.nav_collapsed
-        && ctx.input(|i| {
-            i.pointer
-                .hover_pos()
-                .is_some_and(|p| p.x < screen.left() + collapsed)
-        })
-    {
-        app.nav_collapsed = false;
-    }
     if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
         app.nav_collapsed = false;
     }
-    let target = if app.nav_collapsed {
-        collapsed
-    } else {
-        expanded
-    };
+    let rail = |width| Rect::from_min_max(screen.min, pos2(screen.left() + width, screen.bottom()));
+    let is_collapsed = navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded));
+    let target = if is_collapsed { collapsed } else { expanded };
     let dx = motion(ctx, target);
     let visual = target + dx;
     let pad = 24.0 * s;
@@ -277,6 +345,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                 nav,
                 s,
                 (visual - collapsed) / (expanded - collapsed),
+                is_collapsed,
             );
             let body = Rect::from_min_max(
                 pos2(screen.left() + target + pad, screen.top() + pad),
@@ -311,7 +380,7 @@ pub fn show(app: &mut App, ctx: &Context) {
             }
         });
 }
-fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
+fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, is_collapsed: bool) {
     use ui::mobile::components::{icon, Icon};
     let mut nav = ui.child_ui_with_id_source(
         rect,
@@ -344,7 +413,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
             pos2(rect.right() - 8.0 * s, rect.top() + 104.0 * s),
         );
         let mut b = nav.child_ui(badge, Layout::top_down(Align::Min));
-        crate::licensing::trial_badge(&mut b, app.nav_collapsed);
+        crate::licensing::trial_badge(&mut b, is_collapsed);
     }
     let list_rect = Rect::from_min_max(
         pos2(rect.left() + 8.0 * s, rect.top() + 112.0 * s),
@@ -467,9 +536,9 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
                     label
                 };
                 if response.on_hover_text(help).clicked() {
+                    app.nav_collapsed = false;
                     if let Some(view) = view {
                         app.view = view;
-                        app.nav_collapsed = false;
                     } else {
                         app.refresh_catalog();
                     }
@@ -506,6 +575,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32) {
                 .on_hover_text("Schnellsuche · Strg+K")
                 .clicked()
             {
+                app.nav_collapsed = false;
                 app.palette_open = true;
             }
         });
@@ -570,6 +640,38 @@ mod tests {
                 assert!(!out.shapes.is_empty());
             }
         }
+    }
+    #[test]
+    fn hovering_opens_temporarily_and_reentry_cancels_the_collapse() {
+        let now = 1.0;
+        let delay = appearance().navigation_hover_close_ms / 1000.0;
+        let open = NavigationHover::Closed.update(true, now);
+        assert!(matches!(open, NavigationHover::Inside));
+        assert!(matches!(
+            open.update(true, now + 2.0 * delay),
+            NavigationHover::Inside
+        ));
+
+        let leaving = open.update(false, now);
+        assert!(matches!(
+            leaving.update(false, now + delay * 0.5),
+            NavigationHover::Leaving(_)
+        ));
+        assert!(matches!(
+            leaving.update(false, now + delay),
+            NavigationHover::Closed
+        ));
+
+        let reentered = leaving.update(true, now + delay * 0.5);
+        let left_again = reentered.update(false, now + delay);
+        assert!(matches!(
+            left_again.update(false, now + delay * 1.5),
+            NavigationHover::Leaving(_)
+        ));
+        assert!(matches!(
+            left_again.update(false, now + delay * 2.01),
+            NavigationHover::Closed
+        ));
     }
     #[test]
     fn reversing_navigation_keeps_the_current_visual_position_and_settles() {

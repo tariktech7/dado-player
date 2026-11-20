@@ -19,7 +19,7 @@ npm run package -- --profile DEIN_SAMSUNG_TV_PROFIL
 
 `TIZEN_CLI` muss wie beim Standardbuild auf die SDK-CLI zeigen. Das Samsung-Distributor-
 Zertifikat muss diesen TV enthalten; bestehende Autorenzertifikate und andere Geräteprofile
-behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.7.wgt -- PAKETORDNER`
+behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.8.wgt -- PAKETORDNER`
 installieren und `tizen run -s TV_IP:26101 -p DadoPlayTV.Player` starten.
 
 Das Profil setzt die deklarierte Mindestversion auf 5.0 und übersetzt JavaScript für Chrome 63.

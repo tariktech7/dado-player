@@ -314,6 +314,8 @@ pub struct App {
     /// only serves to bring the hidden chrome back. Consumed by the player.
     pub player_reveal: bool,
     last_cursor: (i32, i32),
+    #[cfg(target_os = "windows")]
+    pub(crate) desktop_overlay: crate::platform::windows::player_overlay::Overlay,
     pub player: Option<Player>,
     pub player_error: Option<String>,
     /// Short-lived status line for the player, e.g. "MX Player ist nicht
@@ -507,6 +509,8 @@ impl App {
             catalog_focus_play: false,
             player_reveal: false,
             last_cursor: (0, 0),
+            #[cfg(target_os = "windows")]
+            desktop_overlay: Default::default(),
             player: None,
             player_error: None,
             player_note: None,
@@ -1224,6 +1228,10 @@ impl App {
     }
 
     fn draw(&mut self, ctx: &Context) {
+        #[cfg(target_os = "windows")]
+        if self.parental.open || self.view != View::Player || self.palette_open {
+            self.desktop_overlay.hide();
+        }
         if self.parental.open {
             crate::ui::parental::show(self, ctx);
             return;
@@ -1237,6 +1245,12 @@ impl App {
                 self.close_preview();
             }
             crate::licensing::blocked_screen(ctx);
+            return;
+        }
+        #[cfg(target_os = "windows")]
+        if self.view == View::Player && self.current_play.is_some() {
+            crate::ui::desktop::show(self, ctx);
+            ui::palette::show(self, ctx);
             return;
         }
         // Touch UI: phone / tablet. Takes over the whole window.
@@ -1253,10 +1267,7 @@ impl App {
         }
 
         if self.view == View::Player && self.current_play.is_some() {
-            // Frameless so the video can use the whole window edge to edge.
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none())
-                .show(ctx, |ui| ui::player::show(self, ui));
+            crate::ui::desktop::show(self, ctx);
             ui::palette::show(self, ctx);
             return;
         }
@@ -2191,6 +2202,8 @@ impl App {
         let radio = self.is_radio(&item.progress_key);
         if let Some(pl) = &mut self.player {
             pl.current_key = item.progress_key.clone();
+            #[cfg(target_os = "windows")]
+            pl.mpv.set_desktop_aspect(crate::types::DesktopAspect::Fit);
             // Audio-only for radio stations (and back to video afterwards).
             if radio {
                 pl.mpv.disable_video();
@@ -2237,6 +2250,10 @@ impl App {
         if let Some(item) = self.preview.take() {
             self.previous_view = View::Live;
             self.current_play = Some(item);
+            #[cfg(target_os = "windows")]
+            if let Some(player) = &self.player {
+                player.mpv.set_desktop_aspect(self.settings.desktop_aspect);
+            }
             self.last_video_rect = None;
             self.last_video_cutouts = None;
             self.ui_activity = -1.0;
@@ -2250,6 +2267,8 @@ impl App {
 
     /// Throw away the mpv instance so new decoder/output settings take effect.
     pub fn reset_player(&mut self) {
+        #[cfg(target_os = "windows")]
+        self.desktop_overlay.hide();
         #[cfg(target_os = "android")]
         crate::platform::android::render::cancel_load();
         self.preview = None;
@@ -2813,6 +2832,8 @@ impl App {
     }
 
     pub fn stop_play(&mut self) {
+        #[cfg(target_os = "windows")]
+        self.desktop_overlay.hide();
         self.pending_history_key = None;
         #[cfg(target_os = "android")]
         crate::platform::android::render::cancel_load();
@@ -3293,6 +3314,11 @@ fn qa_state_snapshot(app: &App) -> String {
 }
 
 impl eframe::App for App {
+    #[cfg(target_os = "windows")]
+    fn raw_input_hook(&mut self, ctx: &Context, raw: &mut egui::RawInput) {
+        crate::platform::windows::player_overlay::read_input(ctx, raw, self.view == View::Player);
+    }
+
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
         if cfg!(target_os = "ios") {
             [0.0; 4]

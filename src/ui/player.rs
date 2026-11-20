@@ -1163,7 +1163,7 @@ fn clean_codec(c: &str) -> String {
 
 /// Audio-only (M3U `radio="true"`) playback surface. The native video window
 /// is parked off-screen, so we paint a dedicated "now playing" card here.
-fn draw_radio_card(app: &App, ui: &Ui, rect: Rect) {
+pub(super) fn draw_radio_card(app: &App, ui: &Ui, rect: Rect) {
     ui.painter().rect_filled(rect, 0.0, theme::BG_DARK);
     let cx = rect.center().x;
     let cy = rect.center().y - 28.0;

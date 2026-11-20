@@ -1565,6 +1565,30 @@ hr {
   padding-top: 16px;
   padding-bottom: 16px;
 }
+/* Use the same palette for player chrome in each application theme. */
+#app .fullscreen .player-top,
+#app .fullscreen .player-controls {
+  background: var(--player-panel-color);
+  color: var(--player-text-color);
+  border: 1px solid var(--player-focus-color);
+  box-shadow: 0 6px 16px #0005;
+}
+.player-top { left: var(--player-top-inset-x); right: var(--player-top-inset-x); top: var(--player-top-inset-y); }
+.player-controls { left: var(--player-controls-inset-x); right: var(--player-controls-inset-x); bottom: var(--player-controls-inset-y); }
+#app .fullscreen .player-top small, #app .fullscreen .timeline { color: var(--player-muted-color); }
+#app .fullscreen .player-top button, #app .fullscreen .player-controls button {
+  background: var(--player-button-color);
+  color: var(--player-text-color);
+  border: 1px solid var(--player-focus-color);
+  border-radius: 12px;
+}
+#app .fullscreen .player-controls button.primary { background: var(--player-primary-color); }
+#app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus,
+#app .fullscreen .player-top button:hover, #app .fullscreen .player-controls button:hover {
+  outline: 3px solid var(--player-focus-color);
+  outline-offset: 2px;
+}
+.timeline > span:last-child { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline .seek-bar { flex: 1 1 0; min-width: 0; cursor: pointer; padding: 8px 0; }
 .timeline .seek-bar progress { display: block; width: 100%; }
 

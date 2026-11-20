@@ -9,6 +9,8 @@ pub mod mobile;
 pub mod palette;
 pub mod parental;
 pub mod player;
+#[cfg(target_os = "windows")]
+mod player_desktop;
 pub mod search;
 pub mod series;
 pub mod settings;

@@ -264,9 +264,7 @@ fn run_backend() -> eframe::Result<()> {
     if matches!(renderer, eframe::Renderer::Wgpu) {
         options.wgpu_options.supported_backends = backends;
     }
-    // The wrapper signals the dispatcher once the first frame is actually
-    // drawn. All other `eframe::App` methods keep their defaults because the
-    // inner app only overrides `update`.
+    // The wrapper signals the dispatcher once the first frame is drawn.
     let ready_file = std::env::var_os(READY_ENV).map(std::path::PathBuf::from);
     match eframe::run_native(
         "Dado-Player",
@@ -389,6 +387,10 @@ struct StartupApp {
 }
 
 impl eframe::App for StartupApp {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        eframe::App::raw_input_hook(&mut self.inner, ctx, raw);
+    }
+
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let Some(path) = self.ready.take() {
             let _ = std::fs::write(path, b"ready");

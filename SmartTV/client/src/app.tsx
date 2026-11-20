@@ -1,4 +1,5 @@
 import { animateNavigation } from "./navigation-motion";
+import appearance from "./shell-appearance";
 import { render, ComponentChildren } from "preact";
 import {
   useEffect,
@@ -159,12 +160,36 @@ function App() {
   const [settingsSection, setSettingsSection] = useState<string | null>("general");
   const t = (de: string, en: string) => saved.settings.language === "en" ? en : de;
   const navCollapsed = useRef(false);
-  const setNavCollapsed = (collapsed: boolean) => {
-    if (navCollapsed.current === collapsed) return;
-    navCollapsed.current = collapsed;
+  const navHover = useRef(false);
+  const navCloseTimer = useRef<ReturnType<typeof setTimeout>>();
+  const stopNavCloseTimer = () => clearTimeout(navCloseTimer.current);
+  const updateNav = () => {
+    const collapsed = navCollapsed.current && !navHover.current;
     void animateNavigation(document.querySelector<HTMLElement>(".shell"), collapsed).then(() => {
       playerRef.current?.position();
     });
+  };
+  const setNavCollapsed = (collapsed: boolean) => {
+    if (navCollapsed.current === collapsed && !navHover.current) return;
+    stopNavCloseTimer();
+    navHover.current = false;
+    navCollapsed.current = collapsed;
+    updateNav();
+  };
+  const enterNav = (event: PointerEvent) => {
+    if (event.pointerType !== "mouse" || !navCollapsed.current) return;
+    stopNavCloseTimer();
+    if (navHover.current) return;
+    navHover.current = true;
+    updateNav();
+  };
+  const leaveNav = (event: PointerEvent) => {
+    if (event.pointerType !== "mouse" || !navHover.current) return;
+    stopNavCloseTimer();
+    navCloseTimer.current = setTimeout(() => {
+      navHover.current = false;
+      updateNav();
+    }, appearance.navigationHoverCloseMs);
   };
   const detailCache = useRef(
     new Map<string, { item: Item; episodes: Item[] }>(),
@@ -771,6 +796,7 @@ function App() {
       window.visualViewport?.removeEventListener("resize", resize);
       document.removeEventListener("focusin", focus);
       document.removeEventListener("visibilitychange", visibility);
+      stopNavCloseTimer();
       p.dispose();
     };
   }, []);
@@ -1493,9 +1519,17 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${navCollapsed.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
+            class={`shell ${navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""}`}
           >
-            <aside class="navigation" data-focus-zone="navigation">
+            <aside
+              class="navigation"
+              data-focus-zone="navigation"
+              onPointerEnter={enterNav}
+              onPointerLeave={leaveNav}
+              onClickCapture={(event) => {
+                if ((event.target as Element).closest("button")) setNavCollapsed(false);
+              }}
+            >
               <div class="brand">
                 <><img class="brand-normal" src="d7.svg" /><img class="brand-dark" src="d7-dark.svg" /></>
                 <div class="brand-copy"><strong>Dado Player</strong>

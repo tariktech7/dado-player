@@ -13,6 +13,7 @@
   "channelNameFont": 26,
   "epgFont": 20,
   "navigationDurationMs": 220,
+  "navigationHoverCloseMs": 700,
   "navigationEasing": [
     0.22,
     1,
@@ -21,5 +22,15 @@
   ],
   "playerTopHeight": 86,
   "playerControlsHeight": 132,
-  "playerCornerRadius": 20
+  "playerCornerRadius": 20,
+  "playerTopInsetX": 60,
+  "playerTopInsetY": 50,
+  "playerControlsInsetX": 90,
+  "playerControlsInsetY": 54,
+  "playerPanelColor": "#101e32d9",
+  "playerButtonColor": "#243c59",
+  "playerPrimaryColor": "#295780",
+  "playerFocusColor": "#add8ff",
+  "playerTextColor": "#f3f7ff",
+  "playerMutedColor": "#d0def0"
 }
