@@ -443,12 +443,8 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
         return;
     }
 
-    // `epaint::PaintCallbackInfo::screen_size_px` is the *full* framebuffer
-    // in physical pixels, which is exactly what mpv_opengl_fbo.w/h want for
-    // FBO 0. `viewport_in_pixels()` describes only the callback rectangle and
-    // is the wrong number here.
-    let (sw, sh) = (info.screen_size_px[0] as i32, info.screen_size_px[1] as i32);
-    if sw <= 0 || sh <= 0 {
+    let viewport = info.viewport_in_pixels();
+    if viewport.width_px <= 0 || viewport.height_px <= 0 {
         return;
     }
 
@@ -475,117 +471,115 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
     // harmless. Its return value is deliberately NOT a gate — see above.
     unsafe { (c.fns.update)(c.ctx) };
 
-    let viewport = info.viewport_in_pixels();
-    let partial = viewport.width_px != sw || viewport.height_px != sh;
     let mut target = TARGET.lock().unwrap();
-    if partial {
-        if viewport.width_px <= 0 || viewport.height_px <= 0 {
-            return;
-        }
-        if target
-            .as_ref()
-            .is_none_or(|t| t.width != viewport.width_px || t.height != viewport.height_px)
-        {
-            unsafe {
-                if let Some(old) = target.take() {
-                    gl.delete_framebuffer(old.fbo);
-                    gl.delete_texture(old.color);
-                    gl.delete_program(old.program);
-                    gl.delete_vertex_array(old.vao);
-                }
-                let Ok(fbo) = gl.create_framebuffer() else {
-                    set_err("Vorschau-Framebuffer fehlt".into());
-                    return;
-                };
-                let Ok(color) = gl.create_texture() else {
-                    gl.delete_framebuffer(fbo);
-                    set_err("Vorschau-Puffer fehlt".into());
-                    return;
-                };
-                gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
-                gl.bind_texture(glow::TEXTURE_2D, Some(color));
-                gl.tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA8 as i32,
-                    viewport.width_px,
-                    viewport.height_px,
-                    0,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    None,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MIN_FILTER,
-                    glow::LINEAR as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MAG_FILTER,
-                    glow::LINEAR as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_WRAP_S,
-                    glow::CLAMP_TO_EDGE as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_WRAP_T,
-                    glow::CLAMP_TO_EDGE as i32,
-                );
-                gl.framebuffer_texture_2d(
-                    glow::FRAMEBUFFER,
-                    glow::COLOR_ATTACHMENT0,
-                    glow::TEXTURE_2D,
-                    Some(color),
-                    0,
-                );
-                let valid =
-                    gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
-                gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-                gl.bind_texture(glow::TEXTURE_2D, None);
-                if !valid {
+    // Consistent compositing when moving from the preview into the player.
+    // Some Android GL drivers draw a black frame when mpv is switched from
+    // the preview FBO to the window's default framebuffer.
+    if target
+        .as_ref()
+        .is_none_or(|t| t.width != viewport.width_px || t.height != viewport.height_px)
+    {
+        unsafe {
+            if let Some(old) = target.take() {
+                gl.delete_framebuffer(old.fbo);
+                gl.delete_texture(old.color);
+                gl.delete_program(old.program);
+                gl.delete_vertex_array(old.vao);
+            }
+            let Ok(fbo) = gl.create_framebuffer() else {
+                set_err("Vorschau-Framebuffer fehlt".into());
+                return;
+            };
+            let Ok(color) = gl.create_texture() else {
+                gl.delete_framebuffer(fbo);
+                set_err("Vorschau-Puffer fehlt".into());
+                return;
+            };
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(fbo));
+            gl.bind_texture(glow::TEXTURE_2D, Some(color));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA8 as i32,
+                viewport.width_px,
+                viewport.height_px,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::TEXTURE_2D,
+                Some(color),
+                0,
+            );
+            let valid =
+                gl.check_framebuffer_status(glow::FRAMEBUFFER) == glow::FRAMEBUFFER_COMPLETE;
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            gl.bind_texture(glow::TEXTURE_2D, None);
+            if !valid {
+                gl.delete_framebuffer(fbo);
+                gl.delete_texture(color);
+                set_err("Vorschau-Framebuffer unvollständig".into());
+                return;
+            }
+            let program = match copy_program(gl) {
+                Ok(p) => p,
+                Err(e) => {
                     gl.delete_framebuffer(fbo);
                     gl.delete_texture(color);
-                    set_err("Vorschau-Framebuffer unvollständig".into());
+                    set_err(e);
                     return;
                 }
-                let program = match copy_program(gl) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        gl.delete_framebuffer(fbo);
-                        gl.delete_texture(color);
-                        set_err(e);
-                        return;
-                    }
-                };
-                let vao = match gl.create_vertex_array() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        gl.delete_framebuffer(fbo);
-                        gl.delete_texture(color);
-                        gl.delete_program(program);
-                        set_err(e);
-                        return;
-                    }
-                };
-                *target = Some(Target {
-                    fbo,
-                    color,
-                    program,
-                    vao,
-                    width: viewport.width_px,
-                    height: viewport.height_px,
-                });
-            }
+            };
+            let vao = match gl.create_vertex_array() {
+                Ok(v) => v,
+                Err(e) => {
+                    gl.delete_framebuffer(fbo);
+                    gl.delete_texture(color);
+                    gl.delete_program(program);
+                    set_err(e);
+                    return;
+                }
+            };
+            *target = Some(Target {
+                fbo,
+                color,
+                program,
+                vao,
+                width: viewport.width_px,
+                height: viewport.height_px,
+            });
         }
     }
-    let selected = if partial { target.as_ref() } else { None };
-    let (render_width, render_height) = selected.map(|t| (t.width, t.height)).unwrap_or((sw, sh));
+    let Some(selected) = target.as_ref() else {
+        return;
+    };
+    let (render_width, render_height) = (selected.width, selected.height);
     let mut fbo = OpenglFbo {
-        fbo: selected.map(|t| t.fbo.0.get() as i32).unwrap_or(0),
+        fbo: selected.fbo.0.get() as i32,
         w: render_width,
         h: render_height,
         internal_format: 0,
@@ -623,7 +617,7 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
 
         // Full framebuffer, matching fbo.w/h. Whether mpv sets its own
         // viewport from those dimensions or honours this one, both agree.
-        gl.bind_framebuffer(glow::FRAMEBUFFER, selected.map(|t| t.fbo).or(ui_fbo));
+        gl.bind_framebuffer(glow::FRAMEBUFFER, Some(selected.fbo));
         gl.viewport(0, 0, render_width, render_height);
         gl.disable(glow::SCISSOR_TEST);
         gl.disable(glow::DEPTH_TEST);
@@ -639,7 +633,8 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
         // mpv changes the framebuffer while rendering. Restore the UI's
         // framebuffer for both fullscreen playback and the preview copy.
         gl.bind_framebuffer(glow::FRAMEBUFFER, ui_fbo);
-        if let Some(t) = selected {
+        {
+            let t = selected;
             gl.viewport(
                 viewport.left_px,
                 viewport.from_bottom_px,
@@ -680,8 +675,7 @@ unsafe fn set_enabled(gl: &glow::Context, cap: u32, on: bool) {
 
 /// The video area as one egui shape.
 ///
-/// Full-screen playback renders directly into the window. Smaller previews
-/// render into a texture and draw inside the supplied rectangle.
+/// Render into a texture and composite within the viewport in both views.
 pub fn shape(rect: egui::Rect) -> egui::Shape {
     egui::Shape::Callback(egui::PaintCallback {
         rect,
