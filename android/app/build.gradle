@@ -30,7 +30,7 @@ android {
     // ---- signing -------------------------------------------------------
     //
     // The app is NOT signed here. Final signing is done once, by
-    // `probe/build_apk.sh`, with a STABLE project-owned key
+    // `android/build.sh`, with the project-owned distribution key
     // (android/app/dadoplayer-release.pk8 + .x509.pem) via `apksigner`.
     //
     // WHY NOT THE DEFAULT DEBUG KEY:
@@ -39,12 +39,12 @@ android {
     // cleared). A build produced with a different certificate cannot be
     // installed over an existing one -> INSTALL_FAILED_UPDATE_INCOMPATIBLE,
     // which testers see as "the APK does not install at all, I have to
-    // uninstall first". Pointing every shipped APK at one fixed key makes
-    // updates always succeed. The key is a throwaway test key, not a secret.
+    // uninstall first". Existing installations require the same signer.
+    // Keep the private key outside version control and release archives.
     //
     // Because signing lives in build_apk.sh, `assembleDebug`/`assembleRelease`
     // here run unsigned-or-debug and are safe to call directly during dev; the
-    // APK is re-signed at the end of build_apk.sh.
+    // distribution APK is signed at the end of android/build.sh.
 
     buildTypes {
         release {

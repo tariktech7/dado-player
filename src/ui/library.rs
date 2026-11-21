@@ -151,7 +151,13 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
                 super::desktop::column(ui, animated, "catalog-details", 0.0, |ui| {
                     super::desktop::catalog_heading(
                         ui,
-                        if series { "Serie & Folgen" } else { "Details" },
+                        if series {
+                            app.settings
+                                .language
+                                .text("Serie & Folgen", "Series & episodes")
+                        } else {
+                            app.settings.language.text("Details", "Details")
+                        },
                     );
                     details(app, ui, series, false)
                 });
@@ -475,7 +481,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
             super::desktop::search_field(
                 ui,
                 &mut app.catalog_queries[usize::from(series)],
-                "Titel suchen",
+                app.settings.language.text("Titel suchen", "Search titles"),
                 tv,
             );
         } else {
@@ -497,20 +503,19 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     } else {
         app.vod_cat.clone()
     };
-    let cols = ((ui.available_width()
-        / if touch {
-            128.0
-        } else if tv {
-            100.0
-        } else {
-            112.0
-        })
-    .floor() as usize)
-        .clamp(
-            if touch { 1 } else { 2 },
-            if touch { 5 } else { usize::MAX },
-        );
     let gap = 8.0;
+    let min_width = if desktop {
+        (super::desktop::appearance().catalog_poster_width * scale).max(128.0)
+    } else {
+        128.0
+    };
+    let min_cols = if touch || super::desktop::handheld() {
+        1
+    } else {
+        2
+    };
+    let cols = (((ui.available_width() + gap) / (min_width + gap)).floor() as usize)
+        .clamp(min_cols, if touch { 5 } else { usize::MAX });
     let width = ((ui.available_width() - gap * (cols - 1) as f32) / cols as f32).max(24.0);
     let art_h = (width * 1.4).min(if tv { 154.0 } else { 190.0 });
     let row_h = art_h + 38.0;
@@ -630,7 +635,11 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         }
     });
     if rows.is_empty() {
-        ui.label("Keine passenden Titel");
+        ui.label(
+            app.settings
+                .language
+                .text("Keine passenden Titel.", "No matching titles."),
+        );
     }
     if let Some(id) = choose {
         app.catalog_focus_play = !touch;

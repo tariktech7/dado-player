@@ -21,6 +21,7 @@ pub struct Appearance {
     pub category_width: f32,
     pub live_preview_width: f32,
     pub catalog_preview_width: f32,
+    pub catalog_poster_width: f32,
     pub navigation_row_height: f32,
     pub navigation_font: f32,
     pub heading_font: f32,

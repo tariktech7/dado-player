@@ -440,53 +440,59 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
             ui.add_space(10.0);
         }
     }
-    let mut list = vec![
-        ("all".to_owned(), "Alle Sender".to_owned()),
-        ("favorites".to_owned(), "Favoriten".to_owned()),
-    ];
-    list.extend(
-        app.library
-            .live_categories
-            .iter()
-            .map(|c| (c.id.clone(), c.name.clone())),
-    );
+    let language = app.settings.language;
+    let categories = &app.library.live_categories;
+    let row_height = if desktop {
+        super::desktop::handheld_size(58.0 * s, 46.0)
+    } else if tv {
+        38.0
+    } else {
+        44.0
+    };
+    let font = tokens::medium(if desktop {
+        super::desktop::handheld_type(21.0 * s, 16.0)
+    } else if tv {
+        16.0
+    } else {
+        14.0
+    });
     let mut selected = None;
     egui::ScrollArea::vertical()
         .id_source("live-categories")
         .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for (id, name) in list {
-                let r = row(
-                    ui,
-                    ("category", &id),
-                    if desktop {
-                        super::desktop::handheld_size(58.0 * s, 46.0)
-                    } else if tv {
-                        34.0
-                    } else {
-                        44.0
-                    },
-                    app.live_cat == id,
-                );
+        .show_rows(ui, row_height, categories.len() + 2, |ui, range| {
+            for index in range {
+                let (id, name) = match index {
+                    0 => ("all", language.text("Alle Sender", "All channels")),
+                    1 => ("favorites", language.text("Favoriten", "Favorites")),
+                    _ => {
+                        let category = &categories[index - 2];
+                        (category.id.as_str(), category.name.as_str())
+                    }
+                };
+                let r = row(ui, ("category", id), row_height, app.live_cat == id);
                 if ui.is_rect_visible(r.rect) {
-                    components::draw_line(
-                        ui,
-                        pos2(r.rect.left() + 12.0, r.rect.center().y),
-                        &name,
-                        tokens::medium(if desktop {
-                            super::desktop::handheld_type(21.0 * s, 16.0)
-                        } else if tv {
-                            16.0
-                        } else {
-                            14.0
-                        }),
+                    let mut job = egui::text::LayoutJob::simple(
+                        name.to_owned(),
+                        font.clone(),
                         ui.visuals().text_color(),
-                        r.rect.width() - 24.0,
+                        (r.rect.width() - 24.0).max(1.0),
+                    );
+                    job.wrap.max_rows = 2;
+                    let galley = ui.fonts(|fonts| fonts.layout_job(job));
+                    ui.painter().galley(
+                        pos2(
+                            r.rect.left() + 12.0,
+                            r.rect.center().y - galley.size().y / 2.0,
+                        ),
+                        galley,
+                        ui.visuals().text_color(),
                     );
                 }
                 if activated(ui, &r, tv) {
-                    selected = Some(id);
+                    selected = Some(id.to_owned());
                 }
+                r.on_hover_text(name);
             }
         });
     if let Some(id) = selected {

@@ -9,6 +9,7 @@ import { createPortal } from "preact/compat";
 import { Item, Category, Watched, itemKey } from "./types";
 import { TVInput } from "./input";
 import { FavoriteMark } from "./favorite-mark";
+import appearance from "./shell-appearance";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 
 export function resumeEpisode(episodes: Item[], history: Watched[]) {
@@ -195,17 +196,19 @@ function PosterGrid({
   selected,
   select,
   favoriteKeys,
+  emptyMessage,
 }: {
   items: Item[];
   selected: Item | null;
   select: (i: Item) => void;
   favoriteKeys: ReadonlySet<string>;
+  emptyMessage: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0),
     [width, setWidth] = useState(600),
     [height, setHeight] = useState(700);
-  const columns = Math.max(2, Math.floor(width / 146)),
+  const columns = Math.max(2, Math.floor(width / appearance.catalogPosterWidth)),
     rowHeight = 248;
   useLayoutEffect(() => {
     const el = root.current!;
@@ -287,12 +290,14 @@ function PosterGrid({
             Math.max(0, Math.ceil(items.length / columns) - end) * rowHeight,
         }}
       />
-      {!items.length && <p>Keine passenden Titel.</p>}
+      {!items.length && <p class="muted">{emptyMessage}</p>}
     </div>
   );
 }
 
 export function CatalogBrowser({
+  kind,
+  t,
   items,
   categories,
   category,
@@ -308,6 +313,8 @@ export function CatalogBrowser({
   toggle,
   play,
 }: {
+  kind: "series" | "vod";
+  t: (de: string, en: string) => string;
   items: Item[];
   categories: Category[];
   category: string;
@@ -364,11 +371,11 @@ export function CatalogBrowser({
   return (
     <div class={`catalog-browser${item ? ' has-preview' : ''}`}>
       <section class="categories" data-focus-zone="categories">
-        <h1>Kategorien</h1>
+        <h1>{t("Kategorien", "Categories")}</h1>
         <div class="category-list">
           {[
-            { id: "favorites", name: "Favoriten" },
-            { id: "all", name: "Alle Titel" },
+            { id: "favorites", name: t("Favoriten", "Favorites") },
+            { id: "all", name: t("Alle Titel", "All titles") },
             ...categories,
           ].map((c) => (
             <button
@@ -384,18 +391,19 @@ export function CatalogBrowser({
         </div>
       </section>
       <section class="catalog-titles" data-focus-zone="titles">
-        <h1>{items[0]?.kind === "series" ? "Serien" : "Filme"}</h1>
+        <h1>{kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
         <TVInput
           type="search"
-          aria-label="Titel suchen"
-          placeholder="Titel suchen"
+          aria-label={t("Titel suchen", "Search titles")}
+          placeholder={t("Titel suchen", "Search titles")}
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
-        <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} />
+        <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys}
+          emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
       {item && <aside ref={preview} class="catalog-details" data-focus-zone="details">
-        <h2>{item.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
+        <h2>{item.kind === "series" ? t("Serie & Folgen", "Series & episodes") : t("Details", "Details")}</h2>
           <div class="catalog-detail-scroll" key={itemKey(item)}>
             <div class="catalog-heading">
               {item.logo && <img src={item.logo} alt="" />}
@@ -403,7 +411,7 @@ export function CatalogBrowser({
                 <h2>{item.name}</h2>
                 <button class="favorite-toggle" aria-pressed={favoriteKeys.has(itemKey(item))} onClick={() => toggle(item)}>
                   <FavoriteMark marked={favoriteKeys.has(itemKey(item))} />
-                  {favoriteKeys.has(itemKey(item)) ? "Favorit" : "Merken"}
+                  {favoriteKeys.has(itemKey(item)) ? t("Favorit", "Favorite") : t("Merken", "Save")}
                 </button>
               </div>
             </div>

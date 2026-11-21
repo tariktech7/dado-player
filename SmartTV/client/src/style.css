@@ -1646,11 +1646,17 @@ hr {
 #app .fullscreen .player-top button[aria-pressed] { min-width: 42px; text-align: center; }
 #app .fullscreen .player-controls button.primary,
 #app .fullscreen .player-options button[aria-pressed="true"] { background: var(--player-primary-color); }
-#app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus, #app .fullscreen .player-options button:focus,
 #app .fullscreen .player-top button:hover, #app .fullscreen .player-controls button:hover, #app .fullscreen .player-options button:hover {
   outline: 2px solid var(--player-focus-color);
   outline-offset: 1px;
 }
+#app .fullscreen .player-top button:focus, #app .fullscreen .player-controls button:focus, #app .fullscreen .player-options button:focus {
+  background: var(--player-focus-color);
+  color: #0c2134;
+  outline: 3px solid #f3f7ff;
+  outline-offset: 2px;
+}
+.player-play-toggle svg { display: block; margin: auto; }
 .timeline > span:last-child { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline .seek-bar { flex: 1 1 0; min-width: 0; cursor: pointer; padding: 8px 0; }
 .timeline .seek-bar progress { display: block; width: 100%; }
@@ -1698,7 +1704,7 @@ hr {
 .catalog-title-list .catalog-poster:focus,
 .navigation nav button:focus {
   outline: none;
-  box-shadow: inset 0 0 0 4px var(--accent);
+  box-shadow: inset 0 0 0 4px var(--accent), inset 8px 0 0 var(--accent);
 }
 
 

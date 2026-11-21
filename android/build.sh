@@ -3,7 +3,7 @@
 #
 # Two stages, because the Rust cdylib has to exist before Gradle packages it:
 #   1. cargo ndk --release  -> android/app/src/main/jniLibs/arm64-v8a/*.so
-#   2. gradlew assembleDebug -> app-debug.apk
+#   2. gradlew assembleRelease -> app-release-unsigned.apk -> signed APK
 #
 # `--release` matches the build the QA captures were taken on. A dev-profile
 # build is 147 MB and unrepresentative of frame timings.
@@ -37,20 +37,18 @@ echo "==> cargo ndk (release, arm64-v8a)"
 # script to a log file when running QA instead.
 cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --locked --release --lib
 
-echo "==> gradlew assembleDebug"
-(cd android && ./gradlew assembleDebug)
+echo "==> gradlew assembleRelease"
+(cd android && ./gradlew assembleRelease)
 
-APK_IN="android/app/build/outputs/apk/debug/app-debug.apk"
+APK_IN="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+APK_OUT="android/app/build/outputs/apk/release/dado-player-signed.apk"
 [ -f "$APK_IN" ] || { echo "!! $APK_IN missing"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # SIGNING
 #
-# Gradle produced app-debug.apk signed with the machine-local debug key (or
-# unsigned). We re-sign it ONCE with the project-owned, stable key so every
-# APK we hand out shares the same certificate. That is what makes an update
-# install over a previous build instead of failing with
-# INSTALL_FAILED_UPDATE_INCOMPATIBLE ("App was not installed").
+# Sign Gradle's unsigned release variant with the existing distribution key.
+# Keeping this signer lets users update installations of the earlier beta.
 #
 # Key material: android/app/dadoplayer-release.pk8 (PKCS#8) +
 #               android/app/dadoplayer-release.x509.pem (self-signed).
@@ -60,32 +58,34 @@ SIGN_CERT="android/app/dadoplayer-release.x509.pem"
 [ -f "$SIGN_KEY" ] || { echo "!! signing key missing: $SIGN_KEY"; exit 1; }
 [ -f "$SIGN_CERT" ] || { echo "!! signing cert missing: $SIGN_CERT"; exit 1; }
 
-echo "==> re-sign with stable project key (apksigner)"
-# apksigner must run AFTER zipalign; AGP's assembleDebug output is already
-# 4 KiB-aligned, so signing in place is safe and preserves alignment.
-"$BT/apksigner.bat" sign --key "$SIGN_KEY" --cert "$SIGN_CERT" "$APK_IN"
+echo "==> sign with stable project key (apksigner)"
+"$BT/apksigner.bat" sign --key "$SIGN_KEY" --cert "$SIGN_CERT" --out "$APK_OUT" "$APK_IN"
 
 echo "==> verify signature"
-"$BT/apksigner.bat" verify --verbose "$APK_IN" | sed -n '1,12p'
+"$BT/apksigner.bat" verify --verbose "$APK_OUT" | sed -n '1,12p'
 echo "    signer cert:"
-"$BT/apksigner.bat" verify --print-certs "$APK_IN" 2>&1 | grep -i "certificate DN" || true
+"$BT/apksigner.bat" verify --print-certs "$APK_OUT" 2>&1 | grep -i "certificate DN" || true
 
 echo "==> verify 4 KiB alignment (required for extractNativeLibs=false)"
-"$BT/zipalign.exe" -c -v 4 "$APK_IN" >/dev/null && echo "    zipalign 4 KiB: OK" || {
+"$BT/zipalign.exe" -c -v 4 "$APK_OUT" >/dev/null && echo "    zipalign 4 KiB: OK" || {
     echo "!! zipalign check failed - re-aligning"; exit 1; }
 
 echo "==> verify extractNativeLibs=false is in the merged manifest"
-if "$BT/aapt.exe" dump xmltree "$APK_IN" AndroidManifest.xml 2>/dev/null | grep -q "extractNativeLibs.*0x0"; then
+if "$BT/aapt.exe" dump xmltree "$APK_OUT" AndroidManifest.xml 2>/dev/null | grep "extractNativeLibs.*0x0" >/dev/null; then
     echo "    extractNativeLibs=false: OK (libs are mmap'd, no 41 MB extraction)"
 else
     echo "!! extractNativeLibs not false - install will extract 41 MB and be slow"
 fi
 
 echo "==> versionCode / package"
-"$BT/aapt.exe" dump badging "$APK_IN" 2>/dev/null | grep -iE "package:|versionCode" || true
+badging=$("$BT/aapt.exe" dump badging "$APK_OUT")
+if [[ "$badging" == *application-debuggable* ]]; then
+    echo "!! The distribution APK must not be debuggable"; exit 1
+fi
+printf '%s\n' "$badging" | grep '^package:'
 
 mkdir -p Releases
-cp "$APK_IN" Releases/Dado-Player-arm64-debug.apk
+cp "$APK_OUT" Releases/Dado-Player-arm64-debug.apk
 cp Releases/Dado-Player-arm64-debug.apk Dado-Player-arm64-debug.apk
 echo "==> Dado-Player-arm64-debug.apk"
 md5sum Dado-Player-arm64-debug.apk

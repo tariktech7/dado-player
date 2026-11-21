@@ -788,7 +788,13 @@ function App() {
     if (fullRef.current && previewRef.current?.kind !== "live" && !tracksRef.current && !playerOptionsRef.current && !document.querySelector(".modal")) {
       if (!controlsRef.current) playerMenuNavigation.current = false;
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        playerMenuNavigation.current = true;
+        if (!playerMenuNavigation.current) {
+          e.preventDefault();
+          playerMenuNavigation.current = true;
+          showControls();
+          requestAnimationFrame(() => document.querySelector<HTMLElement>(".player-play-toggle")?.focus());
+          return;
+        }
       } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !playerMenuNavigation.current) {
         e.preventDefault();
         safe(() => playerRef.current?.seek(e.key === "ArrowLeft" ? -policy.seekStepSeconds : policy.seekStepSeconds));
@@ -802,7 +808,7 @@ function App() {
       if (hidden && (e.key === "Enter" || e.key.startsWith("Arrow"))) {
         e.preventDefault();
         setTimeout(
-          () => focusables(document.querySelector(".fullscreen")!)[0]?.focus(),
+          () => document.querySelector<HTMLElement>(".player-play-toggle")?.focus(),
           20,
         );
         return;
@@ -2032,6 +2038,8 @@ function App() {
                 ) : (
                   <CatalogBrowser
                     key={view}
+                    kind={view === "vod" ? "vod" : "series"}
+                    t={t}
                     items={catalog[view === "vod" ? "vod" : "series"]}
                     categories={
                       catalog.categories[view === "vod" ? "vod" : "series"]
@@ -2143,8 +2151,12 @@ function App() {
                   <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
                     {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
                   </button>
-                  <button class="primary" onClick={() => p?.toggle()}>
-                    {status?.state === "paused" ? t("▷ Abspielen", "▷ Play") : t("Ⅱ Pause", "Ⅱ Pause")}
+                  <button class="primary player-play-toggle" onClick={() => p?.toggle()}
+                    aria-label={status?.state === "paused" ? t("Abspielen", "Play") : t("Pause", "Pause")}>
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor">
+                      {status?.state === "paused" ? <path d="M7 4l13 8-13 8z" /> :
+                        <path d="M6 4h4v16H6zm8 0h4v16h-4z" />}
+                    </svg>
                   </button>
                   <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
                     {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}

@@ -1065,9 +1065,7 @@ impl App {
                 )
             });
         }
-        if (self.tv || (self.view == View::Player && crate::ui::mobile::active(ctx)))
-            && keys.is_empty()
-        {
+        if (self.tv || self.view == View::Player) && keys.is_empty() {
             use crate::platform::RemoteKey;
             for (key, remote) in [
                 (egui::Key::ArrowUp, RemoteKey::Up),
@@ -1076,7 +1074,7 @@ impl App {
                 (egui::Key::ArrowRight, RemoteKey::Right),
                 (egui::Key::Enter, RemoteKey::Ok),
             ] {
-                if ctx.input(|i| i.key_pressed(key)) {
+                if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, key)) {
                     keys.push(remote);
                 }
             }
@@ -1089,12 +1087,16 @@ impl App {
             && !player_options_open
         {
             use crate::platform::RemoteKey;
-            if !self.player_chrome {
+            let focus = egui::Id::new("player-focus-transport");
+            let mut focus_transport =
+                ctx.data(|data| data.get_temp::<bool>(focus).unwrap_or(false));
+            if !self.player_chrome && !focus_transport {
                 self.player_menu_navigation = false;
             }
             for key in &keys {
-                if matches!(key, RemoteKey::Up | RemoteKey::Down) {
-                    self.player_menu_navigation = true;
+                if matches!(key, RemoteKey::Up | RemoteKey::Down) && !self.player_menu_navigation {
+                    self.enter_player_navigation(ctx);
+                    focus_transport = true;
                 } else if !self.player_menu_navigation
                     && matches!(key, RemoteKey::Left | RemoteKey::Right)
                 {
@@ -1111,6 +1113,9 @@ impl App {
             }
             if !self.player_menu_navigation {
                 keys.retain(|k| !matches!(k, RemoteKey::Left | RemoteKey::Right));
+            }
+            if focus_transport {
+                keys.retain(|k| !matches!(k, RemoteKey::Up | RemoteKey::Down));
             }
         }
         // Any interaction with the player brings the chrome back and restarts
@@ -1137,7 +1142,9 @@ impl App {
         let pending_resume_before_draw =
             self.pending_resume.as_ref().map(|(key, _, _)| key.clone());
         let returning_to_catalog = self.desktop_return_item.is_some() && self.view != View::Player;
-        let mobile = cfg!(any(target_os = "android", target_os = "ios")) || self.tv;
+        let mobile = cfg!(any(target_os = "android", target_os = "ios"))
+            || self.tv
+            || (cfg!(windows) && self.view == View::Player);
         if mobile {
             // Screen fingerprint: a new screen restarts focus at its first
             // control. View is Copy, so `as u64` is legal.
@@ -1188,7 +1195,7 @@ impl App {
             // Spatial focus is for the 10-foot *browse* shell. Login stays
             // linear (a form with no horizontal neighbours) and so does the
             // player (one row of transport controls).
-            let spatial = self.tv && self.active_profile.is_some() && self.view != View::Player;
+            let spatial = in_player || (self.tv && self.active_profile.is_some());
             crate::ui::mobile::focus::begin(&focus_keys, screen, pointer_used, modal, spatial);
 
             if in_player && play_pause {
@@ -2486,6 +2493,13 @@ impl App {
         uploaded
     }
 
+    fn enter_player_navigation(&mut self, ctx: &Context) {
+        self.player_menu_navigation = true;
+        self.player_reveal = false;
+        self.ui_activity = ctx.input(|i| i.time);
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("player-focus-transport"), true));
+    }
+
     fn handle_keys(&mut self, ctx: &Context) {
         if self.parental.open {
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -2542,14 +2556,20 @@ impl App {
             if down {
                 self.step_channel(-1);
             }
+            ctx.input_mut(|input| {
+                input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp);
+                input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown);
+            });
         }
 
-        if in_player && !is_live {
+        if in_player && !is_live && !self.parental.open {
             if !self.player_chrome {
                 self.player_menu_navigation = false;
             }
-            if up || down {
-                self.player_menu_navigation = true;
+            if (up || down) && !menus_open {
+                if !self.player_menu_navigation {
+                    self.enter_player_navigation(ctx);
+                }
                 self.ui_activity = ctx.input(|i| i.time);
             }
         }
@@ -4724,19 +4744,25 @@ mod tests {
         app.favorites.clear();
         let ctx = egui::Context::default();
         let keypress = |app: &mut App, key, repeat| {
+            let event = |pressed| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat,
+                modifiers: egui::Modifiers::NONE,
+            };
+            let events = if repeat {
+                vec![event(true)]
+            } else {
+                vec![event(false), event(true)]
+            };
             let _ = ctx.run(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
                         egui::vec2(1400.0, 900.0),
                     )),
-                    events: vec![egui::Event::Key {
-                        key,
-                        physical_key: None,
-                        pressed: true,
-                        repeat,
-                        modifiers: egui::Modifiers::NONE,
-                    }],
+                    events,
                     ..Default::default()
                 },
                 |ctx| app.handle_keys(ctx),

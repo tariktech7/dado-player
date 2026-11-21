@@ -1,7 +1,9 @@
-# dado-player - Android Build (CI only)
+# Dado Player für Android
 
-Rust + egui/eframe 0.27 IPTV-App, portiert auf Android (arm64). Die APK wird
-**ausschließlich in GitHub Actions CI** gebaut - kein lokales NDK nötig.
+Die APK für Android und Android TV (arm64) lässt sich lokal mit `bash android/build.sh`
+oder über GitHub Actions bauen. Der lokale Build verwendet Gradles Release-Variante und
+den vorhandenen Signierschlüssel. Der GitHub-Assetname `Dado-Player-arm64-debug.apk`
+bleibt für bestehende Update-Clients erhalten.
 
 Die native Rust-Library wird mit `cargo ndk` als `libdadoplayer.so` (arm64-v8a)
 gebaut und zusammen mit einer vorgebauten `libmpv.so` von Gradle zu einer APK

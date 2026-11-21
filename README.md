@@ -1,9 +1,7 @@
 # Dado Player
 
-Gemeinsamer Beta-Quellstand: **0.7.9** für Windows, Android (Build 28), iOS (Build 23) und Samsung Tizen.
-[Alle 0.7.9-Beta-Pakete auf GitHub](https://github.com/tariktech7/dado-player/releases/tag/v0.7.9-beta).
-Diese Vorabversion wird direkt über den Release-Link geladen; die bisherigen stabilen
-Updatekanäle werden damit nicht automatisch umgestellt. [Funktions- und Plattformabgleich](docs/PLATFORM-PARITY.md).
+**0.8.0 Beta 1** ist der gemeinsame Stand für Windows, Android, iOS und Samsung Tizen.
+Die Beta ist über [GitHub Releases](https://github.com/tariktech7/dado-player/releases/tag/v0.8.0-beta) für berechtigte Konten verfügbar. Die stabilen Updatekanäle bleiben davon unabhängig.
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:
 [Plattformabgleich](docs/PLATFORM-PARITY.md). Aktuelle Paketdateien und Prüfsummen stehen in Releases/AKTUELL.json.
@@ -14,23 +12,23 @@ ohne diese Kaufsperre. Betrieb und Einrichtung: [Lizenzverwaltung](licensing/REA
 Nur „7 Tage kostenlos testen“ startet einen Trial. „Freischaltung abrufen“ liefert ausschließlich
 eine genehmigte Dauerlizenz; ohne Freigabe erscheint eine entsprechende Meldung. Während des Trials
 stehen verbleibende Tage unter dem App-Namen, bei eingeklappter Navigation als kurze Anzeige.
-Windows und TV verwenden Kategorien, ein virtualisiertes Poster-Raster und einen festen Detailbereich.
-Die Touch-Oberfläche auf Telefonen/Tablets hat stattdessen Kategorien-Dropdown und Suche im jeweiligen Tab,
-ein breites Poster-Raster und eigene Detailseiten mit Zurück-/Rand-Wisch-Navigation.
-Details und Folgen scrollen gemeinsam über die volle Höhe; Staffelbuttons laufen horizontal.
+Alle Apps verwenden die gleiche Spaltennavigation und ein virtualisiertes Poster-Raster. Auf Telefonen
+und Tablets ist die Oberfläche fürs Querformat mit Touch und sicheren Bildschirmrändern ausgelegt.
+Die Detailspalte erscheint bei Filmen und Serien nach der Auswahl. In Live-TV ist die Vorschau dauerhaft
+sichtbar. In Seriendetails lassen sich die Staffeln horizontal und die Folgen vertikal durchblättern.
 Der Play-Button setzt die zuletzt gesehene Folge fort und geht bei höchstens 60 Sekunden Rest
 zur nächsten Folge über. Favoriten und Fortsetzen haben getrennte Rubriken für Live-TV, Serien
 und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Favoritenprogramm.
+Pro Serie erscheint dort und unter Fortsetzen die zuletzt angesehene Folge. Der Folgenverlauf bleibt erhalten.
+Auf Geräten mit Farbtasten öffnet Rot die Elternsperre. Unter Windows entspricht das F1.
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
 
-Der iOS-Stand **0.7.9 / Build 23** wird lokal unter Windows/WSL mit
+Der iOS-Build wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
 mit eigener Apple-ID; Wiedergabe und Layout auf einem echten iPhone bleiben separat zu prüfen.
 Der lokale Buildweg steht in [ios/README.md](ios/README.md).
 LG-Vorbereitung und TV-Verträge: [SmartTV/README.md](SmartTV/README.md).
-
-[Downloads für Windows, Android und iOS auf GitHub Releases](https://github.com/tariktech7/dado-player/releases/latest)
 
 Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Datenmodell und egui-Oberfläche. Alle drei Apps verwenden dieselbe Crate und dieselbe Cargo.lock.
 

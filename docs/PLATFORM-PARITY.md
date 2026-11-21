@@ -12,15 +12,16 @@ Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
 | Daten je Anbieter | Favoriten, Verlauf, Positionen und Laufzeiten je Profil isolieren. Gleiche Sender-/Film-IDs anderer Anbieter dürfen nicht kollidieren. Alte native Dateien werden einmal dem bisherigen Standardprofil zugeordnet und als Sicherung erhalten. |
 | Startseite | Fortsetzen mit Artwork, kompakte Senderlogos, unabhängiges aktuelles Favoritenprogramm. |
 | Favoriten / Fortsetzen | Live-TV, Filme und Serien getrennt anzeigen. |
-| Kataloge | Filme/Serien: Favoriten zuerst; Poster und eigene Detailansicht. Live-TV: alle Sender und Favoriten. |
+| Kataloge | Filme und Serien beginnen mit Favoriten. Die animierte Detailspalte erscheint nach der Titelauswahl. Bei Live-TV stehen zuerst alle Sender, dann die Favoriten. Die Live-Vorschau bleibt sichtbar. |
 | Seitenleiste (Windows und Samsung) | Öffnet sich beim Überfahren mit der Maus. Ohne Auswahl klappt sie 700 ms nach dem Verlassen ein. Ein Klick auf einen Menüpunkt lässt sie geöffnet. |
 | Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und vier Elementen in der Hauptleiste. Ton, Untertitel, Bildformat und Beenden stehen unter Optionen. Windows behält die native Vollbild- und Lautstärkesteuerung. |
 | Live-Vorschau | 712 Einheiten bei 1920 × 1080, auf schmaleren oder kürzeren Flächen entsprechend begrenzt. 16:9-Fläche mit vollständigem Streambild. Programmdetails bleiben separat scrollbar. |
 | Favoritenstatus | Gefüllter Stern für gemerkte Inhalte, leerer Stern für andere. In Live-Zeilen, Film- und Serienpostern, Details und Player anzeigen. |
 | Liste aktualisieren | Sender, Filme und Serien des aktiven Profils neu laden. Bei einem Teilfehler bleiben die bisherigen Einträge des betroffenen Bereichs verfügbar. |
 | Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |
-| Fortsetzen | Direkt fortsetzen. Bei höchstens 60 Sekunden Rest die nächste Folge; fertige Filme neu beginnen. Noch fehlende Episodendaten asynchron laden und einen überholten Startauftrag verwerfen. |
-| Player | Eigene Dado-Steuerung; nach zwei Sekunden ausblenden. Live-TV: Hoch/Runter schaltet, 0 ruft letzten Sender auf, soweit das Eingabegerät diese Tasten liefert. |
+| Fortsetzen | Startseite und Fortsetzen zeigen die zuletzt angesehene Folge pro Serie. Beim Starten bei höchstens 60 Sekunden Rest zur nächsten Folge wechseln. Fertige Filme beginnen erneut. Fehlende Episodendaten werden asynchron geladen. |
+| Farbtasten | Rot/F1 öffnet die PIN-Verwaltung, Grün/F2 wechselt zu Live-TV, Gelb/F3 ändert den Favoritenstatus und Blau/F4 öffnet Einstellungen oder Player-Optionen. Die Zurück-Taste steuert die Navigation. |
+| Player | Eigene Dado-Steuerung mit Play-/Pause-Symbol und deutlichem Fokus. Bei Filmen und Folgen spulen Links/Rechts in 10-Sekunden-Schritten. Hoch/Runter fokussiert zuerst Play/Pause und aktiviert die Menünavigation, bis die Steuerung ausgeblendet wird. Bei Live-TV schaltet Hoch/Runter den Sender, 0 ruft den vorherigen Sender auf. |
 | Ton / Untertitel | Bevorzugte Sprachen mit gemeinsamen ISO-Aliasen, Untertitel automatisch ein/aus. Manuelle Auswahl bleibt während des Streams erhalten. Verfügbare Spuren kommen vom Stream/Player. |
 | Verlauf | Maximal 150 Einträge. Automatischer Start des letzten Streams bei neuen Installationen aus; vorhandene bewusste Einstellung erhalten. |
 
@@ -35,7 +36,7 @@ Die Werte für Zeitgrenzen, Verlaufslimit und den Standard für automatischen St
 | Eingabe | Maus/Tastatur bzw. Touch und Android-TV-Fernbedienung | Touch, native Inline-Tastatur | Fernbedienung, Tastatur erst nach Aktivierung |
 | Layout | Android ausschließlich Querformat. Gleiches Raster wie Windows, auf Android TV mit Fernbedienungsfokus. | Ausschließlich Querformat, mit sicheren Rändern und nativer Tastatur. | Gleiches Raster mit Tizen-Fokuszonen und virtuellen Listen. |
 | Lizenz | Windows: 7 Tage Trial, manuelle Dauerfreigabe; Android: noch keine Kaufsperre | Keine Kaufsperre bis IAP | Gleiche Trial-/Freigabelogik wie Windows |
-| Updates | Portable ersetzt eigene EXE; Android öffnet Systeminstaller | IPA herunterladen, mit eigener Apple-ID neu signieren/installieren | Signatur, TV-Berechtigung und Samsung-Verteilweg erforderlich |
+| Updates | Portable ersetzt eigene EXE; Android öffnet den Systeminstaller | IPA herunterladen und mit eigener Apple-ID installieren | Signierte kompatible Oberflächenupdates aus GitHub. Änderungen am Startloader oder an Berechtigungen erfordern eine neue WGT mit passender Gerätesignatur. |
 | Puffer/Timeout | libmpv-Netzwerkoptionen | Automatisch AVPlayer für HLS / VLC für Dateien, begrenzter Fallback; Puffer und Lade-Watchdog | AVPlay-Optionen nach Geräteunterstützung |
 
 Identische Bedienabläufe bedeuten keine identischen Codec-, DRM-, Installations- oder Store-Fähigkeiten.
@@ -51,6 +52,13 @@ von der Dado-Dauerlizenz und können selbst zeitlich oder auf Geräte beschränk
 - Echte iPhone-/TV-Wiedergabe, Overscan und Fernbedienung erst nach Gerätetest als bestätigt bezeichnen.
 - Alte Pakete archivieren. Windows aktuell ausschließlich Releases/Dado-Player.exe.
 - Eine WGT niemals als USB-installierbar ausgeben. Dafür müssen von Samsung erzeugte TMG- und Lizenzdateien vorliegen.
+
+## Öffentliche Verteilung
+
+- Download und Update-Kanal mit einem Konto ohne Entwicklerrechte prüfen. Für eine öffentliche Downloadquelle einen ersten Abruf und ein Update ohne persönliches GitHub-Token testen.
+- Windows-Paket mit Herausgebersignatur prüfen und auf einem sauberen Windows-10-/11-Gerät starten. Unter Android die APK vom vorgesehenen öffentlichen Kanal über eine vorhandene Installation aktualisieren.
+- iOS vor öffentlicher Freigabe auf einem iPhone mit Live-TV, Film und Serienfolge prüfen. Die aktuelle IPA verwendet die Installation über AltStore/Sideloadly.
+- Das Samsung-Entwicklerpaket ist gerätegebunden. Für allgemein verfügbare Installationen wird ein von Samsung freigegebener Verteilweg benötigt.
 
 ## Automatik und Experten (0.6.1)
 

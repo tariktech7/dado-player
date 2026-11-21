@@ -1710,7 +1710,15 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   await page.keyboard.press('ArrowRight');await expect.poll(seeks).toContain(10000);
   await page.keyboard.press('ArrowRight');await expect.poll(seeks).toContain(20000);
   await page.keyboard.press('ArrowLeft');await expect.poll(seeks).toContain(10000);
-  await page.keyboard.press('ArrowDown');const before=(await seeks()).length;await page.keyboard.press('ArrowRight');expect((await seeks()).length).toBe(before);
+  await page.keyboard.press('ArrowDown');
+  const transport = page.locator('.player-play-toggle');
+  await expect(transport).toBeFocused();
+  await expect(transport).toHaveCSS('background-color', 'rgb(173, 216, 255)');
+  await page.keyboard.press('Enter');
+  await expect(transport).toHaveAccessibleName('Abspielen');
+  await page.keyboard.press('Enter');
+  await expect(transport).toHaveAccessibleName('Pause');
+  const before=(await seeks()).length;await page.keyboard.press('ArrowRight');expect((await seeks()).length).toBe(before);
   await expect(page.locator('.fullscreen')).toHaveClass(/controls-hidden/,{timeout:7000});
   await page.keyboard.press('ArrowRight');await expect.poll(async()=> (await seeks()).length).toBe(before+1);
 });

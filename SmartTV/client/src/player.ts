@@ -530,12 +530,14 @@ export class Player {
     const gen = this.generation, av = this.av;
     this.seekBusy=true;
     let finished = false;
-    const finish=(ok:boolean)=>{
+    const finish=(ok:boolean, timedOut = false)=>{
       if(finished || gen!==this.generation)return;
       finished = true;
       if(this.seekTimer)clearTimeout(this.seekTimer);
       this.seekTimer=null;this.seekBusy=false;
       if(!ok){
+        const queued = this.seekTarget !== requested;
+        if (queued && !timedOut) { this.flushSeek(); return; }
         this.seekTarget=null;
         this.status.notice='Diese Position ist nicht erreichbar. Die Wiedergabe läuft weiter.';
         this.emit();return;
@@ -547,10 +549,7 @@ export class Player {
       if(this.seekTarget!==requested){this.flushSeek();return;}
       this.seekTarget=null;
     };
-    this.seekTimer=setTimeout(()=>{
-      if (live) finish(false);
-      else if(gen===this.generation)this.fail('Der Player reagiert nach dem Spulen nicht. Bitte erneut starten.');
-    },this.settings.timeoutSeconds*1000);
+    this.seekTimer=setTimeout(()=>finish(false, true),this.settings.timeoutSeconds*1000);
     try {
       if(av) av.seekTo(Math.floor(target*1000),()=>finish(true),()=>finish(false));
       else if(this.video){this.video.currentTime=target;finish(true);}

@@ -7,9 +7,12 @@
 
 use crate::platform::ios::bridge;
 use crate::types::Settings;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 pub struct Mpv {
     volume: std::sync::atomic::AtomicI64,
+    pending_seek: Mutex<Option<(f64, Instant)>>,
 }
 
 impl Mpv {
@@ -21,6 +24,7 @@ impl Mpv {
         bridge::set_aspect(s.desktop_aspect);
         Ok(Mpv {
             volume: std::sync::atomic::AtomicI64::new(100),
+            pending_seek: Mutex::new(None),
         })
     }
 
@@ -37,6 +41,7 @@ impl Mpv {
         }
     }
     pub fn load(&self, url: &str) {
+        *self.pending_seek.lock().unwrap() = None;
         bridge::load(url);
     }
 
@@ -49,6 +54,7 @@ impl Mpv {
     pub fn enable_video(&self) {}
 
     pub fn stop(&self) {
+        *self.pending_seek.lock().unwrap() = None;
         bridge::stop();
     }
 
@@ -71,14 +77,32 @@ impl Mpv {
     }
 
     pub fn seek_absolute(&self, secs: f64) {
-        bridge::seek(secs);
+        if !secs.is_finite() {
+            return;
+        }
+        let duration = bridge::duration();
+        let target = secs.clamp(
+            0.0,
+            if duration > 0.0 {
+                (duration - 0.25).max(0.0)
+            } else {
+                f64::INFINITY
+            },
+        );
+        *self.pending_seek.lock().unwrap() = Some((target, Instant::now()));
+        bridge::seek(target);
     }
 
     pub fn seek_relative(&self, secs: f64) {
-        // AVPlayer seeks to an absolute time; a relative seek is current + delta.
-        // Clamp at 0 here rather than letting the host deal with negatives.
-        let target = bridge::position() + secs;
-        bridge::seek(target.max(0.0));
+        let position = bridge::position();
+        // AVPlayer and VLC can still report the old decoder position after a seek.
+        let pending = *self.pending_seek.lock().unwrap();
+        let base = pending
+            .filter(|(target, started)| {
+                started.elapsed() < Duration::from_millis(1500) && (target - position).abs() > 1.0
+            })
+            .map_or(position, |(target, _)| target);
+        self.seek_absolute(base + secs);
     }
 
     pub fn set_volume(&self, vol: i64) {

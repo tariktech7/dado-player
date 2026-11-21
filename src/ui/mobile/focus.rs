@@ -320,6 +320,14 @@ pub fn begin_modal(initial: usize) {
 /// own painting. Activation is a real pointer click OR the remote Ok key on the
 /// focused item; the pending key is consumed so exactly one item fires per press.
 pub fn clicked(ui: &Ui, resp: &Response) -> bool {
+    register_click(ui, resp, true)
+}
+
+pub fn clicked_player(ui: &Ui, resp: &Response) -> bool {
+    register_click(ui, resp, false)
+}
+
+fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
         // Covered by a modal scrim: drop it from the focus order entirely. It
@@ -352,13 +360,13 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
                 s.idx = i;
             }
         }
-        if focused {
+        if focused && show_focus {
             // A clearly visible ring plus a translucent accent wash. The wash
             // uses accent_soft's RGB but a low alpha so content stays readable
             // (and a full-screen scrim can never wash out the whole page).
             let r = resp.rect.shrink(1.0);
             let soft = tokens::accent_soft(ui);
-            let wash_alpha = if s.spatial { 72 } else { 48 };
+            let wash_alpha = if s.spatial { 112 } else { 76 };
             let wash = Color32::from_rgba_unmultiplied(soft.r(), soft.g(), soft.b(), wash_alpha);
             ui.painter()
                 .rect_filled(r, Rounding::same(tokens::RADIUS_SM), wash);
@@ -377,6 +385,12 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
                 tokens::SEL_RING + 1.0
             };
             let rounding = Rounding::same(tokens::RADIUS_SM);
+            let marker = egui::Rect::from_min_size(
+                r.left_top() + egui::vec2(2.0, r.height() * 0.22),
+                egui::vec2(3.0, r.height() * 0.56),
+            );
+            ui.painter()
+                .rect_filled(marker, 1.5, tokens::focus_ring(ui));
             ui.painter()
                 .rect_stroke(r, rounding, Stroke::new(halo, tokens::accent(ui)));
             ui.painter()

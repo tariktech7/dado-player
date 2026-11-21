@@ -80,33 +80,81 @@ fn button(
 ) -> bool {
     let response = ui.interact(rect, ui.id().with(id), Sense::click());
     let p = Palette::get();
+    let focused = if crate::ui::mobile::focus::active() {
+        crate::ui::mobile::focus::focused_id() == Some(response.id)
+    } else {
+        response.has_focus()
+    };
+    let ink = if focused {
+        Color32::from_rgb(12, 33, 52)
+    } else {
+        p.text
+    };
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     ui.painter().rect(
         rect,
         size * 0.48,
-        if primary { p.primary } else { p.button },
-        if response.hovered() || response.has_focus() {
+        if focused {
+            p.focus
+        } else if primary {
+            p.primary
+        } else {
+            p.button
+        },
+        if focused {
+            Stroke::new(2.0_f32, p.text)
+        } else if response.hovered() {
             Stroke::new(2.0_f32, p.focus)
         } else {
             Stroke::NONE
         },
     );
-    ui.painter()
-        .with_clip_rect(rect.shrink2(vec2(4.0, 0.0)))
-        .text(
-            rect.center(),
-            Align2::CENTER_CENTER,
-            label,
-            FontId::proportional(size),
-            p.text,
-        );
-    if crate::ui::mobile::focus::active() {
-        crate::ui::mobile::focus::clicked(ui, &response)
-    } else {
-        response.clicked()
+    let center = rect.center();
+    let half = size * 0.34;
+    match label {
+        "▶" => {
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    center + vec2(-half * 0.7, -half),
+                    center + vec2(half, 0.0),
+                    center + vec2(-half * 0.7, half),
+                ],
+                ink,
+                Stroke::NONE,
+            ));
+        }
+        "⏸" => {
+            for x in [-half * 0.48, half * 0.48] {
+                ui.painter().rect_filled(
+                    Rect::from_center_size(center + vec2(x, 0.0), vec2(half * 0.55, half * 2.0)),
+                    1.0,
+                    ink,
+                );
+            }
+        }
+        _ => {
+            ui.painter()
+                .with_clip_rect(rect.shrink2(vec2(4.0, 0.0)))
+                .text(
+                    center,
+                    Align2::CENTER_CENTER,
+                    label,
+                    FontId::proportional(size),
+                    ink,
+                );
+        }
+    };
+    if label == "▶" || label == "⏸" {
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                if label == "▶" { "Play" } else { "Pause" },
+            )
+        });
     }
+    crate::ui::mobile::focus::clicked_player(ui, &response)
 }
 
 fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) {
@@ -446,11 +494,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         } else {
             "-10 s"
         },
-        if paused {
-            t("Abspielen", "Play")
-        } else {
-            "Pause"
-        },
+        if paused { "▶" } else { "⏸" },
         if live {
             t("Sender ›", "Channel ›")
         } else {
@@ -459,6 +503,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         t("Optionen", "Options"),
     ];
     let (action, layer) = pane(&ctx, "transport", bottom, s, |ui| {
+        if ctx.data_mut(|data| {
+            let id = Id::new("player-focus-transport");
+            let focus = data.get_temp::<bool>(id).unwrap_or(false);
+            data.remove::<bool>(id);
+            focus
+        }) {
+            crate::ui::mobile::focus::request_id(ui.id().with(1_usize));
+        }
         let widths = [104.0, 132.0, 104.0, 112.0];
         let mut x = bottom.center().x - (widths.iter().sum::<f32>() + 34.0) * s / 2.0;
         let mut action = None;
