@@ -144,6 +144,9 @@ impl Mpv {
             // if the render context was not initialized yet, or it will revert
             // to a VO that creates its own window." There is no window here.
             // `gpu-api` belongs to vo=gpu and is deliberately not set.
+            // Use mpv's low-cost GPU profile so the shared GL thread stays
+            // responsive when the preview expands to fill a handset display.
+            me.set_opt_str("profile", "fast");
             me.set_opt_str("vo", "libmpv");
             // The render context must exist *before* loadfile creates the VO;
             // platform::android::render queues the load until its first paint
