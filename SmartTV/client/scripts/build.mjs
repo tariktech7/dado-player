@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { cp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createHash } from 'node:crypto';
 const testConfig = process.env.DADO_LICENSE_TEST_CONFIG;
 const legacy = process.env.DADO_TIZEN_PROFILE === '2019';
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -9,6 +10,11 @@ process.chdir(root);
 const release = JSON.parse(await readFile('../../release.json', 'utf8'));
 if (JSON.parse(await readFile('package.json', 'utf8')).version !== release.version) throw new Error('Run python scripts/release_version.py before building');
 const out = path.resolve("dist");
+const testKeyPlugin = testConfig ? [{ name: 'test-update-key', setup(b) {
+  b.onLoad({ filter: /tizen[\\/]update-key\.json$/ }, async () => ({
+    contents: JSON.stringify(JSON.parse(await readFile(testConfig, 'utf8')).keys['ui-test']), loader: 'json',
+  }));
+}}] : [];
 if (out !== path.join(root, "dist")) throw new Error("Unexpected output path");
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
@@ -23,7 +29,7 @@ await build({
   minify: true,
   external: ["./fonts/*"],
   legalComments: "eof",
-  plugins: testConfig ? [{name:'test-license-key',setup(b){b.onLoad({filter:/licensing[\\/]public-config\.json$/},async()=>({contents:await readFile(testConfig,'utf8'),loader:'json'}));}}] : [],
+  plugins: testConfig ? [...testKeyPlugin, {name:'test-license-key',setup(b){b.onLoad({filter:/licensing[\\/]public-config\.json$/},async()=>({contents:await readFile(testConfig,'utf8'),loader:'json'}));}}] : [],
   metafile: true,
 }).then(async (result) => {
   await writeFile(
@@ -51,10 +57,20 @@ await writeFile(
     pkg.version,
   ),
 );
-await writeFile(
-  "dist/index.html",
-  `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=1920,initial-scale=1"><meta name="application-name" content="Dado Player"><title>Dado Player</title><link rel="stylesheet" href="app.css"></head><body><div id="app"></div><script>(function(){if(typeof tizen!=='undefined'){var s=document.createElement('script');s.src='$WEBAPIS/webapis/webapis.js';s.onload=s.onerror=function(){var a=document.createElement('script');a.src='app.js';document.body.appendChild(a)};document.head.appendChild(s)}else{var a=document.createElement('script');a.src='app.js';document.body.appendChild(a)}})();</script></body></html>`,
-);
+const html = '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=1920,initial-scale=1"><meta name="application-name" content="Dado Player"><title>Dado Player</title><link id="packaged-css" rel="stylesheet" href="app.css"></head><body><div id="app"></div><script src="boot.js"></script></body></html>';
+await writeFile('dist/index.html', html);
+const fingerprint = createHash('sha256').update(html).update(legacy ? 'legacy' : 'modern');
+for (const name of ['src/boot.ts','src/update-format.ts','tizen/update-key.json','tizen/config.xml',
+  'dist/d7.svg','dist/d7-dark.svg','dist/test-video.mp4','dist/icon.png',
+  ...['Regular', 'Semibold', 'Bold'].map(weight => `dist/fonts/SourceSans3-${weight}.ttf`)]) {
+  const content = await readFile(name);
+  const stable = /\.(ts|json|xml)$/.test(name) ? content.toString('utf8').replace(/\r\n/g, '\n') : content;
+  fingerprint.update(name).update(createHash('sha256').update(stable).digest());
+}
+const installed = { version: release.version, build: release.tizenBuild,
+  variant: legacy ? 'legacy' : 'modern', compatibility: fingerprint.digest('hex') };
+await build({entryPoints:['src/boot.ts'], bundle:true, outfile:'dist/boot.js', format:'iife',
+  target:[legacy ? 'chrome63' : 'chrome85'], minify:true, plugins:testKeyPlugin, define:{INSTALLED:JSON.stringify(installed)}});
 await writeFile(
   "dist/version.json",
   JSON.stringify(
@@ -65,6 +81,7 @@ await writeFile(
       minimumTizen: legacy ? "5.0" : "6.5",
       browserTarget: legacy ? "chrome63" : "chrome85",
       licenseTestBuild: !!testConfig,
+      update: installed,
     },
     null,
     2,

@@ -1,9 +1,11 @@
 import { test, expect, Page } from "@playwright/test";
 import { fresh } from "../../src/store";
 import {readFileSync} from 'node:fs';
+import {createPrivateKey, sign} from 'node:crypto';
 import {page as connectPage,script as connectScript,css as connectCss} from '../../../../connect/web.mjs';
 import {fingerprint,signLicense} from '../../../../licensing/shared/protocol.mjs';
 import {withPin,emptyPolicy,lockKey} from '../../src/parental';
+import {accessStorage, signingContext, updateStorage} from '../../src/update-format';
 const profile = {
   id: "qa",
   name: "TV Demo",
@@ -19,6 +21,55 @@ async function parentalPin(page:Page,pin:string,setup=false) {
   for(const n of pin)await modal.getByRole('button',{name:n,exact:true}).click();
   await modal.getByRole('button',{name:setup?'PIN speichern / bestätigen':'Entsperren',exact:true}).click();
 }
+
+async function signedUpdate(page: Page, script: string) {
+  const installed = await page.evaluate(() => window.dadoTvBoot!.installed);
+  const key = createPrivateKey({key: JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!, 'utf8')), format: 'jwk'});
+  const payload = JSON.stringify({...installed, build: installed.build + 1, script, css: 'body { outline: 0; }'});
+  const signature = sign('sha256', Buffer.from(signingContext + payload), {key, dsaEncoding: 'ieee-p1363'}).toString('base64url');
+  return {payload, signature};
+}
+
+test('Samsung installs a signed GitHub update and boots it again offline', async ({page}) => {
+  await fixture(page);
+  await page.addInitScript(({accessStorage}) => localStorage.setItem(accessStorage, 'read-only-test-token'), {accessStorage});
+  await page.goto('/');
+  await page.getByRole('button', {name:'⚙ Einstellungen', exact:true}).click();
+  await page.locator('.settings-sections button').filter({hasText: /Update/}).click();
+  const app = readFileSync('dist/app.js', 'utf8');
+  const signed = await signedUpdate(page, app + '\n;document.title = "Dado Player OTA";');
+  const bytes = Buffer.from(JSON.stringify(signed));
+  const pattern = 'https://api.github.com/repos/tariktech7/dado-player/contents/*';
+  await page.route(pattern, (route) => route.request().method() === 'OPTIONS'
+    ? route.fulfill({status:204, headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Accept'}})
+    : route.fulfill({headers:{'Access-Control-Allow-Origin':'*'}, json:{encoding:'base64', size:bytes.length, content:bytes.toString('base64')}}));
+  await page.getByRole('button', {name:'GitHub-Update prüfen und installieren'}).click();
+  await expect(page).toHaveTitle('Dado Player OTA', {timeout:12_000});
+  await expect.poll(() => page.evaluate(() => window.dadoTvBoot?.fromUpdate)).toBe(true);
+  await page.unroute(pattern);
+  await page.route(pattern, (route) => route.abort());
+  await page.reload();
+  await expect(page).toHaveTitle('Dado Player OTA');
+  await expect(page.getByRole('button', {name:'⚙ Einstellungen', exact:true})).toBeVisible();
+});
+
+test('Samsung ignores a tampered bundle and rolls back a failed signed boot', async ({page}) => {
+  await fixture(page);
+  await page.goto('/');
+  await expect(page.getByRole('button', {name:'⚙ Einstellungen', exact:true})).toBeVisible();
+  const signed = await signedUpdate(page, 'throw new Error("QA startup error");');
+  const tampered = {...signed, payload:signed.payload.replace('QA startup error','unauthorized code')};
+  await page.evaluate(({updateStorage, tampered}) => localStorage.setItem(updateStorage, JSON.stringify({bundle:tampered})), {updateStorage, tampered});
+  await page.reload();
+  await expect(page.getByRole('button', {name:'⚙ Einstellungen', exact:true})).toBeVisible();
+  expect(await page.evaluate(() => window.dadoTvBoot!.fromUpdate)).toBe(false);
+  await page.evaluate(({updateStorage, signed}) => localStorage.setItem(updateStorage, JSON.stringify({bundle:signed})), {updateStorage, signed});
+  await page.reload();
+  await expect(page.getByRole('button', {name:'⚙ Einstellungen', exact:true})).toBeVisible({timeout:20_000});
+  expect(await page.evaluate(() => window.dadoTvBoot!.fromUpdate)).toBe(false);
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).blocked, updateStorage)).toBe(JSON.parse(signed.payload).build);
+});
+
 test('long live-preview metadata stays inside its own panel and retains a usable video area',async({page})=>{
   await fixture(page,true,true);
   await page.route('https://provider.invalid/**',async route=>{

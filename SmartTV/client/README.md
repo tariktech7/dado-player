@@ -105,6 +105,41 @@ Vorschau: http://127.0.0.1:18497. Die Browser-Tests simulieren Samsungs API, ers
 keinen Decoder-/Wiedergabetest auf Hardware. Tests enthalten ausschließlich Demodaten.
 Der Build lädt keine Anwendungsskripte von einem CDN. Samsung webapis.js wird nur auf Tizen geladen.
 
+## Web-Updates über GitHub
+
+Ab Tizen-Build 3 lädt Dado Player kompatible Web-Updates selbst, prüft die Signatur und startet
+bei Leerlauf neu. Das zuerst installierte WGT bildet die Rückfallebene. Schlägt ein neuer Start
+fehl, lädt der TV wieder die installierte Version. Profile, Favoriten und Lizenz bleiben im
+App-Speicher. In **Einstellungen → Updates** lässt sich die installierte Version wiederherstellen.
+
+Das GitHub-Repository ist privat. Als Zugriff dient ein GitHub Fine-grained Token für
+`tariktech7/dado-player` mit **Contents: Read-only**, einmalig als **GitHub-Lese-Token** in den
+Update-Einstellungen des TVs eingetragen. Der Token liegt im lokalen App-Speicher des TVs.
+Ohne Token gibt es keine automatische Abfrage. Der TV prüft jeweils nach dem Start und danach
+alle sechs Stunden. Änderungen am Paket, an Ressourcen, Berechtigungen oder am Startprogramm
+benötigen ein neues WGT. Dieser Updateweg ist für die Entwicklerinstallation vorgesehen.
+
+Für einen neuen Web-Stand zuerst `tizenBuild` in `release.json` erhöhen und
+`python scripts/release_version.py` im Repository-Stamm ausführen. Danach im TV-Client bauen und
+signieren. Der getrennte P-256-Updateschlüssel liegt außerhalb des Repositories unter
+`~/.dado-player/tizen-update-private.pem`. `DADO_TV_KEY_FILE` kann auf den geschützten
+Speicherort zeigen. Der öffentliche Schlüssel in `tizen/update-key.json` gehört zum WGT.
+
+```powershell
+npm run build
+npm run sign:update -- ../../Releases/Tizen-Updates
+$env:DADO_TIZEN_PROFILE = '2019'
+npm run build
+npm run sign:update -- ../../Releases/Tizen-Updates
+Remove-Item Env:DADO_TIZEN_PROFILE
+npm run publish:update -- ../../Releases/Tizen-Updates
+```
+
+`publish:update` prüft beide Signaturen, Profil und Buildnummer und veröffentlicht beide Varianten
+gemeinsam auf dem privaten Branch `tizen-updates`. Bei geändertem Kompatibilitätswert zeigt die App
+den Hinweis auf das neue WGT an. Der Ablauf orientiert sich am Web-Updater von
+[APL-TV](https://github.com/Knikt/APL-TV/blob/main/app/js/updater.js).
+
 ## Signierung und Installation
 
 1. Apps auf dem TV öffnen, 12345 eingeben, Developer Mode aktivieren, PC-IP eintragen,

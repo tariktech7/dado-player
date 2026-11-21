@@ -3,6 +3,6 @@
   "androidBuild": 33,
   "iosBuild": 28,
   "windowsBuild": 2,
-  "tizenBuild": 2,
+  "tizenBuild": 3,
   "channel": "beta"
 }

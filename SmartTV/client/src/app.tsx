@@ -32,8 +32,11 @@ import { Home } from "./home";
 import { FavoriteMark } from "./favorite-mark";
 import {licenseClient} from './licensing';
 import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
+import { accessStorage, readSlot, saveSlot } from './update-format';
+import { stageUpdate } from './update-client';
 import packageInfo from "../package.json";
-const APP_VERSION = packageInfo.version;
+const APP_VERSION = window.dadoTvBoot?.running.version || packageInfo.version;
+const APP_BUILD = window.dadoTvBoot?.running.build || releaseInfo.tizenBuild;
 import {
   exitApp,
   rememberFocus,
@@ -159,6 +162,7 @@ function Field({
   );
 }
 function App() {
+  useEffect(() => window.dadoTvBoot?.ready(), []);
   const [license,setLicense]=useState(licenseClient.state);
   useEffect(()=>{void prepareCloudDevice().catch(()=>{});},[]);
   useEffect(()=>{const unsubscribe=licenseClient.subscribe(()=>setLicense(licenseClient.state));void licenseClient.init();return unsubscribe;},[]);
@@ -249,6 +253,11 @@ function App() {
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
     [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateToken, setUpdateToken] = useState(() => {
+    try { return localStorage.getItem(accessStorage) || ''; } catch { return ''; }
+  });
+  const [updateReady, setUpdateReady] = useState<'manual' | 'automatic' | null>(null);
+  const updateInProgress = useRef(false);
   const [, repaint] = useState(0),
     playerRef = useRef<Player | null>(null),
     providerRef = useRef<Provider | null>(null),
@@ -1058,41 +1067,45 @@ function App() {
         </div>
       </section>
     );
-  const checkUpdates = async () => {
+  const checkUpdates = async (manual: boolean) => {
+    if (updateInProgress.current) return;
+    updateInProgress.current = true;
     setCheckingUpdate(true);
-    setUpdate(t("Version wird geprüft …", "Checking for updates …"));
+    if (manual) setUpdate(t("Update wird geprüft …", "Checking for updates …"));
     try {
-      const r = await fetch(
-        "https://api.github.com/repos/tariktech7/dado-player/releases?per_page=30",
-      );
-      if (!r.ok) throw new Error("GitHub release unavailable");
-      const releases: {draft: boolean; tag_name: string; assets: {name: string; label: string | null}[]}[] = await r.json();
-      const version = (value: string) => value.split(".").map(Number);
-      const current = version(APP_VERSION);
-      const isCurrentOrNewer = (value: string) => {
-        const candidate = version(value);
-        const difference = candidate.map((value, index) => value - current[index]).find(value => value !== 0);
-        return difference === undefined || difference > 0;
-      };
-      const updateAvailable = releases.some(release => {
-        const tag = /^v(\d+\.\d+\.\d+)(?:-beta)?$/.exec(release.tag_name);
-        return !release.draft && !!tag && isCurrentOrNewer(tag[1]) && release.assets.some(asset => {
-          const label = /^tizen-build-(\d+)$/.exec(asset.label || "");
-          return asset.name === `Dado-Player-Tizen-${tag[1]}.wgt` && !!label && Number(label[1]) > releaseInfo.tizenBuild;
-        });
-      });
-      setUpdate(
-        updateAvailable
-          ? t("Update verfügbar. Installiere es über den verbundenen PC.", "Update available. Install it from the connected PC.")
-          : t("Du verwendest die aktuelle Version.", "You are using the current version."),
-      );
+      const result = await stageUpdate(updateToken);
+      if (result === 'ready') {
+        setUpdateReady(manual ? 'manual' : 'automatic');
+        setUpdate(t('Update geprüft und geladen. Neustart, sobald keine Wiedergabe läuft.', 'Verified update downloaded. Restart once playback is idle.'));
+      } else if (result === 'reinstall') {
+        setUpdate(t('Diese Version benötigt ein neues signiertes TV-Paket vom PC.', 'This version requires a new signed TV package installed from a PC.'));
+      } else if (manual) {
+        setUpdate(result === 'current' ? t('Du verwendest die aktuelle Version.', 'You are using the current version.') :
+          result === 'blocked' ? t('Dieses Update wurde nach einem Startfehler zurückgesetzt.', 'This update was rolled back after a startup error.') :
+          t('GitHub-Zugriff fehlt. Prüfe den Lese-Token und den Update-Kanal.', 'Check the read-only GitHub token and the update channel.'));
+      }
     } catch {
-      setUpdate(t("GitHub-Zugriff fehlt. Auf dem verbundenen PC lässt sich das private Release abrufen und installieren.",
-        "GitHub access is unavailable. Get and install the private release from the connected PC."));
+      if (manual) setUpdate(t('Update konnte nicht sicher geladen werden.', 'The update could not be downloaded safely.'));
     } finally {
+      updateInProgress.current = false;
       setCheckingUpdate(false);
     }
   };
+  useEffect(() => {
+    if (!updateToken || !window.dadoTvBoot) return;
+    const first = setTimeout(() => void checkUpdates(false), 30_000);
+    const interval = setInterval(() => void checkUpdates(false), 6 * 3600_000);
+    return () => { clearTimeout(first); clearInterval(interval); };
+  }, [updateToken, saved.settings.language]);
+  useEffect(() => {
+    if (!updateReady || busy || preview || full || resume || exit || refreshing ||
+        (view !== 'home' && !(view === 'settings' && updateReady === 'manual'))) return;
+    const restart = setInterval(() => {
+      if (!previewRef.current && !fullRef.current &&
+          !document.querySelector('.modal, input:focus:not([readonly])')) location.reload();
+    }, 2500);
+    return () => clearInterval(restart);
+  }, [updateReady, busy, preview, full, resume, exit, view, refreshing]);
   const choose = (
     value: string,
     onChange: (v: string) => void,
@@ -1224,9 +1237,24 @@ function App() {
           <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
         case "updates": return <>
-          <button disabled={checkingUpdate} onClick={() => void checkUpdates()}>
-            {t("GitHub-Update prüfen", "Check for GitHub updates")}
+          <Field label={t('GitHub-Lese-Token', 'Read-only GitHub token')}>
+            <TVInput type="password" autocomplete="off" value={updateToken}
+              onChange={(e) => {
+                const value = e.currentTarget.value.trim();
+                try {
+                  if (value) localStorage.setItem(accessStorage, value);
+                  else localStorage.removeItem(accessStorage);
+                  setUpdateToken(value);
+                } catch { setUpdate(t('Speichern fehlgeschlagen.', 'Could not save the token.')); }
+              }} />
+          </Field>
+          <button disabled={checkingUpdate} onClick={() => void checkUpdates(true)}>
+            {t("GitHub-Update prüfen und installieren", "Check and install GitHub update")}
           </button>
+          {window.dadoTvBoot?.fromUpdate && <button onClick={() => {
+            try { saveSlot({ blocked: Math.max(readSlot().blocked || 0, APP_BUILD) }); location.reload(); }
+            catch { setUpdate(t('Rückkehr fehlgeschlagen.', 'Could not roll back the update.')); }
+          }}>{t('Installierte Version wiederherstellen', 'Restore installed version')}</button>}
           <button
             onClick={() =>
               void start(
@@ -1245,9 +1273,9 @@ function App() {
             Integriertes Testvideo abspielen
           </button>
           {update && <p role="status">{update}</p>}
-          <p class="muted">{t("Samsung installiert signierte Updates für diesen TV über den verbundenen PC.",
-            "Samsung installs signed updates for this TV from the connected PC.")}</p>
-          <p class="muted">{APP_VERSION} · Build {releaseInfo.tizenBuild} · D7</p>
+          <p class="muted">{t('Mit GitHub-Lesezugriff prüft Dado Player automatisch alle sechs Stunden auf signierte Web-Updates.',
+            'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
+          <p class="muted">{APP_VERSION} · Build {APP_BUILD} · D7</p>
         </>;
         case "license": return <>
           <p><strong>{license.text}</strong></p>

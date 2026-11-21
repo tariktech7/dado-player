@@ -9,7 +9,8 @@ if (data.length > 20_000_000) throw new Error("Unexpected widget size");
 const entries = unzipSync(data),
   names = Object.keys(entries),
   text = (n) => new TextDecoder().decode(entries[n]);
-if (entries['version.json'] && JSON.parse(text('version.json')).licenseTestBuild) throw new Error('Test-license builds must never be packaged for distribution');
+const metadata = entries['version.json'] ? JSON.parse(text('version.json')) : {};
+if (metadata.licenseTestBuild) throw new Error('Test-license builds must never be packaged for distribution');
 for (const file of [
   "index.html",
   "config.xml",
@@ -36,7 +37,11 @@ if (
   !text("config.xml").includes(`version="${version}"`)
 )
   throw new Error("Identity/version mismatch");
-if (!text("index.html").includes("$WEBAPIS/webapis/webapis.js"))
+const index = text('index.html');
+const hasSamsungLoader = metadata.update
+  ? !!entries['boot.js'] && index.includes('src="boot.js"') && text('boot.js').includes('$WEBAPIS/webapis/webapis.js')
+  : index.includes('$WEBAPIS/webapis/webapis.js');
+if (!hasSamsungLoader)
   throw new Error("Missing Samsung API loader");
 const signed = !!entries["author-signature.xml"] && !!entries["signature1.xml"];
 if (file.includes("-unsigned") && signed)
