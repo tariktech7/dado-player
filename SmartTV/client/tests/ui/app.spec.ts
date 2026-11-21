@@ -1649,6 +1649,9 @@ test('remote scrolling progresses through intermediate positions and honors redu
   await fixture(page,true,true);await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();
   await expect(page.locator('.channel[data-channel="18"]')).toBeAttached();
   const values=await page.locator('.channel-list').evaluate(async el=>{
+    if (getComputedStyle(el, "::-webkit-scrollbar").display !== "none") {
+      throw new Error("Channel scrollbar is visible");
+    }
     el.querySelector<HTMLElement>('.channel[data-channel="1"]')!.focus({preventScroll:true});
     const values = [el.scrollTop];
     el.querySelector<HTMLElement>('.channel[data-channel="18"]')!.focus({preventScroll:true});

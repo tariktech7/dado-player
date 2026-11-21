@@ -627,13 +627,6 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             (target as f32 * stride - ui.available_height() * 0.5).max(0.0),
         );
     }
-    let previous_scroll_style = ui.spacing().scroll;
-    if desktop || tv {
-        // Reserve space for the thumb before measuring and painting channel rows.
-        let style = &mut ui.spacing_mut().scroll;
-        style.floating = false;
-        style.bar_inner_margin = 8.0 * scale;
-    }
     scroll.show_viewport(ui, |ui, viewport| {
         if indices.is_empty() {
             ui.label("Keine passenden Sender");
@@ -801,9 +794,6 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             }
         });
     });
-    if desktop {
-        ui.spacing_mut().scroll = previous_scroll_style;
-    }
     if let Some(index) = selected {
         let channel = app.library.channels[index].clone();
         app.select_live_channel(play_item(&channel));

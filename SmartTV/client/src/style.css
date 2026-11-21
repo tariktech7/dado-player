@@ -292,8 +292,6 @@ hr {
   min-width: 0;
   overflow: auto;
   padding: 16px 8px 40px 20px;
-  scrollbar-width: thin;
-  scrollbar-color: #55706e transparent;
 }
 .live-shell {
   grid-template-columns: 276px 252px minmax(0, 1fr);
@@ -329,7 +327,6 @@ hr {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  scrollbar-width: thin;
 }
 .category-list button {
   height: 68px;
@@ -370,7 +367,6 @@ hr {
 .channel-list {
   height: 832px;
   overflow: auto;
-  scrollbar-width: thin;
   padding: 4px 7px 4px 4px;
 }
 .channel {
@@ -1003,14 +999,8 @@ hr {
     transition: none !important;
   }
 }
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background: #55706e;
-  border-radius: 4px;
-}
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
 
 #video-host {
   position: absolute;

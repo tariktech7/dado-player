@@ -356,7 +356,6 @@ fn style(ctx: &Context, s: f32) {
         style.spacing.item_spacing = vec2(12.0 * s, 12.0 * s);
         style.spacing.interact_size.y = (48.0 * s).max(23.0);
         style.spacing.button_padding = vec2(16.0 * s, 9.0 * s);
-        style.spacing.scroll.bar_width = 5.0;
         style.animation_time = appearance().navigation_duration_ms / 1000.0;
         for (kind, size) in [
             (egui::TextStyle::Body, 22.0),
@@ -897,18 +896,17 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
             ];
             let language = app.settings.language;
             let refresh_label = language.text("Liste aktualisieren", "Refresh library");
+            let spacing = nav.spacing().item_spacing.y;
+            let total_rows = (rows.len() + 1) as f32;
+            let row_height = (appearance().navigation_row_height * s - spacing)
+                .min(((list_rect.height() + spacing) / total_rows - spacing).max(23.0));
             for (label, view, symbol) in rows
                 .into_iter()
                 .map(|(label, view, icon)| (label, Some(view), icon))
                 .chain(std::iter::once((refresh_label, None, Icon::Refresh)))
             {
-                let (r, _) = nav.allocate_exact_size(
-                    vec2(
-                        nav.available_width(),
-                        appearance().navigation_row_height * s - 8.0 * s,
-                    ),
-                    Sense::hover(),
-                );
+                let (r, _) = nav
+                    .allocate_exact_size(vec2(nav.available_width(), row_height), Sense::hover());
                 let response = nav.interact(
                     r,
                     nav.id().with(view.map(|view| view as u64)),

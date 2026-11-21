@@ -127,6 +127,21 @@ pub fn apply(ctx: &Context, dark: bool) {
     style.spacing.interact_size.y = 28.0;
     style.spacing.indent = 16.0;
     style.spacing.menu_margin = egui::Margin::same(6.0);
+    style.spacing.scroll = egui::style::ScrollStyle {
+        floating: true,
+        bar_width: 0.0,
+        bar_inner_margin: 0.0,
+        bar_outer_margin: 0.0,
+        floating_width: 0.0,
+        floating_allocated_width: 0.0,
+        dormant_background_opacity: 0.0,
+        active_background_opacity: 0.0,
+        interact_background_opacity: 0.0,
+        dormant_handle_opacity: 0.0,
+        active_handle_opacity: 0.0,
+        interact_handle_opacity: 0.0,
+        ..Default::default()
+    };
 
     style.text_styles = text_styles();
     #[cfg(windows)]

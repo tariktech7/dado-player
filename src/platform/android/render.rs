@@ -619,9 +619,11 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
         let old_scissor = gl.is_enabled(glow::SCISSOR_TEST);
         let old_blend = gl.is_enabled(glow::BLEND);
         let old_depth = gl.is_enabled(glow::DEPTH_TEST);
+        let ui_fbo = painter.intermediate_fbo();
 
         // Full framebuffer, matching fbo.w/h. Whether mpv sets its own
         // viewport from those dimensions or honours this one, both agree.
+        gl.bind_framebuffer(glow::FRAMEBUFFER, selected.map(|t| t.fbo).or(ui_fbo));
         gl.viewport(0, 0, render_width, render_height);
         gl.disable(glow::SCISSOR_TEST);
         gl.disable(glow::DEPTH_TEST);
@@ -634,8 +636,10 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
             *slot = None;
         }
 
+        // mpv changes the framebuffer while rendering. Restore the UI's
+        // framebuffer for both fullscreen playback and the preview copy.
+        gl.bind_framebuffer(glow::FRAMEBUFFER, ui_fbo);
         if let Some(t) = selected {
-            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
             gl.viewport(
                 viewport.left_px,
                 viewport.from_bottom_px,
@@ -652,7 +656,6 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
             if error != glow::NO_ERROR {
                 set_err(format!("Vorschau-Kopie: OpenGL {error}"));
             }
-            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
         }
         gl.viewport(old_vp[0], old_vp[1], old_vp[2], old_vp[3]);
         gl.scissor(

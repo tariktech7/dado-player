@@ -60,8 +60,8 @@ def main():
         install_windows(sys.argv[2])
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
     tv = json.loads((ROOT / "SmartTV/client/package.json").read_text())["version"]
-    for file in RELEASES.glob("Dado-Player-Tizen-*.wgt"):
-        version = re.fullmatch(r"Dado-Player-Tizen-(\d+\.\d+\.\d+)(?:-unsigned)?\.wgt", file.name)
+    for file in RELEASES.glob("Dado-Player-Tizen*.wgt"):
+        version = re.fullmatch(r"Dado-Player-Tizen(?:5)?-(\d+\.\d+\.\d+)(?:-unsigned)?\.wgt", file.name)
         if version and version[1] != tv:
             archive(file, "Samsung-Tizen", version[1])
     ipa = RELEASES / "Dado-Player-unsigned.ipa"

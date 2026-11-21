@@ -260,17 +260,13 @@ pub fn show(app: &mut App, ctx: &Context) {
 }
 
 fn touch_style(ctx: &Context) {
-    if ctx.style().spacing.interact_size == egui::vec2(tokens::TOUCH, tokens::TOUCH)
-        && ctx.style().spacing.scroll.bar_width == 3.0
-    {
+    if ctx.style().spacing.interact_size == egui::vec2(tokens::TOUCH, tokens::TOUCH) {
         return;
     }
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(8.0, 8.0);
     style.spacing.button_padding = egui::vec2(14.0, 10.0);
     style.spacing.interact_size = egui::vec2(tokens::TOUCH, tokens::TOUCH);
-    style.spacing.scroll.bar_width = 3.0;
-    style.spacing.scroll.floating = true;
     style
         .text_styles
         .insert(egui::TextStyle::Body, tokens::reg(tokens::FS_BODY));
@@ -293,14 +289,13 @@ fn touch_style(ctx: &Context) {
 /// values — deliberately NOT a global `pixels_per_point` multiplier (§23.5),
 /// which would blur the measured fonts and break the phone geometry.
 fn tv_style(ctx: &Context) {
-    if ctx.style().spacing.interact_size.y == 36.0 && ctx.style().spacing.scroll.bar_width == 5.0 {
+    if ctx.style().spacing.interact_size.y == 36.0 {
         return;
     }
     let mut style = (*ctx.style()).clone();
     style.spacing.item_spacing = egui::vec2(6.0, 6.0);
     style.spacing.button_padding = egui::vec2(10.0, 6.0);
     style.spacing.interact_size = egui::vec2(36.0, 36.0);
-    style.spacing.scroll.bar_width = 5.0;
     style
         .text_styles
         .insert(egui::TextStyle::Body, tokens::reg(16.0));
