@@ -737,14 +737,7 @@ impl App {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
 
-        // Resolve the presentation mode every frame: the user can switch it in
-        // settings and expects the screen to change immediately, not after a
-        // restart. `IPTV_TV` is a desktop-only QA hook (see below).
-        let tv = ui::mobile::use_tv_layout(
-            self.settings.tv_mode,
-            crate::platform::tv_device(),
-            ui::mobile::handheld_landscape(ctx),
-        ) || std::env::var("IPTV_TV").is_ok();
+        let tv = crate::platform::tv_device() || std::env::var_os("IPTV_TV").is_some();
         if tv && !self.tv {
             let section = if self.view == View::Player {
                 self.previous_view
@@ -883,7 +876,7 @@ impl App {
             }
 
             if jni_bridge::take_back() {
-                if crate::platform::text_focus() {
+                if crate::platform::text_focus() || ctx.wants_keyboard_input() {
                     // BACK while editing ends text entry; it must not fall
                     // through to mobile_back() -> "leave the app". On a TV
                     // this is the only way out of a focused field with a D-pad.
@@ -893,12 +886,18 @@ impl App {
                     }
                     crate::platform::set_text_focus(false);
                 } else {
-                    self.mobile_back();
+                    if !crate::ui::desktop::color_shortcut(self, ctx, egui::Key::Escape) {
+                        self.mobile_back();
+                    }
                 }
                 ctx.request_repaint();
             }
             // AppCompatActivity asks before it finishes the activity.
-            jni_bridge::set_can_back(self.mobile_can_back() || crate::platform::text_focus());
+            jni_bridge::set_can_back(
+                self.active_profile.is_some()
+                    || self.mobile_can_back()
+                    || crate::platform::text_focus(),
+            );
         }
 
         // Poll the player and keep playback progress + stream metadata in memory.
@@ -989,6 +988,20 @@ impl App {
         // Drain unconditionally so the native key queue never backs up on the
         // desktop UI, where there is nothing to focus.
         let mut keys = crate::platform::drain_remote_keys();
+        if !crate::platform::text_focus() && !ctx.wants_keyboard_input() {
+            keys.retain(|key| {
+                use crate::platform::RemoteKey;
+                let color = match key {
+                    RemoteKey::Red => egui::Key::F1,
+                    RemoteKey::Green => egui::Key::F2,
+                    RemoteKey::Yellow => egui::Key::F3,
+                    RemoteKey::Blue => egui::Key::F4,
+                    _ => return true,
+                };
+                crate::ui::desktop::color_shortcut(self, ctx, color);
+                false
+            });
+        }
         let recall = keys.contains(&crate::platform::RemoteKey::Recall)
             || ctx.input(|input| {
                 input.events.iter().any(|event| {
@@ -1004,11 +1017,12 @@ impl App {
                 })
             });
         keys.retain(|key| *key != crate::platform::RemoteKey::Recall);
+        let player_options_open =
+            ui::player_desktop::menus_open(ctx) || self.audio_menu_open || self.sub_menu_open;
         if recall
             && !ctx.wants_keyboard_input()
             && !self.parental.open
-            && !self.audio_menu_open
-            && !self.sub_menu_open
+            && !player_options_open
             && (self.view == View::Live
                 || (self.view == View::Player
                     && self
@@ -1025,8 +1039,7 @@ impl App {
                 .is_some_and(|p| p.kind == PlayKind::Live)
             && !ctx.wants_keyboard_input()
             && !self.parental.open
-            && !self.audio_menu_open
-            && !self.sub_menu_open
+            && !player_options_open
         {
             use crate::platform::RemoteKey;
             for key in &keys {
@@ -1073,6 +1086,7 @@ impl App {
                 .current_play
                 .as_ref()
                 .is_some_and(|p| p.kind != PlayKind::Live)
+            && !player_options_open
         {
             use crate::platform::RemoteKey;
             if !self.player_chrome {
@@ -1122,9 +1136,8 @@ impl App {
             .map(|item| item.progress_key.clone());
         let pending_resume_before_draw =
             self.pending_resume.as_ref().map(|(key, _, _)| key.clone());
-        #[cfg(windows)]
         let returning_to_catalog = self.desktop_return_item.is_some() && self.view != View::Player;
-        let mobile = crate::ui::mobile::active(ctx);
+        let mobile = cfg!(any(target_os = "android", target_os = "ios")) || self.tv;
         if mobile {
             // Screen fingerprint: a new screen restarts focus at its first
             // control. View is Copy, so `as u64` is legal.
@@ -1140,19 +1153,10 @@ impl App {
                 | (self.pending_delete.is_some() as u64) << 2
                 | (self.parental.open as u64) << 1;
             let pointer_used = ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down());
-            // A scrim-covered overlay makes every control underneath it
-            // unreachable by D-pad; the focus engine switches to a modal scope.
-            // Mirror the routing in ui::mobile::show(): it early-returns for
-            // the player and the login screen, so `more::sheet()` (and thus
-            // begin_modal) is only reachable from the library shell. Flagging a
-            // modal that never opens would suppress EVERY control on a frame.
             let in_shell = self.active_profile.is_some() && self.view != View::Player;
-            // The "Mehr" sheet belongs to the phone shell only. If a user
-            // switches to TV while it is open, flagging a modal that never
-            // draws would suppress EVERY TV control on that frame.
             let modal = (!in_shell && self.pending_delete.is_some())
-                || (!self.tv && in_shell && self.mobile_more)
-                || self.description_open.is_some();
+                || self.description_open.is_some()
+                || (self.tv && ui::desktop::exit_prompt(ctx));
 
             // PlayPause is a global media key. On the player it must only toggle
             // pause, not also select the focused control: focus restarts at idx 0
@@ -1212,6 +1216,10 @@ impl App {
                 self.desktop_origin_focus = None;
                 ctx.request_repaint();
             }
+        }
+        #[cfg(not(windows))]
+        if returning_to_catalog && self.desktop_return_item.take().is_some() {
+            ctx.request_repaint();
         }
         #[cfg(target_os = "ios")]
         crate::platform::ios::bridge::end_frame(ctx);
@@ -1301,35 +1309,9 @@ impl App {
             crate::licensing::blocked_screen(ctx);
             return;
         }
-        #[cfg(target_os = "windows")]
-        if self.view == View::Player && self.current_play.is_some() {
-            crate::ui::desktop::show(self, ctx);
-            ui::palette::show(self, ctx);
-            return;
-        }
-        // Touch UI: phone / tablet. Takes over the whole window.
-        if ui::mobile::active(ctx) {
-            ui::mobile::show(self, ctx);
-            ui::library::description_dialog(self, ctx);
-            ui::palette::show(self, ctx);
-            return;
-        }
-
         // Leaving the channel list closes the preview (and stops its audio).
         if self.view != View::Live && self.preview.is_some() {
             self.close_preview();
-        }
-
-        if self.view == View::Player && self.current_play.is_some() {
-            crate::ui::desktop::show(self, ctx);
-            ui::palette::show(self, ctx);
-            return;
-        }
-
-        if self.active_profile.is_none() {
-            ui::login::show(self, ctx);
-            ui::palette::show(self, ctx);
-            return;
         }
 
         crate::ui::desktop::show(self, ctx);
@@ -2266,7 +2248,6 @@ impl App {
         let radio = self.is_radio(&item.progress_key);
         if let Some(pl) = &mut self.player {
             pl.current_key = item.progress_key.clone();
-            #[cfg(target_os = "windows")]
             pl.mpv.set_desktop_aspect(crate::types::DesktopAspect::Fit);
             // Audio-only for radio stations (and back to video afterwards).
             if radio {
@@ -2276,6 +2257,8 @@ impl App {
             }
             #[cfg(target_os = "android")]
             crate::platform::android::render::request_load(&item.url, 0.0);
+            #[cfg(target_os = "ios")]
+            crate::platform::ios::bridge::native_player(false);
             #[cfg(not(target_os = "android"))]
             pl.mpv.load(&item.url);
             pl.mpv.set_volume(vol);
@@ -2313,8 +2296,12 @@ impl App {
     pub fn promote_preview(&mut self, fullscreen: bool) {
         if let Some(item) = self.preview.take() {
             self.previous_view = View::Live;
+            #[cfg(target_os = "ios")]
+            if self.settings.ios_native_player {
+                self.play(item);
+                return;
+            }
             self.current_play = Some(item);
-            #[cfg(target_os = "windows")]
             if let Some(player) = &self.player {
                 player.mpv.set_desktop_aspect(self.settings.desktop_aspect);
             }
@@ -2902,7 +2889,6 @@ impl App {
         }
     }
 
-    #[cfg(windows)]
     fn queue_desktop_player_return(&mut self) {
         if let Some(item) = &self.current_play {
             self.desktop_return_item = Some(item.progress_key.clone());
@@ -2915,15 +2901,16 @@ impl App {
         }
     }
 
-    #[cfg(windows)]
     pub(crate) fn back_from_player(&mut self) {
         if self.previous_view == View::Live
+            && !(cfg!(target_os = "ios") && self.settings.ios_native_player)
             && self
                 .current_play
                 .as_ref()
                 .is_some_and(|item| item.kind == PlayKind::Live)
         {
             self.queue_desktop_player_return();
+            #[cfg(windows)]
             self.desktop_overlay.hide();
             if let Some(player) = &self.player {
                 player
@@ -2968,7 +2955,6 @@ impl App {
         }
         self.save_user_data();
         self.reset_track_state();
-        #[cfg(windows)]
         self.queue_desktop_player_return();
         self.current_play = None;
         self.view = self.previous_view;
@@ -3569,6 +3555,7 @@ mod scroll_profile {
 
     #[test]
     fn catalogue_scroll_work_is_bounded_by_viewport() {
+        let mut small_catalogue_peak = 0;
         for category_count in [20, 1000] {
             let mut app = App::test_app();
             app.library.vod_categories = (0..category_count)
@@ -3594,6 +3581,7 @@ mod scroll_profile {
             crate::theme::apply(&ctx, true);
             let mut times = Vec::new();
             let mut shapes = 0;
+            let mut peak_shapes = 0;
             for frame in 0..90 {
                 let start = std::time::Instant::now();
                 let output = ctx.run(
@@ -3615,8 +3603,9 @@ mod scroll_profile {
                     },
                 );
                 shapes = output.shapes.len();
+                peak_shapes = peak_shapes.max(shapes);
                 assert!(
-                    shapes < 200,
+                    shapes < 260,
                     "Offscreen categories generated {shapes} paint shapes"
                 );
                 let _ = ctx.tessellate(output.shapes, output.pixels_per_point);
@@ -3625,6 +3614,14 @@ mod scroll_profile {
                 }
             }
             times.sort_by(f64::total_cmp);
+            if category_count == 20 {
+                small_catalogue_peak = peak_shapes;
+            } else {
+                assert!(
+                    peak_shapes <= small_catalogue_peak + 16,
+                    "Offscreen categories inflated the visible shape budget: {small_catalogue_peak} → {peak_shapes}"
+                );
+            }
             println!("CATALOGUE CPU categories={category_count} movies=20000 shapes={shapes} median_ms={:.2} p95_ms={:.2}",times[times.len()/2],times[times.len()*95/100]);
         }
     }
@@ -4108,9 +4105,11 @@ mod tests {
         app.view = View::Live;
 
         let shared_width = crate::ui::desktop::appearance().live_preview_width;
-        for (width, height, expected_width) in
-            [(1920.0, 1080.0, shared_width), (1280.0, 420.0, 396.0)]
-        {
+        for (width, height, expected_width) in [
+            (1920.0, 1080.0, shared_width),
+            (1280.0, 420.0, 356.0),
+            (740.0, 360.0, shared_width * 740.0 / 1920.0),
+        ] {
             let ctx = egui::Context::default();
             crate::fonts::install(&ctx);
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));

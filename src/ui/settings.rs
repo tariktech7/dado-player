@@ -153,7 +153,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .ctx()
         .data(|data| data.get_temp::<usize>(section_key).unwrap_or(0));
     let mobile = super::mobile::active(ui.ctx());
-    if !mobile && ui.available_width() >= 600.0 {
+    if super::desktop::active(ui.ctx()) && ui.available_width() >= 275.0 {
         let scale = super::desktop::scale(ui.ctx());
         ui.heading(t("Einstellungen", "Settings"));
         ui.add_space(12.0 * scale);
@@ -170,23 +170,19 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         .id_source("settings-menu")
                         .show(ui, |ui| {
                             ui.add_space(4.0 * scale);
+                            super::mobile::focus::set_zone(1);
                             for (index, section) in sections().iter().enumerate() {
                                 if section.id == "license" && !cfg!(target_os = "windows") {
                                     continue;
                                 }
                                 let label = language.text(&section.de, &section.en);
-                                if ui
-                                    .add_sized(
-                                        [
-                                            (ui.available_width() - 8.0 * scale).max(0.0),
-                                            42.0 * scale,
-                                        ],
-                                        egui::Button::new(label)
-                                            .selected(current == index)
-                                            .rounding(12.0 * scale),
-                                    )
-                                    .clicked()
-                                {
+                                let response = ui.add_sized(
+                                    [(ui.available_width() - 8.0 * scale).max(0.0), 42.0 * scale],
+                                    egui::Button::new(label)
+                                        .selected(current == index)
+                                        .rounding(12.0 * scale),
+                                );
+                                if activate(ui, &response) {
                                     current = index;
                                     ui.ctx()
                                         .data_mut(|data| data.insert_temp(section_key, current));
@@ -195,11 +191,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         });
                 },
             );
-            let panel_width = (width - menu_width - ui.spacing().item_spacing.x).max(260.0);
+            let panel_width = (width - menu_width - ui.spacing().item_spacing.x).max(1.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(panel_width, height),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
+                    super::mobile::focus::set_zone(2);
                     ui.set_width(panel_width);
                     if let Some(section) = sections().get(current) {
                         egui::ScrollArea::vertical()
@@ -336,7 +333,7 @@ fn panel(
                         &mut app.settings.theme,
                         &themes,
                     );
-                    if mobile {
+                    if mobile && !super::desktop::active(ui.ctx()) {
                         use crate::types::TvMode;
                         *changed |= select(
                             ui,

@@ -71,6 +71,7 @@ extern "C" {
     fn dado_host_motion_active(active: i32);
     fn dado_host_copy_device_address(address: *const c_char);
     fn dado_host_options(json: *const c_char);
+    fn dado_host_aspect(mode: i32);
     fn dado_host_native_player(enabled: i32);
     fn dado_host_tracks(buffer: *mut c_char, capacity: i32) -> i32;
     fn dado_host_current_track(kind: i32) -> i64;
@@ -117,6 +118,16 @@ pub fn copy_device_address(address: &str) -> bool {
 
 pub fn native_player(enabled: bool) {
     unsafe { dado_host_native_player(enabled as i32) }
+}
+
+pub fn set_aspect(aspect: crate::types::DesktopAspect) {
+    use crate::types::DesktopAspect;
+    let mode = match aspect {
+        DesktopAspect::Auto | DesktopAspect::Fit => 0,
+        DesktopAspect::Fill => 1,
+        DesktopAspect::Stretch => 2,
+    };
+    unsafe { dado_host_aspect(mode) };
 }
 
 pub fn configure(settings: &crate::types::Settings) {

@@ -380,7 +380,6 @@ impl ClockFormat {
     }
 }
 
-#[cfg(target_os = "windows")]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DesktopAspect {
     Auto,
@@ -392,7 +391,6 @@ pub enum DesktopAspect {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    #[cfg(target_os = "windows")]
     #[serde(default)]
     pub desktop_aspect: DesktopAspect,
     #[serde(default)]
@@ -490,7 +488,6 @@ fn default_sub_size() -> f32 {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            #[cfg(target_os = "windows")]
             desktop_aspect: DesktopAspect::default(),
             language: AppLanguage::default(),
             clock_format: ClockFormat::default(),

@@ -10,7 +10,8 @@ const POSTER_H: f32 = 166.0;
 
 /// Full-width content dashboard inspired by the supplied reference capture.
 pub fn show(app: &mut App, ui: &mut Ui) {
-    if mobile_active(ui.ctx()) && !app.tv && ui.available_width() < 940.0 {
+    let shared = super::desktop::active(ui.ctx());
+    if !shared && mobile_active(ui.ctx()) && !app.tv && ui.available_width() < 940.0 {
         let pad = if ui.available_width() < 360.0 {
             12.0
         } else {
@@ -21,9 +22,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             .show(ui, |ui| show_content(app, ui, true));
         return;
     }
-    if ui.available_width() >= if app.tv { 620.0 } else { 940.0 } {
-        let gap = 20.0;
-        let right = (ui.available_width() * 0.28).clamp(if app.tv { 180.0 } else { 280.0 }, 340.0);
+    if ui.available_width()
+        >= if shared {
+            350.0
+        } else if app.tv {
+            620.0
+        } else {
+            940.0
+        }
+    {
+        let scale = if shared {
+            super::desktop::scale(ui.ctx())
+        } else {
+            1.0
+        };
+        let gap = 20.0 * scale;
+        let right = (ui.available_width() * 0.28).clamp(180.0 * scale, 440.0 * scale);
         let left = ui.available_width() - right - gap;
         let height = ui.available_height();
         ui.horizontal_top(|ui| {
@@ -696,7 +710,7 @@ fn live_rail(
             });
         });
     if let Some(item) = play {
-        if mobile_active(ui.ctx()) && !app.tv {
+        if !super::desktop::active(ui.ctx()) && mobile_active(ui.ctx()) && !app.tv {
             app.play(item);
         } else {
             app.start_preview(item);

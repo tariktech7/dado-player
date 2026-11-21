@@ -8,6 +8,7 @@ import {
 import { createPortal } from "preact/compat";
 import { Item, Category, Watched, itemKey } from "./types";
 import { TVInput } from "./input";
+import { FavoriteMark } from "./favorite-mark";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 
 export function resumeEpisode(episodes: Item[], history: Watched[]) {
@@ -193,10 +194,12 @@ function PosterGrid({
   items,
   selected,
   select,
+  favoriteKeys,
 }: {
   items: Item[];
   selected: Item | null;
   select: (i: Item) => void;
+  favoriteKeys: ReadonlySet<string>;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0),
@@ -254,10 +257,12 @@ function PosterGrid({
             key={itemKey(i)}
             data-grid-index={start * columns + n}
             data-focus-key={itemKey(i)}
+            data-favorite={favoriteKeys.has(itemKey(i))}
             class={`catalog-poster ${selected?.id === i.id ? "selected" : ""}`}
             onClick={() => select(i)}
           >
             <span class="poster-art">
+              <span class="poster-favorite"><FavoriteMark marked={favoriteKeys.has(itemKey(i))} /></span>
               {i.logo ? (
                 <img
                   src={i.logo}
@@ -318,18 +323,19 @@ export function CatalogBrowser({
   toggle: (i: Item) => void;
   play: (i: Item, pos: number) => void;
 }) {
+  const favoriteKeys = useMemo(() => new Set(favorites.map(itemKey)), [favorites]);
+  const categoryFavorites = category === "favorites" ? favoriteKeys : null;
   const filtered = useMemo(() => {
-    const keys = new Set(favorites.map(itemKey)),
-      q = query.toLocaleLowerCase();
+    const q = query.toLocaleLowerCase();
     return items.filter(
       (i) =>
         (category === "all" ||
           (category === "favorites"
-            ? keys.has(itemKey(i))
+            ? categoryFavorites?.has(itemKey(i))
             : i.category === category)) &&
         i.name.toLocaleLowerCase().includes(q),
     );
-  }, [items, category, query, favorites]);
+  }, [items, category, query, categoryFavorites]);
   const item = detail?.id === selected?.id ? detail : selected;
   const preview = useRef<HTMLElement>(null);
   const [activation, setActivation] = useState(0);
@@ -386,7 +392,7 @@ export function CatalogBrowser({
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
-        <PosterGrid items={filtered} selected={selected} select={activate} />
+        <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} />
       </section>
       <aside ref={preview} class="catalog-details" data-focus-zone="details">
         <h2>{item?.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
@@ -396,10 +402,9 @@ export function CatalogBrowser({
               {item.logo && <img src={item.logo} alt="" />}
               <div>
                 <h2>{item.name}</h2>
-                <button onClick={() => toggle(item)}>
-                  {favorites.some((f) => itemKey(f) === itemKey(item))
-                    ? "★ Favorit"
-                    : "☆ Merken"}
+                <button class="favorite-toggle" aria-pressed={favoriteKeys.has(itemKey(item))} onClick={() => toggle(item)}>
+                  <FavoriteMark marked={favoriteKeys.has(itemKey(item))} />
+                  {favoriteKeys.has(itemKey(item)) ? "Favorit" : "Merken"}
                 </button>
               </div>
             </div>

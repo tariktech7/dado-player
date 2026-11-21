@@ -691,6 +691,10 @@ pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativeOnKey(
         23 | 66 | 160 => RemoteKey::Ok, // DPAD_CENTER / ENTER / NUMPAD_ENTER
         7 | 144 => RemoteKey::Recall,   // KEYCODE_0 / KEYCODE_NUMPAD_0
         85 | 126 | 127 => RemoteKey::PlayPause, // MEDIA_PLAY_PAUSE / PLAY / PAUSE
+        183 => RemoteKey::Red,
+        184 => RemoteKey::Green,
+        185 => RemoteKey::Yellow,
+        186 => RemoteKey::Blue,
         // BACK is not forwarded by Java today: it goes through the existing
         // onBackPressed() -> nativeRequestBack() -> App::mobile_back() chain
         // instead, so popping a second time here would fire twice. The mapping

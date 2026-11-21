@@ -730,14 +730,17 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await first.click();
   const second = page.locator('.channel[data-channel="2"]');
   await second.focus();
+  await expect(second.locator(".favorite-mark")).toHaveAttribute("fill", "none");
   await color(405);
   await color(405, true);
+  await expect(second.locator(".favorite-mark")).toHaveAttribute("fill", "currentColor");
   await page.getByRole("button", { name: "Favoriten", exact: true }).click();
   await expect(page.locator(".channel")).toHaveCount(1);
   await expect(second).toBeVisible();
   await second.click();
   await second.click();
   await expect(page.locator(".fullscreen")).toBeVisible();
+  await expect(page.locator(".fullscreen").getByRole("button", { name: "Favorit" })).toHaveAttribute("aria-pressed", "true");
   await color(406);
   await expect(page.locator(".player-options")).toBeVisible();
   await expect(legend.getByRole("listitem")).toHaveText(["Zurück", "Live TV", "Favorit", "Optionen"]);
@@ -1644,10 +1647,13 @@ test('OK focuses the movie/series play action, including episodes that arrive la
 
 test('remote scrolling progresses through intermediate positions and honors reduced motion',async({page})=>{
   await fixture(page,true,true);await page.goto('/');await page.getByRole('button',{name:'▣ Live TV',exact:true}).click();
-  await page.locator('.channel[data-channel="1"]').evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));
-  await page.locator('.channel[data-channel="18"]').evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));
+  await expect(page.locator('.channel[data-channel="18"]')).toBeAttached();
   const values=await page.locator('.channel-list').evaluate(async el=>{
-    const values:number[]=[];for(let i=0;i<32;i++){values.push(el.scrollTop);await new Promise(requestAnimationFrame);}return values;
+    el.querySelector<HTMLElement>('.channel[data-channel="1"]')!.focus({preventScroll:true});
+    const values = [el.scrollTop];
+    el.querySelector<HTMLElement>('.channel[data-channel="18"]')!.focus({preventScroll:true});
+    for(let i=0;i<32;i++){await new Promise(requestAnimationFrame);values.push(el.scrollTop);}
+    return values;
   });
   expect(values[values.length-1]).toBeGreaterThan(300);
   expect(new Set(values.map(Math.round)).size).toBeGreaterThan(4);

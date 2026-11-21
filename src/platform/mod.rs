@@ -147,6 +147,10 @@ pub enum RemoteKey {
     Back,
     PlayPause,
     Recall,
+    Red,
+    Green,
+    Yellow,
+    Blue,
 }
 
 /// Is this a television device?

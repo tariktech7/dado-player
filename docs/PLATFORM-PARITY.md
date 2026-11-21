@@ -1,7 +1,7 @@
-# Gemeinsamer Produktstand 0.7.9
+# Gemeinsamer Produktstand 0.8.0 Beta 1
 
-`release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Android-Buildnummer
-28 und iOS-Buildnummer 23 bleiben eigenständig monoton steigend. Nach Änderungen
+`release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Die vier
+Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -15,7 +15,8 @@
 | Kataloge | Filme/Serien: Favoriten zuerst; Poster und eigene Detailansicht. Live-TV: alle Sender und Favoriten. |
 | Seitenleiste (Windows und Samsung) | Öffnet sich beim Überfahren mit der Maus. Ohne Auswahl klappt sie 700 ms nach dem Verlassen ein. Ein Klick auf einen Menüpunkt lässt sie geöffnet. |
 | Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und vier Elementen in der Hauptleiste. Ton, Untertitel, Bildformat und Beenden stehen unter Optionen. Windows behält die native Vollbild- und Lautstärkesteuerung. |
-| Live-Vorschau (Windows und Samsung) | Gemeinsame Breite von 640 Einheiten bei 1920 × 1080, 16:9-Fläche und vollständiges Streambild mit erhaltenem Seitenverhältnis. Die Programmdetails bleiben separat scrollbar. |
+| Live-Vorschau | 712 Einheiten bei 1920 × 1080, auf schmaleren oder kürzeren Flächen entsprechend begrenzt. 16:9-Fläche mit vollständigem Streambild. Programmdetails bleiben separat scrollbar. |
+| Favoritenstatus | Gefüllter Stern für gemerkte Inhalte, leerer Stern für andere. In Live-Zeilen, Film- und Serienpostern, Details und Player anzeigen. |
 | Liste aktualisieren | Sender, Filme und Serien des aktiven Profils neu laden. Bei einem Teilfehler bleiben die bisherigen Einträge des betroffenen Bereichs verfügbar. |
 | Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |
 | Fortsetzen | Direkt fortsetzen. Bei höchstens 60 Sekunden Rest die nächste Folge; fertige Filme neu beginnen. Noch fehlende Episodendaten asynchron laden und einen überholten Startauftrag verwerfen. |
@@ -32,8 +33,7 @@ Die Werte für Zeitgrenzen, Verlaufslimit und den Standard für automatischen St
 | --- | --- | --- | --- |
 | Player | libmpv | AVPlayerLayer mit Dado-Overlay; Apple-Steuerung optional | AVPlay |
 | Eingabe | Maus/Tastatur bzw. Touch und Android-TV-Fernbedienung | Touch, native Inline-Tastatur | Fernbedienung, Tastatur erst nach Aktivierung |
-| Touch-UI | Android: Kategorien-Dropdown, Suche, volle Detailseite mit Rand-Zurück | Gleiches Touch-Konzept | Spalten, Fokusgedächtnis, feste Vorschau |
-| TV-/Desktop-UI | Kategorien, Poster/Sender, Detailbereich; unabhängige Fokuszonen | Nur bei breiter Darstellung/TV-Modus sinnvoll | Spalten und virtuelle Listen |
+| Layout | Android ausschließlich Querformat. Gleiches Raster wie Windows, auf Android TV mit Fernbedienungsfokus. | Ausschließlich Querformat, mit sicheren Rändern und nativer Tastatur. | Gleiches Raster mit Tizen-Fokuszonen und virtuellen Listen. |
 | Lizenz | Windows: 7 Tage Trial, manuelle Dauerfreigabe; Android: noch keine Kaufsperre | Keine Kaufsperre bis IAP | Gleiche Trial-/Freigabelogik wie Windows |
 | Updates | Portable ersetzt eigene EXE; Android öffnet Systeminstaller | IPA herunterladen, mit eigener Apple-ID neu signieren/installieren | Signatur, TV-Berechtigung und Samsung-Verteilweg erforderlich |
 | Puffer/Timeout | libmpv-Netzwerkoptionen | Automatisch AVPlayer für HLS / VLC für Dateien, begrenzter Fallback; Puffer und Lade-Watchdog | AVPlay-Optionen nach Geräteunterstützung |

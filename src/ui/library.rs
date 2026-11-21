@@ -72,7 +72,7 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let scale = super::desktop::scale(ui.ctx());
         let landscape = super::mobile::handheld_landscape(ui.ctx());
         let narrow = a.width() < 620.0 && !landscape;
-        let gap = 10.0;
+        let gap = if desktop { 24.0 * scale } else { 10.0 };
         let cw = if desktop {
             super::desktop::category_width(a.width(), scale)
         } else if landscape {
@@ -83,7 +83,7 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             (a.width() * 0.25).clamp(174.0, 244.0)
         };
         let dw = if desktop {
-            super::desktop::appearance().catalog_preview_width * scale
+            (super::desktop::appearance().catalog_preview_width * scale).min(a.width() * 0.45)
         } else if landscape {
             (a.width() * 0.39).min(340.0)
         } else if narrow {
@@ -113,12 +113,15 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
                 0.0,
                 egui::Color32::from_black_alpha(24),
             );
+            focus::set_zone(1);
             super::desktop::column(ui, cr, "catalog-categories", offset, |ui| {
                 categories(app, ui, series)
             });
+            focus::set_zone(2);
             super::desktop::column(ui, lr, "catalog-posters", offset, |ui| {
                 posters(app, ui, series, false)
             });
+            focus::set_zone(3);
             super::desktop::column(ui, dr, "catalog-details", 0.0, |ui| {
                 super::desktop::catalog_heading(
                     ui,
@@ -306,7 +309,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
                         tokens::reg(if desktop {
-                            21.0 * scale
+                            (21.0 * scale).max(11.0)
                         } else if tv {
                             12.0
                         } else {
@@ -413,6 +416,8 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
     rows
 }
 fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
+    let desktop = super::desktop::active(ui.ctx());
+    let scale = super::desktop::scale(ui.ctx());
     let tv = app.tv;
     if !touch {
         if super::desktop::active(ui.ctx()) {
@@ -435,11 +440,12 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                 .size(18.0),
             );
         }
-        if super::desktop::active(ui.ctx()) {
-            ui.add_sized(
-                [ui.available_width(), 56.0 * super::desktop::scale(ui.ctx())],
-                egui::TextEdit::singleline(&mut app.catalog_queries[usize::from(series)])
-                    .hint_text("Titel suchen"),
+        if desktop {
+            super::desktop::search_field(
+                ui,
+                &mut app.catalog_queries[usize::from(series)],
+                "Titel suchen",
+                tv,
             );
         } else {
             let mut reveal = false;
@@ -520,16 +526,14 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                             ui.interact(rect, poster_scope.with(entry.id), Sense::click());
                         if returning_movie == Some(entry.id) {
                             response.request_focus();
+                            if tv {
+                                focus::request_id(response.id);
+                            }
                             app.desktop_return_item = None;
                         }
-                        #[cfg(windows)]
-                        if response.has_focus() {
-                            let kind = if series { "series" } else { "vod" };
-                            super::desktop::remember_favorite_target(
-                                &response,
-                                &format!("{kind}:{}", entry.id),
-                            );
-                        }
+                        let kind = if series { "series" } else { "vod" };
+                        let key = format!("{kind}:{}", entry.id);
+                        super::desktop::remember_favorite_target(&response, &key);
                         if ui.is_rect_visible(rect) {
                             ui.painter().rect_filled(
                                 rect.shrink(1.0),
@@ -559,6 +563,16 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                                 art,
                                 &entry.name,
                             );
+                            if desktop {
+                                let radius = (12.0 * scale).max(6.0);
+                                let center = art.right_top() + vec2(-radius - 3.0, radius + 3.0);
+                                ui.painter().circle_filled(
+                                    center,
+                                    radius + 3.0,
+                                    ui.visuals().panel_fill,
+                                );
+                                super::favorite_star(ui, center, radius, app.is_favorite(&key));
+                            }
                             let mut job = egui::text::LayoutJob::simple(
                                 entry.name.clone(),
                                 tokens::medium(if tv { 11.0 } else { 13.0 }),
@@ -645,11 +659,17 @@ fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
             );
             job.wrap.max_rows = 2;
             ui.label(job);
-            let response = ui.button(if app.is_favorite(&key) {
-                "★ Favorit"
-            } else {
-                "☆ Merken"
-            });
+            let response = ui
+                .horizontal(|ui| {
+                    let response = crate::ui::fav_button(app, ui, &key);
+                    ui.label(if app.is_favorite(&key) {
+                        app.settings.language.text("Favorit", "Favorite")
+                    } else {
+                        app.settings.language.text("Merken", "Save")
+                    });
+                    response
+                })
+                .inner;
             if series && app.catalog_focus_play && app.series_episodes_for(entry.id).is_none() {
                 let key = ui
                     .id()
@@ -661,9 +681,6 @@ fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                         focus::request_id(response.id);
                     }
                 }
-            }
-            if hit(ui, &response, tv) {
-                app.toggle_favorite(&key);
             }
         });
     });

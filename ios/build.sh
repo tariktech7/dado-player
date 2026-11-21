@@ -196,7 +196,7 @@ else
 
     # Swift exports: must be UNDEFINED here (provided by the Swift host, which
     # links against this archive).
-    for sym in dado_host_attach dado_host_load dado_host_video_frame dado_host_options dado_host_motion_active; do
+    for sym in dado_host_attach dado_host_load dado_host_video_frame dado_host_options dado_host_motion_active dado_host_aspect; do
         if grep -qE "[[:space:]]T[[:space:]]+_${sym}$" <<<"$SYMBOLS"; then
             echo "!! $sym is defined in the Rust library — it belongs to Swift" >&2
             exit 1

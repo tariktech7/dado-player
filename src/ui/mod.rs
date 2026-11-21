@@ -9,7 +9,6 @@ pub mod mobile;
 pub mod palette;
 pub mod parental;
 pub mod player;
-#[cfg(target_os = "windows")]
 pub(crate) mod player_desktop;
 pub mod search;
 pub mod series;
@@ -82,18 +81,69 @@ pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
 }
 
 /// A small star toggle bound to a favorite key.
-pub fn fav_button(app: &mut App, ui: &mut Ui, key: &str) {
-    let is = app.is_favorite(key);
-    let text = if is { "★" } else { "☆" };
-    let mut b = egui::Button::new(RichText::new(text).size(16.0)).frame(false);
-    if is {
-        b = b.fill(Color32::TRANSPARENT);
-    }
-    let response = ui.add(b).on_hover_text("Favorit");
-    #[cfg(windows)]
+pub fn fav_button(app: &mut App, ui: &mut Ui, key: &str) -> Response {
+    let marked = app.is_favorite(key);
+    let size = (42.0 * desktop::scale(ui.ctx())).max(20.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    let response = response.on_hover_text(if marked {
+        "Favorit entfernen"
+    } else {
+        "Als Favorit markieren"
+    });
     desktop::remember_favorite_target(&response, key);
-    if response.clicked() {
+    let clicked = if app.tv {
+        mobile::focus::clicked(ui, &response)
+    } else {
+        response.clicked()
+    };
+    if clicked {
         app.toggle_favorite(key);
+    }
+    favorite_star(ui, rect.center(), size * 0.34, app.is_favorite(key));
+    response
+}
+
+pub(super) fn favorite_star(ui: &Ui, center: egui::Pos2, radius: f32, marked: bool) {
+    let color = if marked {
+        if ui.visuals().dark_mode {
+            Color32::from_rgb(255, 211, 107)
+        } else {
+            Color32::from_rgb(143, 83, 0)
+        }
+    } else {
+        theme::muted(ui)
+    };
+    draw_favorite_star(ui, center, radius, marked, color);
+}
+
+pub(super) fn draw_favorite_star(
+    ui: &Ui,
+    center: egui::Pos2,
+    radius: f32,
+    marked: bool,
+    color: Color32,
+) {
+    let points: Vec<_> = (0..10)
+        .map(|i| {
+            let angle = std::f32::consts::TAU * i as f32 / 10.0 - std::f32::consts::FRAC_PI_2;
+            center + Vec2::angled(angle) * radius * if i % 2 == 0 { 1.0 } else { 0.46 }
+        })
+        .collect();
+    if marked {
+        let mut mesh = egui::Mesh::default();
+        mesh.colored_vertex(center, color);
+        for point in &points {
+            mesh.colored_vertex(*point, color);
+        }
+        for i in 0..10 {
+            mesh.add_triangle(0, i + 1, (i + 1) % 10 + 1);
+        }
+        ui.painter().add(egui::Shape::mesh(mesh));
+    } else {
+        ui.painter().add(egui::Shape::closed_line(
+            points,
+            Stroke::new((radius * 0.13).max(1.0), color),
+        ));
     }
 }
 

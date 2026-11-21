@@ -55,7 +55,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 }
 
 /// Samsung's category / channel / preview composition at desktop density.
-pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32) {
+pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32) -> Option<Rect> {
     number_jump(app, ui);
     let a = super::desktop::appearance();
     let gap = 24.0 * s;
@@ -74,6 +74,7 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
         0.0,
         Color32::from_black_alpha(24),
     );
+    focus::set_zone(1);
     super::desktop::column(ui, cr, "live-categories", offset, |ui| {
         categories(app, ui, true)
     });
@@ -83,19 +84,22 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
     let mut channel_clip = clip;
     channel_clip.max.x = channel_clip.max.x.min(lr.right() - offset.max(0.0));
     ui.set_clip_rect(channel_clip);
+    focus::set_zone(2);
     super::desktop::column(ui, lr, "live-channels", offset, |ui| {
         ui.spacing_mut().item_spacing.y = 6.0 * s;
         channels(app, ui, true)
     });
     ui.set_clip_rect(clip);
-    super::desktop::column(ui, pr, "live-preview", 0.0, |ui| {
+    focus::set_zone(3);
+    let cutout = super::desktop::column(ui, pr, "live-preview", 0.0, |ui| {
         preview_desktop(app, ui, s)
     });
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_secs(30));
+    cutout
 }
 
-fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
+fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
     let item = app.preview.clone().or_else(|| {
         app.live_selected
             .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
@@ -108,16 +112,31 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
             .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
     );
     if let Some(item) = &item {
-        let bounds = Rect::from_min_max(pos2(header.right() - 42.0 * s, header.top()), header.max);
+        let size = (42.0 * s).max(20.0);
+        let bounds =
+            Rect::from_min_size(pos2(header.right() - size, header.top()), Vec2::splat(size));
         let mut favorite = ui.child_ui(bounds, Layout::top_down(Align::Min));
         crate::ui::fav_button(app, &mut favorite, &item.progress_key);
     }
     ui.add_space(6.0);
     let w = ui.available_width();
     let (rect, response) = ui.allocate_exact_size(vec2(w, w * 9.0 / 16.0), Sense::click());
-    ui.painter().rect_filled(rect, 12.0 * s, Color32::BLACK);
-    if app.preview.is_some() {
-        app.position_preview(rect.intersect(ui.clip_rect()), ui.ctx().pixels_per_point());
+    let shown = rect.intersect(ui.clip_rect());
+    let playing = app
+        .preview
+        .as_ref()
+        .is_some_and(|p| !app.is_radio(&p.progress_key))
+        && app.player.is_some()
+        && app.player_error.is_none()
+        && shown.is_positive();
+    if !playing || !cfg!(target_os = "ios") {
+        ui.painter().rect_filled(rect, 12.0 * s, Color32::BLACK);
+    }
+    if playing {
+        app.position_preview(shown, ui.ctx().pixels_per_point());
+        #[cfg(target_os = "android")]
+        ui.painter()
+            .add(crate::platform::android::render::shape(shown));
     } else {
         components::icon(
             ui,
@@ -137,15 +156,13 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
             ),
         );
         ui.label("Hier erscheinen Vorschau, Programm und Senderinformationen.");
-        return;
+        return None;
     };
-    let open = ui
-        .add_sized(
-            [w, 40.0 * s],
-            egui::Button::new("Vollbild öffnen  ↗").frame(false),
-        )
-        .clicked();
-    if response.clicked() || open {
+    let open = ui.add_sized(
+        [w, 40.0 * s],
+        egui::Button::new("Vollbild öffnen  ↗").frame(false),
+    );
+    if activated(ui, &response, app.tv) | activated(ui, &open, app.tv) {
         if app.preview.is_some() {
             app.promote_preview(false);
         } else {
@@ -204,7 +221,8 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
                     } else {
                         "Keine aktuellen Programmdaten."
                     });
-                    if ui.button("EPG erneut laden").clicked() {
+                    let retry = ui.button("EPG erneut laden");
+                    if activated(ui, &retry, app.tv) {
                         app.retry_epg(id);
                     }
                 }
@@ -230,6 +248,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) {
                 }
             }
         });
+    playing.then_some(shown)
 }
 
 /// TV keeps the category title in the brand row and search in the column
@@ -538,21 +557,25 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             ui.heading(title);
         }
         ui.add_space(6.0);
-        let query = ui.add_sized(
-            [
-                ui.available_width(),
-                if desktop {
-                    56.0 * scale
-                } else if tv {
-                    42.0
-                } else {
-                    30.0
-                },
-            ],
-            egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
-        );
-        if tv && focus::clicked(ui, &query) {
-            query.request_focus();
+        if desktop {
+            super::desktop::search_field(ui, &mut app.live_q, "Sender suchen", tv);
+        } else {
+            let query = ui.add_sized(
+                [
+                    ui.available_width(),
+                    if desktop {
+                        56.0 * scale
+                    } else if tv {
+                        42.0
+                    } else {
+                        30.0
+                    },
+                ],
+                egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
+            );
+            if tv && focus::clicked(ui, &query) {
+                query.request_focus();
+            }
         }
     }
     let indices = filtered_channels(app, ui);
@@ -640,9 +663,11 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 let r = row(ui, ("channel", id), row_h, app.is_previewing(&key));
                 if desktop && app.desktop_return_item.as_deref() == Some(key.as_str()) {
                     r.request_focus();
+                    if tv {
+                        focus::request_id(r.id);
+                    }
                     app.desktop_return_item = None;
                 }
-                #[cfg(windows)]
                 super::desktop::remember_favorite_target(&r, &key);
                 if app.scroll_to == Some(id) {
                     ui.scroll_to_rect(r.rect, Some(Align::Center));
@@ -684,7 +709,23 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         &channel.name,
                     );
                     let x = logo.right() + 10.0;
-                    let width = (r.rect.right() - x - 10.0).max(1.0);
+                    let right_margin = if desktop {
+                        (40.0 * scale).max(18.0)
+                    } else {
+                        10.0
+                    };
+                    let width = (r.rect.right() - x - right_margin).max(1.0);
+                    if desktop {
+                        crate::ui::favorite_star(
+                            ui,
+                            pos2(
+                                r.rect.right() - right_margin * 0.5,
+                                r.rect.top() + 26.0 * scale,
+                            ),
+                            (13.0 * scale).max(5.0),
+                            app.is_favorite(&key),
+                        );
+                    }
                     let (current, next) =
                         epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now);
                     for (line, (offset, text, size, color)) in [

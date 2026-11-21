@@ -8,16 +8,25 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     ui.add(egui::Label::new(RichText::new("Suche").size(22.0).strong()));
     ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.add(
-            egui::TextEdit::singleline(&mut app.search_q)
-                .hint_text("Kanal, Film oder Serie suchen…")
-                .desired_width(380.0),
+    if super::desktop::active(ui.ctx()) {
+        super::desktop::search_field(
+            ui,
+            &mut app.search_q,
+            "Kanal, Film oder Serie suchen…",
+            app.tv,
         );
-        if !app.search_q.is_empty() && ui.button("×").clicked() {
-            app.search_q.clear();
-        }
-    });
+    } else {
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut app.search_q)
+                    .hint_text("Kanal, Film oder Serie suchen…")
+                    .desired_width(380.0),
+            );
+            if !app.search_q.is_empty() && ui.button("×").clicked() {
+                app.search_q.clear();
+            }
+        });
+    }
     ui.add_space(6.0);
 
     let q = app.search_q.trim().to_lowercase();

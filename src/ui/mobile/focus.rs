@@ -171,7 +171,11 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
                     s.pending_ok = true;
                     s.active = true;
                 }
-                RemoteKey::Recall => {}
+                RemoteKey::Recall
+                | RemoteKey::Red
+                | RemoteKey::Green
+                | RemoteKey::Yellow
+                | RemoteKey::Blue => {}
                 RemoteKey::Back => {
                     // BACK is already handled by the Java -> nativeRequestBack()
                     // -> App::mobile_back() chain. Popping here would fire twice.
@@ -454,6 +458,15 @@ pub fn clear_activation() {
 /// Whether remote focus is currently active (a remote user is navigating).
 pub fn active() -> bool {
     STATE.with(|cell| cell.borrow().active)
+}
+
+pub fn focused_id() -> Option<egui::Id> {
+    STATE.with(|cell| {
+        let s = cell.borrow();
+        s.active
+            .then(|| s.desired_id.or_else(|| s.ids.get(s.idx).copied()))
+            .flatten()
+    })
 }
 
 /// Index of the focused control in registration order, if focus is active.

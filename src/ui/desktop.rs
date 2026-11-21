@@ -32,50 +32,30 @@ pub struct Appearance {
     pub navigation_hover_close_ms: f64,
     pub refresh_feedback_ms: f32,
     pub refresh_spin_ms: f32,
-    #[cfg(windows)]
     pub remote_shortcuts: [RemoteShortcut; 4],
     pub navigation_easing: [f32; 4],
     pub player_top_height: f32,
     pub player_controls_height: f32,
-    #[cfg(target_os = "windows")]
     pub player_top_inset_x: f32,
-    #[cfg(target_os = "windows")]
     pub player_top_inset_y: f32,
-    #[cfg(target_os = "windows")]
     pub player_controls_inset_x: f32,
-    #[cfg(target_os = "windows")]
     pub player_controls_inset_y: f32,
-    #[cfg(target_os = "windows")]
     pub player_panel_color: String,
-    #[cfg(target_os = "windows")]
     pub player_button_color: String,
-    #[cfg(target_os = "windows")]
     pub player_primary_color: String,
-    #[cfg(target_os = "windows")]
     pub player_focus_color: String,
-    #[cfg(target_os = "windows")]
     pub player_text_color: String,
-    #[cfg(target_os = "windows")]
     pub player_muted_color: String,
-    #[cfg(target_os = "windows")]
     pub player_top_max_width: f32,
-    #[cfg(target_os = "windows")]
     pub player_controls_max_width: f32,
-    #[cfg(target_os = "windows")]
     pub player_border_color: String,
-    #[cfg(target_os = "windows")]
     pub player_button_height: f32,
-    #[cfg(target_os = "windows")]
     pub player_button_font: f32,
-    #[cfg(target_os = "windows")]
     pub player_popup_padding: f32,
-    #[cfg(target_os = "windows")]
     pub player_popup_gap: f32,
-    #[cfg(target_os = "windows")]
     pub player_popup_offset: f32,
     pub player_corner_radius: f32,
 }
-#[cfg(windows)]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteShortcut {
@@ -94,16 +74,64 @@ pub fn appearance() -> &'static Appearance {
     })
 }
 pub fn active(ctx: &Context) -> bool {
-    cfg!(target_os = "windows") && !ui::mobile::active(ctx)
+    ctx.data(|data| data.get_temp::<bool>(Id::new("shared-landscape-shell")))
+        .unwrap_or_else(|| cfg!(windows) && !ui::mobile::active(ctx))
 }
 pub fn scale(ctx: &Context) -> f32 {
-    (ctx.screen_rect().width() / appearance().reference_width).clamp(0.66, 1.25)
+    let screen = safe_rect(ctx, false);
+    (screen.width() / appearance().reference_width)
+        .min(screen.height() / 840.0)
+        .clamp(0.28, 1.25)
+}
+pub(super) fn safe_rect(ctx: &Context, keyboard: bool) -> Rect {
+    let r = ctx.screen_rect();
+    let i = crate::platform::insets();
+    let ppp = ctx.pixels_per_point();
+    let bottom = if keyboard {
+        i.bottom
+    } else {
+        (i.bottom - i.ime).max(0.0)
+    };
+    Rect::from_min_max(
+        pos2(r.left() + i.left / ppp, r.top() + i.top / ppp),
+        pos2(
+            (r.right() - i.right / ppp).max(r.left() + i.left / ppp + 1.0),
+            (r.bottom() - bottom / ppp).max(r.top() + i.top / ppp + 1.0),
+        ),
+    )
 }
 pub(crate) fn category_width(width: f32, scale: f32) -> f32 {
     (appearance().category_width * scale).min(width * 0.33)
 }
 
-#[cfg(windows)]
+pub(super) fn search_field(
+    ui: &mut Ui,
+    value: &mut String,
+    hint: &str,
+    remote: bool,
+) -> egui::Response {
+    let height = (56.0 * scale(ui.ctx())).max(26.0);
+    let response = ui.add_sized(
+        [ui.available_width().max(1.0), height],
+        egui::TextEdit::singleline(value).hint_text(hint),
+    );
+    if remote && ui::mobile::focus::clicked(ui, &response) {
+        response.request_focus();
+    }
+    if response.gained_focus() {
+        crate::platform::set_input_type(1);
+        crate::platform::seed_ime(value);
+    }
+    #[cfg(target_os = "ios")]
+    {
+        if let Some(edited) = crate::platform::ios::bridge::edited(response.id.value()) {
+            *value = edited;
+        }
+        crate::platform::ios::bridge::edit(ui, &response, hint, value, 0);
+    }
+    response
+}
+
 pub(super) fn shortcut_legend(
     painter: &egui::Painter,
     screen: Rect,
@@ -111,6 +139,7 @@ pub(super) fn shortcut_legend(
     language: crate::types::AppLanguage,
     text: Color32,
     background: Option<Color32>,
+    show_key: bool,
 ) -> Rect {
     let s = scale.min(screen.width() / 520.0);
     let labels = appearance().remote_shortcuts.each_ref().map(|shortcut| {
@@ -123,7 +152,11 @@ pub(super) fn shortcut_legend(
             language.text(&shortcut.de, &shortcut.en)
         };
         let galley = painter.layout_no_wrap(
-            format!("{}  {label}", shortcut.key),
+            if show_key {
+                format!("{}  {label}", shortcut.key)
+            } else {
+                label.into()
+            },
             FontId::proportional(16.0 * s),
             text,
         );
@@ -321,7 +354,7 @@ pub fn column<R>(
 fn style(ctx: &Context, s: f32) {
     ctx.style_mut(|style| {
         style.spacing.item_spacing = vec2(12.0 * s, 12.0 * s);
-        style.spacing.interact_size.y = 48.0 * s;
+        style.spacing.interact_size.y = (48.0 * s).max(23.0);
         style.spacing.button_padding = vec2(16.0 * s, 9.0 * s);
         style.spacing.scroll.bar_width = 5.0;
         style.animation_time = appearance().navigation_duration_ms / 1000.0;
@@ -334,9 +367,9 @@ fn style(ctx: &Context, s: f32) {
             style.text_styles.insert(
                 kind.clone(),
                 if kind == egui::TextStyle::Heading {
-                    ui::mobile::tokens::bold(size * s)
+                    ui::mobile::tokens::bold((size * s).max(12.0))
                 } else {
-                    FontId::proportional(size * s)
+                    FontId::proportional((size * s).max(11.0))
                 },
             );
         }
@@ -395,9 +428,8 @@ fn navigation_is_collapsed(app: &App, ctx: &Context, compact: Rect, expanded: Re
     app.nav_collapsed && matches!(next, NavigationHover::Closed)
 }
 
-#[cfg(windows)]
 pub(crate) fn remember_favorite_target(response: &egui::Response, key: &str) {
-    if response.has_focus() {
+    if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
         response.ctx.data_mut(|data| {
             data.insert_temp(
                 Id::new("desktop-favorite-target"),
@@ -432,14 +464,22 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
     if crate::licensing::enabled() && !crate::licensing::allowed() {
         return false;
     }
+    color_shortcut(app, ctx, key)
+}
+
+pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bool {
     let player = app.view == View::Player;
     if !player && (app.active_profile.is_none() || !active(ctx)) {
         return false;
     }
-    if app.pending_resume.is_some() || app.description_open.is_some() {
+    if app.parental.open || app.pending_resume.is_some() || app.description_open.is_some() {
         if matches!(key, egui::Key::Escape | egui::Key::F1) {
-            app.clear_resume();
-            app.description_open = None;
+            if app.parental.open {
+                app.parental.close();
+            } else {
+                app.clear_resume();
+                app.description_open = None;
+            }
         }
         return true;
     }
@@ -464,7 +504,8 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
                     app.back_from_player();
                 }
             } else {
-                let focused = ctx.memory(|memory| memory.focused());
+                let focused = ui::mobile::focus::focused_id()
+                    .or_else(|| ctx.memory(|memory| memory.focused()));
                 let nav_focus =
                     ctx.data(|data| data.get_temp::<Id>(Id::new("desktop-nav-focused-id")));
                 if nav_focus.is_some() && focused == nav_focus {
@@ -486,7 +527,8 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
             focus_navigation(app);
         }
         egui::Key::F3 => {
-            let focused = ctx.memory(|memory| memory.focused());
+            let focused =
+                ui::mobile::focus::focused_id().or_else(|| ctx.memory(|memory| memory.focused()));
             let target = if player {
                 app.current_play
                     .as_ref()
@@ -524,26 +566,36 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
     true
 }
 
+pub(crate) fn exit_prompt(ctx: &Context) -> bool {
+    ctx.data(|data| {
+        data.get_temp::<bool>(Id::new("desktop-exit-prompt"))
+            .unwrap_or(false)
+    })
+}
+
 pub fn show(app: &mut App, ctx: &Context) {
+    ctx.data_mut(|data| data.insert_temp(Id::new("shared-landscape-shell"), true));
     if app.view == View::Player && app.current_play.is_some() {
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
             .show(ctx, |ui| {
-                #[cfg(target_os = "windows")]
                 super::player_desktop::show(app, ui);
-                #[cfg(not(target_os = "windows"))]
-                ui::player::show(app, ui);
             });
         return;
     }
     if app.active_profile.is_none() {
-        ui::login::show(app, ctx);
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            ui::mobile::show_landscape_login(app, ctx);
+        } else {
+            ui::login::show(app, ctx);
+        }
         return;
     }
     let a = appearance();
     let s = scale(ctx);
     style(ctx, s);
-    let screen = ctx.screen_rect();
+    let screen = safe_rect(ctx, true);
+    let background = ctx.screen_rect();
     let expanded = a.navigation_expanded * s;
     let collapsed = a.navigation_collapsed * s;
     if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
@@ -562,15 +614,16 @@ pub fn show(app: &mut App, ctx: &Context) {
     let visual = target + dx;
     let pad = 24.0 * s;
     egui::CentralPanel::default()
-        .frame(egui::Frame::none().fill(ctx.style().visuals.panel_fill))
+        .frame(egui::Frame::none())
         .show(ctx, |ui| {
-            theme::ambient(ui, screen);
+            let backdrop = ui.painter().add(egui::Shape::Noop);
             let nav = rail(visual);
             ui.painter().rect_filled(
                 Rect::from_min_max(screen.min, nav.max),
                 0.0,
                 Color32::from_black_alpha(24),
             );
+            ui::mobile::focus::set_zone(0);
             navigation(
                 app,
                 ui,
@@ -588,12 +641,13 @@ pub fn show(app: &mut App, ctx: &Context) {
                         } else {
                             pad
                         },
-                    screen.bottom() - 30.0 * s,
+                    (screen.bottom() - 30.0 * s).max(screen.top() + pad + 1.0),
                 ),
             );
             let view = app.view;
-            if view == View::Live {
-                ui::live::show_desktop(app, ui, body, s, dx);
+            ui::mobile::focus::set_zone(1);
+            let preview = if view == View::Live {
+                ui::live::show_desktop(app, ui, body, s, dx)
             } else {
                 column(
                     ui,
@@ -617,22 +671,25 @@ pub fn show(app: &mut App, ctx: &Context) {
                         });
                     },
                 );
-            }
-            #[cfg(windows)]
-            shortcut_legend(
-                ui.painter(),
-                screen,
-                s,
-                app.settings.language,
-                theme::muted(ui),
-                None,
+                None
+            };
+            ui.painter().set(
+                backdrop,
+                theme::ambient_shape(ui, background, preview.filter(|_| cfg!(target_os = "ios"))),
             );
+            if cfg!(windows) || app.tv {
+                shortcut_legend(
+                    ui.painter(),
+                    screen,
+                    s,
+                    app.settings.language,
+                    theme::muted(ui),
+                    None,
+                    cfg!(windows),
+                );
+            }
         });
-    #[cfg(windows)]
-    if ctx
-        .data(|data| data.get_temp::<bool>(Id::new("desktop-exit-prompt")))
-        .unwrap_or(false)
-    {
+    if exit_prompt(ctx) {
         let mut dismiss = false;
         let mut quit = false;
         egui::Window::new(
@@ -645,13 +702,22 @@ pub fn show(app: &mut App, ctx: &Context) {
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
+            if app.tv {
+                ui::mobile::focus::begin_modal(0);
+            }
             ui.horizontal(|ui| {
-                dismiss = ui
-                    .button(app.settings.language.text("Weitersehen", "Keep watching"))
-                    .clicked();
-                quit = ui
-                    .button(app.settings.language.text("Beenden", "Quit"))
-                    .clicked();
+                let keep = ui.button(app.settings.language.text("Weitersehen", "Keep watching"));
+                let stop = ui.button(app.settings.language.text("Beenden", "Quit"));
+                dismiss = if app.tv {
+                    ui::mobile::focus::clicked(ui, &keep)
+                } else {
+                    keep.clicked()
+                };
+                quit = if app.tv {
+                    ui::mobile::focus::clicked(ui, &stop)
+                } else {
+                    stop.clicked()
+                };
             });
         });
         if dismiss || quit {
@@ -851,9 +917,12 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 let selected = view == Some(app.view);
                 if focus_requested && selected {
                     response.request_focus();
+                    if app.tv {
+                        ui::mobile::focus::request_id(response.id);
+                    }
                     response.scroll_to_me(None);
                 }
-                if response.has_focus() {
+                if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
                     nav.data_mut(|data| {
                         data.insert_temp(Id::new("desktop-nav-focused-id"), response.id)
                     });
@@ -891,7 +960,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                         nav,
                         pos2(label_x, r.center().y),
                         label,
-                        FontId::proportional(appearance().navigation_font * s),
+                        FontId::proportional((appearance().navigation_font * s).max(11.0)),
                         color.gamma_multiply(label_alpha),
                         (r.right() - label_x - 8.0 * s).max(0.0),
                     );
@@ -909,7 +978,12 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 } else {
                     label
                 };
-                if response.on_hover_text(help).clicked() {
+                let response = response.on_hover_text(help);
+                if if app.tv {
+                    ui::mobile::focus::clicked(nav, &response)
+                } else {
+                    response.clicked()
+                } {
                     app.nav_collapsed = false;
                     if let Some(view) = view {
                         app.view = view;
@@ -936,7 +1010,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 .size(18.0 * s),
         );
         footer_ui.label(
-            egui::RichText::new(format!("Windows {}", crate::release_info::VERSION))
+            egui::RichText::new(format!("Version {}", crate::release_info::VERSION))
                 .color(muted.gamma_multiply(label_alpha))
                 .size(16.0 * s),
         );

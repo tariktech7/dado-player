@@ -71,10 +71,7 @@
           The matching Java class is com.tarik.dadoplayer.GameActivity.
         -->
         <!--
-          fullUser: the phone UI is portrait-first (bottom tabs + vertical
-          lists) and rotates to landscape for the player. See MOBILE-BAUPLAN.md
-          §18. Do NOT lock this to landscape any more - that was a workaround
-          for the desktop layout.
+          The shared four-column UI uses landscape on phones and televisions.
         -->
         <!--
           configChanges must cover EVERY configuration change Android can send,
@@ -99,7 +96,7 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
             android:launchMode="singleTask"
             android:enableOnBackInvokedCallback="true"
-            android:screenOrientation="fullUser">
+            android:screenOrientation="sensorLandscape">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

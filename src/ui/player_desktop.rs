@@ -1,6 +1,7 @@
 //! Samsung-style Windows controls. Native mpv keeps the same video rectangle
 //! while the composited panes appear, change, and hide.
 use crate::app::App;
+#[cfg(windows)]
 use crate::platform::windows::player_overlay::cursor_inside;
 use crate::types::{DesktopAspect, PlayKind};
 use egui::{
@@ -101,7 +102,11 @@ fn button(
             FontId::proportional(size),
             p.text,
         );
-    response.clicked()
+    if crate::ui::mobile::focus::active() {
+        crate::ui::mobile::focus::clicked(ui, &response)
+    } else {
+        response.clicked()
+    }
 }
 
 fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) {
@@ -227,41 +232,48 @@ pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
     let full = ui.available_rect_before_wrap();
-    ui.painter().rect_filled(full, 0.0, Color32::BLACK);
+    if !cfg!(target_os = "ios") {
+        ui.painter().rect_filled(full, 0.0, Color32::BLACK);
+    }
     let Some(item) = app.current_play.clone() else {
         return;
     };
     let live = item.kind == PlayKind::Live;
     let ppp = ctx.pixels_per_point();
     let a = super::desktop::appearance();
-    let s = (full.width() / a.reference_width)
-        .clamp(0.66, 1.25)
-        .min(full.width() / 610.0)
-        .min(full.height() / 600.0);
+    let safe = super::desktop::safe_rect(&ctx, false).intersect(full);
+    let s = super::desktop::scale(&ctx)
+        .max(if cfg!(windows) { 0.66 } else { 0.54 })
+        .min(safe.width() / 610.0)
+        .min(safe.height() / 480.0);
     let top_size = vec2(
-        (full.width() - 2.0 * a.player_top_inset_x * s).min(a.player_top_max_width * s),
+        (safe.width() - 2.0 * a.player_top_inset_x * s).min(a.player_top_max_width * s),
         a.player_top_height * s,
     );
     let title = Rect::from_center_size(
         pos2(
-            full.center().x,
-            full.top() + a.player_top_inset_y * s + top_size.y / 2.0,
+            safe.center().x,
+            safe.top() + a.player_top_inset_y * s + top_size.y / 2.0,
         ),
         top_size,
     );
     let bottom_size = vec2(
-        (full.width() - 2.0 * a.player_controls_inset_x * s).min(a.player_controls_max_width * s),
+        (safe.width() - 2.0 * a.player_controls_inset_x * s).min(a.player_controls_max_width * s),
         a.player_controls_height * s,
     );
     let bottom = Rect::from_center_size(
         pos2(
-            full.center().x,
-            full.bottom() - a.player_controls_inset_y * s - bottom_size.y / 2.0,
+            safe.center().x,
+            safe.bottom() - a.player_controls_inset_y * s - bottom_size.y / 2.0,
         ),
         bottom_size,
     );
     let radio = app.is_radio(&item.progress_key);
+    #[cfg(windows)]
     let video = app.player.as_ref().map(|p| p.surface.native_handle());
+    #[cfg(target_os = "android")]
+    ui.painter()
+        .add(crate::platform::android::render::shape(full));
     app.position_video(
         if radio {
             Rect::from_min_size(pos2(-50.0, -50.0), vec2(1.0, 1.0))
@@ -281,13 +293,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .data(|data| data.get_temp(options_menu))
         .unwrap_or(false);
     let mut aspect_open = ctx.data(|data| data.get_temp(aspect_menu)).unwrap_or(false);
+    #[cfg(windows)]
+    let hovering_controls = app.player_chrome
+        && video.is_some_and(|handle| {
+            cursor_inside(handle, title, ppp) || cursor_inside(handle, bottom, ppp)
+        });
+    #[cfg(not(windows))]
+    let hovering_controls = false;
     if app.ui_activity < 0.0
         || app.note_pointer_activity()
         || ctx.input(|i| i.pointer.any_down())
-        || (app.player_chrome
-            && video.is_some_and(|handle| {
-                cursor_inside(handle, title, ppp) || cursor_inside(handle, bottom, ppp)
-            }))
+        || hovering_controls
         || app.audio_menu_open
         || app.sub_menu_open
         || aspect_open
@@ -299,13 +315,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let reveal_only = std::mem::take(&mut app.player_reveal);
     let visible = (keep || remaining > 0.0) && !reveal_only;
     app.player_chrome = visible;
-    if !visible && app.player_error.is_none() {
+    let error = app.player_error.clone().or_else(platform_error);
+    if !visible && error.is_none() {
+        #[cfg(windows)]
         app.desktop_overlay.hide();
         app.set_video_cutouts(&[]);
         app.audio_menu_open = false;
         app.sub_menu_open = false;
         app.player_menu_navigation = false;
         dismiss_menus(app, &ctx);
+        crate::ui::mobile::focus::clear_activation();
         ctx.set_cursor_icon(egui::CursorIcon::None);
         return;
     }
@@ -333,18 +352,25 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             22.0 * s,
             false,
         );
-        let favorite_x = title.width() / s - 108.0;
+        let favorite_x = title.width() / s - if cfg!(windows) { 108.0 } else { 54.0 };
         let favorite = app.is_favorite(&item.progress_key);
-        if button(
-            ui,
-            "favorite",
-            control(favorite_x, 42.0),
-            if favorite { "★" } else { "☆" },
-            24.0 * s,
-            favorite,
-        ) {
+        let favorite_rect = control(favorite_x, 42.0);
+        if button(ui, "favorite", favorite_rect, "", 24.0 * s, favorite) {
             app.toggle_favorite(&item.progress_key);
         }
+        let marked = app.is_favorite(&item.progress_key);
+        super::draw_favorite_star(
+            ui,
+            favorite_rect.center(),
+            (13.0 * s).max(6.0),
+            marked,
+            if marked {
+                Color32::from_rgb(255, 211, 107)
+            } else {
+                Palette::get().text
+            },
+        );
+        #[cfg(windows)]
         if button(
             ui,
             "fullscreen",
@@ -601,7 +627,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if app.audio_menu_open || app.sub_menu_open {
         layers.push(track_menu(app, &ctx, title, bottom, s));
     }
-    if let Some(error) = &app.player_error {
+    if let Some(error) = &error {
         let rect = Rect::from_center_size(full.center(), vec2(820.0, 132.0) * s);
         let (_, layer) = pane(&ctx, "error", rect, s, |ui| {
             line(
@@ -615,7 +641,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         layers.push(layer);
     }
-    if visible {
+    if visible && (cfg!(windows) || app.tv) {
         let id = Id::new("desktop-player-shortcut-legend");
         let layer = LayerId::new(Order::Foreground, id);
         let bounds = super::desktop::shortcut_legend(
@@ -625,12 +651,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             language,
             Palette::get().text,
             Some(Palette::get().panel),
+            cfg!(windows),
         );
         ctx.move_to_top(layer);
         layers.push((layer, bounds));
     }
+    #[cfg(windows)]
     let composited = !app.palette_open
         && video.is_some_and(|handle| app.desktop_overlay.paint(&ctx, handle, &layers));
+    #[cfg(windows)]
     if composited {
         app.set_video_cutouts(&[]);
     } else {
@@ -650,6 +679,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             .collect();
         app.set_video_cutouts(&holes);
     }
+}
+
+fn platform_error() -> Option<String> {
+    #[cfg(target_os = "android")]
+    return crate::platform::android::render::last_error();
+    #[cfg(target_os = "ios")]
+    {
+        extern "C" {
+            fn dado_host_error_code() -> i32;
+        }
+        let code = unsafe { dado_host_error_code() };
+        (code != 0)
+            .then(|| format!("Wiedergabe-Fehler {code}. Streamformat und Verbindung prüfen."))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    None
 }
 
 fn track_menu(

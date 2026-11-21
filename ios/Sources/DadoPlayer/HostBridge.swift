@@ -276,6 +276,11 @@ public func dado_host_video_visible(_ visible: Int32) {
 
 /// Replaces the current item. The URL may carry provider credentials, so it is
 /// never logged.
+@_cdecl("dado_host_aspect")
+public func dado_host_aspect(_ mode: Int32) {
+    VideoHost.shared.withView { $0.setAspect(mode) }
+}
+
 @_cdecl("dado_host_options")
 public func dado_host_options(_ json: UnsafePointer<CChar>?) {
     guard let json, let data = String(cString: json).data(using: .utf8),

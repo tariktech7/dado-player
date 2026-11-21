@@ -654,6 +654,14 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
          * fall through to the framework instead.
          */
         switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_PROG_RED:
+            case KeyEvent.KEYCODE_PROG_GREEN:
+            case KeyEvent.KEYCODE_PROG_YELLOW:
+            case KeyEvent.KEYCODE_PROG_BLUE:
+                if (event.getRepeatCount() == 0) {
+                    nativeOnKey(event.getKeyCode(), event.getAction());
+                }
+                return true;
             case KeyEvent.KEYCODE_0:
             case KeyEvent.KEYCODE_NUMPAD_0:
                 if (event.getRepeatCount() == 0) {

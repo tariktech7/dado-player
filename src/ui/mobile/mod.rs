@@ -212,6 +212,11 @@ pub(crate) fn handheld_landscape(ctx: &Context) -> bool {
         && size.x > size.y
 }
 
+pub(super) fn show_landscape_login(app: &mut App, ctx: &Context) {
+    touch_style(ctx);
+    login::show(app, ctx, &Layout::new(ctx));
+}
+
 /// Entry point, called from `App::draw`.
 pub fn show(app: &mut App, ctx: &Context) {
     let mut l = Layout::new(ctx);

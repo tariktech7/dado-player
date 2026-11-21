@@ -380,7 +380,6 @@ impl Mpv {
         let _ = self.command(&["stop"]);
     }
 
-    #[cfg(target_os = "windows")]
     pub fn set_desktop_aspect(&self, aspect: crate::types::DesktopAspect) {
         use crate::types::DesktopAspect;
         if aspect == DesktopAspect::Auto {
@@ -408,7 +407,6 @@ impl Mpv {
     }
 
     pub fn configure(&self, settings: &Settings) {
-        #[cfg(target_os = "windows")]
         self.set_desktop_aspect(settings.desktop_aspect);
         for (key, value) in [
             ("cache-secs", settings.cache_secs.clamp(5, 600).to_string()),

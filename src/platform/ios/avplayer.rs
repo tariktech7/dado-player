@@ -18,6 +18,7 @@ impl Mpv {
         bridge::attach();
         bridge::native_player(s.ios_native_player);
         bridge::configure(s);
+        bridge::set_aspect(s.desktop_aspect);
         Ok(Mpv {
             volume: std::sync::atomic::AtomicI64::new(100),
         })
@@ -54,6 +55,11 @@ impl Mpv {
     pub fn configure(&self, settings: &Settings) {
         bridge::native_player(settings.ios_native_player);
         bridge::configure(settings);
+        bridge::set_aspect(settings.desktop_aspect);
+    }
+
+    pub fn set_desktop_aspect(&self, aspect: crate::types::DesktopAspect) {
+        bridge::set_aspect(aspect);
     }
 
     pub fn set_pause(&self, paused: bool) {

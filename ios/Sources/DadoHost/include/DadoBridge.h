@@ -76,6 +76,7 @@ void dado_app_set_env(double top,
 void dado_host_attach(void);
 /// UTF-8 playback options JSON, copied synchronously by the host. Never logged.
 void dado_host_options(const char *json);
+void dado_host_aspect(int32_t mode);
 void dado_host_native_player(int32_t enabled);
 int32_t dado_host_tracks(char *buffer, int32_t capacity);
 int64_t dado_host_current_track(int32_t kind);

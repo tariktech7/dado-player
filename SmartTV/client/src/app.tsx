@@ -29,6 +29,7 @@ import settingsSections from "../../../shared/settings-sections.json" with { typ
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
 import releaseInfo from '../../../release.json' with { type: 'json' };
 import { Home } from "./home";
+import { FavoriteMark } from "./favorite-mark";
 import {licenseClient} from './licensing';
 import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
 import packageInfo from "../package.json";
@@ -315,8 +316,8 @@ function App() {
     i.kind === "episode"
       ? catalog.series.find((s) => s.id === i.seriesId) || i
       : i;
-  const isFavorite = (i: Item) =>
-    favorites.some((f) => itemKey(f) === itemKey(favoriteTarget(i)));
+  const favoriteKeys = useMemo(() => new Set(favorites.map(itemKey)), [favorites]);
+  const isFavorite = (i: Item) => favoriteKeys.has(itemKey(favoriteTarget(i)));
   const toggleFavorite = (i: Item) =>
     changed({
       ...savedRef.current,
@@ -930,17 +931,19 @@ function App() {
   useLayoutEffect(() => {
     playerRef.current?.position();
   });
+  const liveFavorites = category === "favorites" ? favoriteKeys : null;
   const filteredLive = useMemo(
-    () =>
-      catalog.live.filter(
+    () => {
+      const normalizedQuery = query.toLocaleLowerCase();
+      return catalog.live.filter(
         (i) =>
           (category === "all" || category === "favorites"
-            ? category !== "favorites" ||
-              favorites.some((f) => itemKey(f) === itemKey(i))
+            ? category !== "favorites" || liveFavorites?.has(itemKey(i))
             : i.category === category) &&
-          i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
-      ),
-    [catalog, category, query, favorites],
+          i.name.toLocaleLowerCase().includes(normalizedQuery),
+      );
+    },
+    [catalog.live, category, query, liveFavorites],
   );
   const returnChannel = !full && view === "live" && playerReturn.current?.kind === "live"
     ? filteredLive.findIndex(i => i.id === playerReturn.current?.id)
@@ -1003,6 +1006,7 @@ function App() {
       onClick={() => void start(item)}
       data-channel={item.id}
       data-focus-key={itemKey(item)}
+      data-favorite={isFavorite(item)}
     >
       <Logo item={item} />
       <span class="channel-copy">
@@ -1012,6 +1016,7 @@ function App() {
           <small>Danach: {info(item)[1]?.title || "Keine Programmdaten"}</small>
         </span>
       </span>
+      <FavoriteMark marked={isFavorite(item)} />
     </button>
   );
   const card = (item: Item, continuing = false) => (
@@ -1786,10 +1791,11 @@ function App() {
                       <h2>{t("Vorschau", "Preview")}</h2>
                       <button
                         class="icon-button"
-                        aria-label="Sender als Favorit"
+                        aria-label={t("Sender als Favorit", "Favorite channel")}
+                        aria-pressed={isFavorite(preview)}
                         onClick={() => toggleFavorite(preview)}
                       >
-                        {isFavorite(preview) ? "★" : "☆"}
+                        <FavoriteMark marked={isFavorite(preview)} />
                       </button>
                     </header>
                     <div
@@ -2053,7 +2059,7 @@ function App() {
                 </span>
                 <button aria-label={t("Favorit", "Favorite")} aria-pressed={isFavorite(preview)}
                   onClick={() => toggleFavorite(preview)}>
-                  {isFavorite(preview) ? "★" : "☆"}
+                  <FavoriteMark marked={isFavorite(preview)} />
                 </button>
               </div>
               <div class="player-feedback">

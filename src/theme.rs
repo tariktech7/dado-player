@@ -401,15 +401,17 @@ pub fn glass(ui: &egui::Ui, rect: egui::Rect, radius: f32) {
 }
 /// Ambient light beneath translucent navigation and library surfaces.
 pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
+    ui.painter().add(ambient_shape(ui, rect, None));
+}
+
+pub fn ambient_shape(ui: &egui::Ui, rect: egui::Rect, cutout: Option<egui::Rect>) -> egui::Shape {
     let dark = ui.visuals().dark_mode;
     let base = ui.visuals().panel_fill;
-    ui.painter().rect_filled(rect, 0.0, base);
-    if crate::ui::desktop::active(ui.ctx()) && dark && !warm(ui) {
-        return;
-    }
     let mut mesh = egui::Mesh::default();
     let colors = if warm(ui) {
         [normal_color("glow"), normal_color("background"), base, base]
+    } else if crate::ui::desktop::active(ui.ctx()) && dark {
+        [base; 4]
     } else if dark {
         [
             Color32::from_rgb(19, 42, 52),
@@ -425,20 +427,41 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
             base,
         ]
     };
-    for (pos, color) in [
-        rect.left_top(),
-        rect.right_top(),
-        rect.right_bottom(),
-        rect.left_bottom(),
-    ]
-    .into_iter()
-    .zip(colors)
-    {
-        mesh.colored_vertex(pos, color);
+    let hole = cutout.unwrap_or(egui::Rect::NOTHING).intersect(rect);
+    let patches = if hole.is_positive() {
+        [
+            egui::Rect::from_min_max(rect.min, egui::pos2(rect.right(), hole.top())),
+            egui::Rect::from_min_max(egui::pos2(rect.left(), hole.bottom()), rect.max),
+            egui::Rect::from_min_max(egui::pos2(rect.left(), hole.top()), hole.left_bottom()),
+            egui::Rect::from_min_max(hole.right_top(), egui::pos2(rect.right(), hole.bottom())),
+        ]
+    } else {
+        [
+            rect,
+            egui::Rect::NOTHING,
+            egui::Rect::NOTHING,
+            egui::Rect::NOTHING,
+        ]
+    };
+    let [tl, tr, br, bl] = colors.map(egui::Rgba::from);
+    for patch in patches.into_iter().filter(egui::Rect::is_positive) {
+        let index = mesh.vertices.len() as u32;
+        for pos in [
+            patch.left_top(),
+            patch.right_top(),
+            patch.right_bottom(),
+            patch.left_bottom(),
+        ] {
+            let x = (pos.x - rect.left()) / rect.width();
+            let y = (pos.y - rect.top()) / rect.height();
+            let top = tl * (1.0 - x) + tr * x;
+            let bottom = bl * (1.0 - x) + br * x;
+            mesh.colored_vertex(pos, (top * (1.0 - y) + bottom * y).into());
+        }
+        mesh.add_triangle(index, index + 1, index + 2);
+        mesh.add_triangle(index, index + 2, index + 3);
     }
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    ui.painter().add(egui::Shape::mesh(mesh));
+    egui::Shape::mesh(mesh)
 }
 
 #[cfg(test)]

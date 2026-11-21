@@ -28,10 +28,20 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
     private var requestedPause = false
     private var volume = 100
     private var generation = 0
+    private var aspect: Int32 = 0
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        vlcSurface.transform = .identity
         vlcSurface.frame = bounds
+        if aspect != 0, bounds.width > 0, bounds.height > 0, videoSize.width > 0, videoSize.height > 0 {
+            let ratio = (bounds.width / bounds.height) / (videoSize.width / videoSize.height)
+            let x = max(ratio, 1)
+            let y = max(1 / ratio, 1)
+            vlcSurface.transform = aspect == 1
+                ? CGAffineTransform(scaleX: max(x, y), y: max(x, y))
+                : CGAffineTransform(scaleX: x, y: y)
+        }
         VideoHost.shared.keepVideoBehindControls()
     }
 
@@ -79,6 +89,7 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
     private func commonInit() {
         backgroundColor = .black
         isOpaque = true
+        clipsToBounds = true
         playerLayer.player = player
         playerLayer.videoGravity = .resizeAspect
         vlcSurface.frame = bounds
@@ -96,6 +107,12 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
     // MARK: - Control
 
     func configure(options: [String: Any]) { playbackOptions = options }
+
+    func setAspect(_ mode: Int32) {
+        aspect = mode
+        playerLayer.videoGravity = mode == 1 ? .resizeAspectFill : mode == 2 ? .resize : .resizeAspect
+        setNeedsLayout()
+    }
 
     func load(url: URL) {
         stop()
@@ -364,7 +381,10 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
             case .playing, .paused:
                 self.startupTimeout?.cancel()
                 self.errorCode = nil
-                self.videoSize = decoder.videoSize
+                if self.videoSize != decoder.videoSize {
+                    self.videoSize = decoder.videoSize
+                    self.setNeedsLayout()
+                }
                 #if targetEnvironment(simulator)
                 if ProcessInfo.processInfo.environment["DADO_VIDEO_SMOKE"] == "1",
                    decoder.hasVideoOut, self.position > 0.5 {
