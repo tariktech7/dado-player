@@ -39,6 +39,15 @@ impl App {
         false
     }
 }
+pub(super) fn open_management(app: &mut App) {
+    if app.current_play.is_some() {
+        app.stop_play();
+    }
+    app.close_preview();
+    app.parental.close();
+    app.parental.open = true;
+}
+
 pub fn entry(app: &mut App, ui: &mut Ui) {
     ui.heading("Elternsperre");
     if crate::ui::desktop::active(ui.ctx()) {
@@ -57,9 +66,7 @@ pub fn entry(app: &mut App, ui: &mut Ui) {
             "Eltern-PIN einrichten"
         },
     ) {
-        app.close_preview();
-        app.parental.close();
-        app.parental.open = true;
+        open_management(app);
     }
     ui.add_space(12.0);
 }

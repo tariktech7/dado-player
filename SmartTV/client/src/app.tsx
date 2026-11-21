@@ -736,12 +736,10 @@ function App() {
     if (code >= 403 && code <= 406) {
       e.preventDefault();
       if (e.repeat) return;
-      if (code === 403) {
-        back();
-        return;
-      }
       if (!session || editingText || tracksRef.current || parental.open || document.querySelector(".modal")) return;
-      if (code === 404) {
+      if (code === 403) {
+        manageParental();
+      } else if (code === 404) {
         if (view === "live" && fullRef.current) leavePlayer();
         else goShortcut("live");
       } else if (code === 405) {
@@ -1133,6 +1131,10 @@ function App() {
     </>;
   };
   useEffect(() => { document.documentElement.lang = saved.settings.language; }, [saved.settings.language]);
+  const manageParental = () => {
+    stop();
+    parental.manage();
+  };
   const settingsView = () => {
     const active = settingsSections.find((section) => section.id === settingsSection);
     const renderSection = (id: string) => {
@@ -1236,7 +1238,7 @@ function App() {
         </>;
         case "parental": return <>
           <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
-          <button onClick={()=>{stop();parental.manage();}}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
+          <button onClick={manageParental}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
         case "updates": return <>
           <Field label={t('GitHub-Lese-Token', 'Read-only GitHub token')}>

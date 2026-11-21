@@ -4762,6 +4762,13 @@ mod tests {
         assert!(app.is_favorite(&focused_key));
         app.nav_collapsed = true;
         keypress(&mut app, egui::Key::F1, false);
+        assert!(app.parental.open);
+        assert!(app.nav_collapsed);
+        keypress(&mut app, egui::Key::F1, false);
+        assert!(app.parental.open);
+        keypress(&mut app, egui::Key::Escape, false);
+        assert!(!app.parental.open);
+        keypress(&mut app, egui::Key::Escape, false);
         assert!(!app.nav_collapsed);
         keypress(&mut app, egui::Key::F4, false);
         assert!(app.view == View::Settings);

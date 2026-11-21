@@ -779,7 +779,7 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await page.goto("/");
   await expect(page.locator(".navigation")).toBeVisible();
   const legend = page.getByRole("list", { name: "Farbtasten" });
-  await expect(legend.getByRole("listitem")).toHaveText(["Zurück", "Live TV", "Favorit", "Einstellungen"]);
+  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Live TV", "Favorit", "Einstellungen"]);
   const bottomGap = await legend.evaluate(el =>
     document.querySelector("#app")!.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom,
   );
@@ -807,15 +807,21 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await expect(page.locator(".fullscreen").getByRole("button", { name: "Favorit" })).toHaveAttribute("aria-pressed", "true");
   await color(406);
   await expect(page.locator(".player-options")).toBeVisible();
-  await expect(legend.getByRole("listitem")).toHaveText(["Zurück", "Live TV", "Favorit", "Optionen"]);
-  await color(403);
+  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Live TV", "Favorit", "Optionen"]);
+  await page.keyboard.press("Escape");
   await expect(page.locator(".player-options")).toHaveCount(0);
-  await color(403);
+  await page.keyboard.press("Escape");
   await expect(second).toBeFocused();
-  await color(403);
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
   await color(406);
   await expect(page.getByRole("button", { name: "⚙ Einstellungen", exact: true })).toBeFocused();
+  await color(403);
+  await expect(page.locator('[data-parental]')).toContainText('PIN');
+  await color(403);
+  await expect(page.locator('[data-parental]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-parental]')).toHaveCount(0);
 });
 
 test("Back restores focus to the watched channel, movie and episode", async ({ page }) => {

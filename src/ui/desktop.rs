@@ -536,7 +536,7 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
         return false;
     }
     if app.parental.open || app.pending_resume.is_some() || app.description_open.is_some() {
-        if matches!(key, egui::Key::Escape | egui::Key::F1) {
+        if key == egui::Key::Escape {
             if app.parental.open {
                 app.parental.close();
             } else {
@@ -555,13 +555,14 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
         .data(|data| data.get_temp::<bool>(exit))
         .unwrap_or(false)
     {
-        if matches!(key, egui::Key::Escape | egui::Key::F1) {
+        if key == egui::Key::Escape {
             ctx.data_mut(|data| data.remove::<bool>(exit));
         }
         return true;
     }
     match key {
-        egui::Key::Escape | egui::Key::F1 => {
+        egui::Key::F1 => super::parental::open_management(app),
+        egui::Key::Escape => {
             if player {
                 if !super::player_desktop::dismiss_menus(app, ctx) {
                     app.back_from_player();
