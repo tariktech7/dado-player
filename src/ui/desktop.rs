@@ -840,7 +840,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
     let mut mark_ui = nav.child_ui(mark, Layout::top_down(Align::Min));
     ui::brand_mark(&mut mark_ui, 44.0 * s);
     if handheld() {
-        let row = Rect::from_center_size(mark.center(), Vec2::splat(70.0 * s));
+        let row = Rect::from_center_size(mark.center(), egui::Vec2::splat(70.0 * s));
         if nav
             .interact(
                 row,
