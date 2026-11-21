@@ -429,9 +429,27 @@ fn empty_hero(app: &mut App, ui: &mut Ui) {
 }
 
 fn continue_items(app: &App) -> Vec<(String, String, String, String, PlayKind)> {
-    app.history
-        .iter()
+    crate::types::resume_history(&app.history)
         .filter_map(|h| {
+            if let Some(series_id) = h
+                .key
+                .strip_prefix("ep:")
+                .and_then(|key| key.split_once(':'))
+                .and_then(|(id, _)| id.parse::<u32>().ok())
+            {
+                let series = app
+                    .library
+                    .series
+                    .iter()
+                    .find(|series| series.id == series_id)?;
+                return Some((
+                    h.key.clone(),
+                    series.name.clone(),
+                    series.cover.clone(),
+                    String::new(),
+                    PlayKind::Episode,
+                ));
+            }
             let item = app.resolve_play(&h.key)?;
             let key = item.progress_key.clone();
             let cover = cover_for(app, &key);
@@ -615,6 +633,9 @@ fn poster_rail(
                                 .and_then(|s| s.parse::<u32>().ok())
                             {
                                 app.open_series(id);
+                                ui.ctx().request_repaint();
+                            } else if key.starts_with("ep:") {
+                                app.play_history_key(key);
                                 ui.ctx().request_repaint();
                             } else if let Some(item) = app.resolve_play(key) {
                                 play = Some(item);

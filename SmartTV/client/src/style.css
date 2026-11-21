@@ -1321,7 +1321,18 @@ hr {
   justify-content: center;
 }
 .catalog-browser {
+  grid-template-columns: var(--category-width, 320px) minmax(280px, 1fr);
+  overflow: hidden;
+}
+.catalog-browser.has-preview {
   grid-template-columns: var(--category-width, 320px) minmax(280px, 1fr) var(--catalog-preview-width, 440px);
+}
+@keyframes reveal-catalog-preview {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .catalog-details { animation: reveal-catalog-preview 240ms cubic-bezier(.22, 1, .36, 1); }
 }
 .category-list button {
   white-space: normal;

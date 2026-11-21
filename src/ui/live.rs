@@ -62,9 +62,18 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
     let category_w = super::desktop::category_width(body.width(), s);
     let preview_w = (a.live_preview_width * s)
         .min((body.width() - category_w - 2.0 * gap).max(1.0) * 0.72)
-        .min(body.height() * 0.58 * 16.0 / 9.0)
+        .min(
+            body.height()
+                * if super::desktop::handheld() {
+                    0.64
+                } else {
+                    0.58
+                }
+                * 16.0
+                / 9.0,
+        )
         .min(if super::desktop::handheld() {
-            body.width() * 0.33
+            body.width() * 0.40
         } else {
             body.width()
         });

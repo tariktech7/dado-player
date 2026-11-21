@@ -362,7 +362,7 @@ export function CatalogBrowser({
     }
   }, [activation, item, episodes]);
   return (
-    <div class="catalog-browser">
+    <div class={`catalog-browser${item ? ' has-preview' : ''}`}>
       <section class="categories" data-focus-zone="categories">
         <h1>Kategorien</h1>
         <div class="category-list">
@@ -394,9 +394,8 @@ export function CatalogBrowser({
         />
         <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} />
       </section>
-      <aside ref={preview} class="catalog-details" data-focus-zone="details">
-        <h2>{item?.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
-        {item ? (
+      {item && <aside ref={preview} class="catalog-details" data-focus-zone="details">
+        <h2>{item.kind === "series" ? "Serie & Folgen" : "Details"}</h2>
           <div class="catalog-detail-scroll" key={itemKey(item)}>
             <div class="catalog-heading">
               {item.logo && <img src={item.logo} alt="" />}
@@ -430,14 +429,7 @@ export function CatalogBrowser({
               </button>
             )}
           </div>
-        ) : (
-          <div class="empty-preview">
-            <span>▷</span>
-            <h3>Titel auswählen</h3>
-            <p>Informationen und Wiedergabe bleiben hier sichtbar.</p>
-          </div>
-        )}
-      </aside>
+      </aside>}
     </div>
   );
 }

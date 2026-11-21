@@ -17,6 +17,7 @@ import {
   Settings,
   emptyCatalog,
   itemKey,
+  resumeHistory,
 } from "./types";
 import { load, save, favorite, remember } from "./store";
 import { Provider, hostUrl, httpUrl } from "./api";
@@ -1001,6 +1002,7 @@ function App() {
         popup?.querySelector<HTMLElement>("button"))?.focus();
     }
   }, [playerOptions]);
+  const resumeRows = useMemo(() => resumeHistory(history), [history]);
   const [now, next] = preview ? currentNext(epg[preview.id] || []) : [];
   const favoriteRows = favorites.filter((i) => i.kind === "live");
   useEffect(() => {
@@ -1887,7 +1889,7 @@ function App() {
                   <Home
                     name={session?.name || ""}
                     catalog={catalog}
-                    history={history}
+                    history={resumeRows}
                     favorites={favoriteRows}
                     program={(i) =>
                       info(i)[0]?.title || "Keine Programmdaten verfügbar"
@@ -1923,7 +1925,7 @@ function App() {
                     </div>
                     <div class="history-list">
                       {!history.length && <p>Noch nichts angesehen.</p>}
-                      {history
+                      {resumeRows
                         .filter((h) =>
                           historyKind === "series"
                             ? h.item.kind === "episode" ||

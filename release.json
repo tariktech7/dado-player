@@ -1,8 +1,8 @@
 {
   "version": "0.8.0",
-  "androidBuild": 33,
-  "iosBuild": 28,
-  "windowsBuild": 2,
-  "tizenBuild": 3,
+  "androidBuild": 34,
+  "iosBuild": 29,
+  "windowsBuild": 3,
+  "tizenBuild": 4,
   "channel": "beta"
 }

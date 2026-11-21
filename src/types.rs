@@ -163,6 +163,42 @@ pub struct HistEntry {
     pub sub: String,
 }
 
+pub fn resume_history(history: &[HistEntry]) -> impl Iterator<Item = &HistEntry> {
+    let mut rows: Vec<_> = history.iter().collect();
+    rows.sort_by_key(|entry| std::cmp::Reverse(entry.ts));
+    let mut series = std::collections::HashSet::new();
+    rows.into_iter().filter(move |entry| {
+        entry
+            .key
+            .strip_prefix("ep:")
+            .and_then(|key| key.split_once(':'))
+            .and_then(|(id, _)| id.parse::<u32>().ok())
+            .is_none_or(|id| series.insert(id))
+    })
+}
+
+#[cfg(test)]
+#[test]
+fn resume_keeps_only_the_latest_episode_for_each_series() {
+    let entries = [
+        ("ep:10:1", 20),
+        ("ep:20:1", 25),
+        ("ep:10:9", 30),
+        ("vod:10", 40),
+        ("live:10", 50),
+    ]
+    .map(|(key, ts)| HistEntry {
+        key: key.into(),
+        ts,
+        title: String::new(),
+        sub: String::new(),
+    });
+    let keys: Vec<_> = resume_history(&entries)
+        .map(|entry| entry.key.as_str())
+        .collect();
+    assert_eq!(keys, ["live:10", "vod:10", "ep:10:9", "ep:20:1"]);
+}
+
 /// Hardware decoding backend. Different machines/drivers behave differently,
 /// so the user can switch if playback stutters or stays black.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

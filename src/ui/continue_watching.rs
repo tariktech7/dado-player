@@ -274,9 +274,7 @@ fn movies_tab(app: &mut App, ui: &mut Ui) {
 
 /// Series as a poster grid; a click continues the last watched episode.
 fn series_tab(app: &mut App, ui: &mut Ui) {
-    let entries: Vec<(String, String, String)> = app
-        .history
-        .iter()
+    let entries: Vec<(String, String, String)> = crate::types::resume_history(&app.history)
         .filter(|h| h.key.starts_with("ep:"))
         .map(|h| (h.key.clone(), h.title.clone(), h.sub.clone()))
         .collect();

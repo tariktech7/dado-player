@@ -70,6 +70,19 @@ test('Samsung ignores a tampered bundle and rolls back a failed signed boot', as
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).blocked, updateStorage)).toBe(JSON.parse(signed.payload).build);
 });
 
+test('catalogue gives the posters the full width until a title opens a sliding preview', async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto('/');
+  await page.locator('.navigation [data-focus-key="vod"]').click();
+  const preview = page.locator('.catalog-details');
+  await expect(preview).toHaveCount(0);
+  await page.locator('.catalog-poster').first().click();
+  await expect(preview.getByRole('heading', {name:'Demo Film'})).toBeVisible();
+  await expect(preview).toHaveCSS('animation-name', 'reveal-catalog-preview');
+  await page.locator('.navigation [data-focus-key="live"]').click();
+  await expect(page.locator('.preview-panel')).toBeVisible();
+});
+
 test('long live-preview metadata stays inside its own panel and retains a usable video area',async({page})=>{
   await fixture(page,true,true);
   await page.route('https://provider.invalid/**',async route=>{

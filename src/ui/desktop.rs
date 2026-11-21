@@ -422,6 +422,9 @@ impl NavigationHover {
 }
 
 fn navigation_is_collapsed(app: &App, ctx: &Context, compact: Rect, expanded: Rect) -> bool {
+    if handheld() {
+        return app.nav_collapsed;
+    }
     let id = Id::new("desktop-navigation-hover");
     let previous = ctx
         .data(|data| data.get_temp::<NavigationHover>(id))
@@ -451,6 +454,41 @@ fn navigation_is_collapsed(app: &App, ctx: &Context, compact: Rect, expanded: Re
     };
     ctx.data_mut(|data| data.insert_temp(id, next));
     app.nav_collapsed && matches!(next, NavigationHover::Closed)
+}
+
+fn handheld_content_scroll(ctx: &Context, body: Rect) -> bool {
+    let key = Id::new("handheld-navigation-swipe");
+    let events: Vec<_> = ctx.input(|input| {
+        input
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    ..
+                } => Some((*pos, *pressed)),
+                _ => None,
+            })
+            .collect()
+    });
+    ctx.data_mut(|data| {
+        let mut close = false;
+        for (pos, pressed) in events {
+            if pressed {
+                data.remove::<egui::Pos2>(key);
+                if body.contains(pos) {
+                    data.insert_temp(key, pos);
+                }
+            } else if let Some(origin) = data.get_temp::<egui::Pos2>(key) {
+                data.remove::<egui::Pos2>(key);
+                let delta = pos - origin;
+                close |= delta.y.abs() > 14.0 && delta.y.abs() > delta.x.abs();
+            }
+        }
+        close
+    })
 }
 
 pub(crate) fn remember_favorite_target(response: &egui::Response, key: &str) {
@@ -668,7 +706,9 @@ pub fn show(app: &mut App, ctx: &Context) {
                 pos2(left + target + pad, screen.top() + pad),
                 pos2(
                     screen.right()
-                        - if app.view == View::Live {
+                        - if handheld() {
+                            4.0
+                        } else if app.view == View::Live {
                             a.live_preview_edge * s
                         } else {
                             pad
@@ -677,6 +717,10 @@ pub fn show(app: &mut App, ctx: &Context) {
                         .max(screen.top() + pad + 1.0),
                 ),
             );
+            if handheld() && handheld_content_scroll(ctx, body) && !app.nav_collapsed {
+                app.nav_collapsed = true;
+                ctx.request_repaint();
+            }
             let view = app.view;
             ui::mobile::focus::set_zone(1);
             let preview = if view == View::Live {
@@ -1049,9 +1093,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 } else {
                     response.clicked()
                 } {
-                    if !handheld() {
-                        app.nav_collapsed = false;
-                    }
+                    app.nav_collapsed = false;
                     if let Some(view) = view {
                         app.view = view;
                     } else {
@@ -1115,6 +1157,31 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn handheld_swipe_stays_with_its_starting_column() {
+        let ctx = Context::default();
+        let content = Rect::from_min_max(pos2(90.0, 0.0), pos2(600.0, 320.0));
+        for (origin, end, closes) in [
+            (pos2(112.0, 200.0), pos2(75.0, 80.0), true),
+            (pos2(55.0, 200.0), pos2(112.0, 80.0), false),
+            (pos2(112.0, 200.0), pos2(55.0, 199.0), false),
+        ] {
+            for (position, pressed) in [(origin, true), (end, false)] {
+                let _ = ctx.run(
+                    egui::RawInput {
+                        events: vec![egui::Event::PointerButton {
+                            pos: position,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        }],
+                        ..Default::default()
+                    },
+                    |ctx| assert_eq!(handheld_content_scroll(ctx, content), !pressed && closes),
+                );
+            }
+        }
+    }
     #[test]
     fn large_live_catalogue_keeps_layout_work_bounded_while_scrolling() {
         let rt = tokio::runtime::Builder::new_multi_thread()

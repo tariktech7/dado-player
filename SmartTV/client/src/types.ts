@@ -45,6 +45,16 @@ export interface Watched {
   duration: number;
   at: number;
 }
+export function resumeHistory(history: Watched[]): Watched[] {
+  const seen = new Set<string>();
+  return [...history].sort((a, b) => b.at - a.at).filter(({item}) => {
+    const seriesId = item.kind === 'episode' ? item.seriesId : item.kind === 'series' ? item.id : undefined;
+    if (!seriesId) return true;
+    if (seen.has(seriesId)) return false;
+    seen.add(seriesId);
+    return true;
+  });
+}
 export interface Settings {
   language: "de" | "en";
   clockFormat: "H24" | "H12";

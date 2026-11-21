@@ -27,17 +27,16 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         crate::app::ContinueTab::Series => "ep:",
     };
     let mut play = None;
+    let entries: Vec<_> = crate::types::resume_history(&app.history)
+        .filter(|h| h.key.starts_with(prefix))
+        .cloned()
+        .collect();
     egui::ScrollArea::vertical()
         .id_source(("continue", prefix))
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.add_space(8.0);
-            for h in app
-                .history
-                .clone()
-                .into_iter()
-                .filter(|h| h.key.starts_with(prefix))
-            {
+            for h in entries {
                 if let Some(sid) = h
                     .key
                     .strip_prefix("ep:")

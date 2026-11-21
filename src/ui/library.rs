@@ -72,6 +72,21 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let scale = super::desktop::scale(ui.ctx());
         let landscape = super::mobile::handheld_landscape(ui.ctx());
         let narrow = a.width() < 620.0 && !landscape;
+        let selected = if series {
+            app.selected_series
+        } else {
+            app.selected_movie
+        }
+        .is_some();
+        let animation = ui.ctx().animate_bool_with_time(
+            ui.id().with("catalog-preview-slide"),
+            selected,
+            if super::desktop::reduced_motion(ui.ctx()) {
+                0.0
+            } else {
+                0.24
+            },
+        );
         let gap = if desktop { 24.0 * scale } else { 10.0 };
         let cw = if desktop {
             super::desktop::category_width(a.width(), scale)
@@ -82,7 +97,11 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         } else {
             (a.width() * 0.25).clamp(174.0, 244.0)
         };
-        let dw = if desktop {
+        let dw = if !selected {
+            0.0
+        } else if desktop && super::desktop::handheld() {
+            (a.width() * 0.42).min(360.0)
+        } else if desktop {
             (super::desktop::appearance().catalog_preview_width * scale).min(a.width() * 0.45)
         } else if landscape {
             (a.width() * 0.39).min(340.0)
@@ -91,7 +110,7 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         } else {
             (a.width() * 0.32).clamp(220.0, 340.0)
         };
-        let h = if narrow {
+        let h = if narrow && selected {
             (a.height() * 0.48).max(120.0)
         } else {
             a.height()
@@ -99,7 +118,10 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let cr = Rect::from_min_size(a.min, vec2(cw, h));
         let lr = Rect::from_min_max(
             pos2(cr.right() + gap, a.top()),
-            pos2(a.right() - dw - if narrow { 0.0 } else { gap }, a.top() + h),
+            pos2(
+                a.right() - dw - if narrow || !selected { 0.0 } else { gap },
+                a.top() + h,
+            ),
         );
         let dr = if narrow {
             Rect::from_min_max(pos2(a.left(), lr.bottom() + gap), a.max)
@@ -121,14 +143,20 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             super::desktop::column(ui, lr, "catalog-posters", offset, |ui| {
                 posters(app, ui, series, false)
             });
-            focus::set_zone(3);
-            super::desktop::column(ui, dr, "catalog-details", 0.0, |ui| {
-                super::desktop::catalog_heading(
-                    ui,
-                    if series { "Serie & Folgen" } else { "Details" },
-                );
-                details(app, ui, series, false)
-            });
+            if selected {
+                let clip = ui.clip_rect();
+                ui.set_clip_rect(clip.intersect(dr));
+                let animated = dr.translate(vec2((1.0 - animation) * dr.width(), 0.0));
+                focus::set_zone(3);
+                super::desktop::column(ui, animated, "catalog-details", 0.0, |ui| {
+                    super::desktop::catalog_heading(
+                        ui,
+                        if series { "Serie & Folgen" } else { "Details" },
+                    );
+                    details(app, ui, series, false)
+                });
+                ui.set_clip_rect(clip);
+            }
             return;
         }
         let mut c = ui.child_ui(cr, Layout::top_down(Align::Min));
@@ -139,10 +167,13 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         l.set_clip_rect(lr.intersect(ui.clip_rect()));
         focus::set_zone(2);
         posters(app, &mut l, series, false);
-        let mut d = ui.child_ui(dr, Layout::top_down(Align::Min));
-        d.set_clip_rect(dr.intersect(ui.clip_rect()));
-        focus::set_zone(3);
-        details(app, &mut d, series, false);
+        if selected {
+            let animated = dr.translate(vec2((1.0 - animation) * dr.width(), 0.0));
+            let mut d = ui.child_ui(animated, Layout::top_down(Align::Min));
+            d.set_clip_rect(dr.intersect(ui.clip_rect()));
+            focus::set_zone(3);
+            details(app, &mut d, series, false);
+        }
     });
 }
 /// A phone catalogue is a full-page grid followed by a separate detail page.
