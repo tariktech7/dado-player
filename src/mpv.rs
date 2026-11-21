@@ -157,6 +157,9 @@ impl Mpv {
             // auto-safe falls back to software decoding on its own. If a
             // device's MediaCodec is broken, `hwdec=no` is the one-line change.
             me.set_opt_str("hwdec", "auto-safe");
+            // Match egui's RGBA8 compositing target on Android. Some GLES
+            // drivers fail the floating-point-to-RGBA8 blit when the FBO resizes.
+            me.set_opt_str("fbo-format", "rgba8");
             me.set_opt_str("ao", "audiotrack");
             me.set_opt_str("video-sync", s.video_sync.mpv());
             me.set_opt_str("keep-open", "no");

@@ -309,7 +309,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
                         tokens::reg(if desktop {
-                            (21.0 * scale).max(11.0)
+                            super::desktop::handheld_type((21.0 * scale).max(11.0), 12.0)
                         } else if tv {
                             12.0
                         } else {
@@ -575,7 +575,10 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                             }
                             let mut job = egui::text::LayoutJob::simple(
                                 entry.name.clone(),
-                                tokens::medium(if tv { 11.0 } else { 13.0 }),
+                                tokens::medium(super::desktop::handheld_type(
+                                    if tv { 11.0 } else { 13.0 },
+                                    14.0,
+                                )),
                                 ui.visuals().text_color(),
                                 (width - 8.0).max(1.0),
                             );

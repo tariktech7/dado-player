@@ -100,6 +100,17 @@ pub(super) fn safe_rect(ctx: &Context, keyboard: bool) -> Rect {
         ),
     )
 }
+pub(super) fn handheld() -> bool {
+    cfg!(any(target_os = "android", target_os = "ios")) && !crate::platform::tv_device()
+}
+
+pub(super) fn handheld_type(size: f32, minimum: f32) -> f32 {
+    if handheld() {
+        (size * 1.14).max(minimum)
+    } else {
+        size
+    }
+}
 pub(crate) fn category_width(width: f32, scale: f32) -> f32 {
     (appearance().category_width * scale).min(width * 0.33)
 }
@@ -291,7 +302,7 @@ pub fn heading(ui: &mut Ui, text: &str) -> Rect {
         ui,
         pos2(r.left(), r.center().y),
         text,
-        ui::mobile::tokens::bold(appearance().heading_font * s),
+        ui::mobile::tokens::bold(handheld_type(appearance().heading_font * s, 16.0)),
         ui.visuals().text_color(),
         r.width(),
     );
@@ -304,7 +315,7 @@ pub fn catalog_heading(ui: &mut Ui, text: &str) -> Rect {
         ui,
         pos2(r.left(), r.center().y),
         text,
-        ui::mobile::tokens::bold(appearance().catalog_heading_font * s),
+        ui::mobile::tokens::bold(handheld_type(appearance().catalog_heading_font * s, 13.0)),
         ui.visuals().text_color(),
         r.width(),
     );
@@ -352,9 +363,10 @@ pub fn column<R>(
         .inner
 }
 fn style(ctx: &Context, s: f32) {
+    let minimum_control_height = if handheld() { 28.0 } else { 23.0 };
     ctx.style_mut(|style| {
         style.spacing.item_spacing = vec2(12.0 * s, 12.0 * s);
-        style.spacing.interact_size.y = (48.0 * s).max(23.0);
+        style.spacing.interact_size.y = (48.0 * s).max(minimum_control_height);
         style.spacing.button_padding = vec2(16.0 * s, 9.0 * s);
         style.animation_time = appearance().navigation_duration_ms / 1000.0;
         for (kind, size) in [
@@ -366,9 +378,9 @@ fn style(ctx: &Context, s: f32) {
             style.text_styles.insert(
                 kind.clone(),
                 if kind == egui::TextStyle::Heading {
-                    ui::mobile::tokens::bold((size * s).max(12.0))
+                    ui::mobile::tokens::bold(handheld_type((size * s).max(12.0), 16.0))
                 } else {
-                    FontId::proportional((size * s).max(11.0))
+                    FontId::proportional(handheld_type((size * s).max(11.0), 12.0))
                 },
             );
         }
@@ -827,6 +839,20 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
     );
     let mut mark_ui = nav.child_ui(mark, Layout::top_down(Align::Min));
     ui::brand_mark(&mut mark_ui, 44.0 * s);
+    if handheld() {
+        let row = Rect::from_center_size(mark.center(), Vec2::splat(70.0 * s));
+        if nav
+            .interact(
+                row,
+                nav.id().with("toggle-handheld-navigation"),
+                Sense::click(),
+            )
+            .clicked()
+        {
+            app.nav_collapsed = !app.nav_collapsed;
+            nav.ctx().request_repaint();
+        }
+    }
     if label_alpha > 0.01 {
         nav.painter().text(
             pos2(rect.left() + 76.0 * s, rect.top() + 53.0 * s),

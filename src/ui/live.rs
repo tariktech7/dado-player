@@ -537,6 +537,7 @@ fn filtered_channels(app: &mut App, ui: &Ui) -> std::sync::Arc<Vec<usize>> {
 fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     let tv = app.tv;
     let desktop = super::desktop::active(ui.ctx());
+    let handheld = desktop && super::desktop::handheld();
     let scale = super::desktop::scale(ui.ctx());
     if controls {
         let title = if app.live_cat == "all" {
@@ -589,13 +590,18 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     let tv_row_h = ((ui.available_height() - 9.0 * 3.0) / 10.0).clamp(34.0, 40.0);
     let (name_size, epg_size) = if desktop {
         (
-            super::desktop::appearance().channel_name_font * scale,
-            super::desktop::appearance().epg_font * scale,
+            super::desktop::handheld_type(
+                super::desktop::appearance().channel_name_font * scale,
+                13.0,
+            ),
+            super::desktop::handheld_type(super::desktop::appearance().epg_font * scale, 11.0),
         )
     } else {
         (13.0, 10.0)
     };
-    let row_h = if desktop {
+    let row_h = if handheld {
+        ((super::desktop::appearance().channel_row_height - 6.0) * scale * 1.15).max(38.0)
+    } else if desktop {
         (super::desktop::appearance().channel_row_height - 6.0) * scale
     } else if tv {
         tv_row_h
@@ -603,6 +609,8 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         90.0
     };
     let stride = row_h + ui.spacing().item_spacing.y;
+    let desktop_name_y = if handheld { row_h * 0.33 } else { 26.0 * scale };
+    let desktop_epg_y = if handheld { row_h * 0.76 } else { 57.0 * scale };
     let (name_y, current_y, next_y) = ui.fonts(|fonts| {
         let name_h = fonts.row_height(&tokens::reg(name_size));
         let epg_h = fonts.row_height(&tokens::reg(epg_size));
@@ -713,7 +721,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             ui,
                             pos2(
                                 r.rect.right() - right_margin * 0.5,
-                                r.rect.top() + 26.0 * scale,
+                                r.rect.top() + desktop_name_y,
                             ),
                             (13.0 * scale).max(5.0),
                             app.is_favorite(&key),
@@ -724,7 +732,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     for (line, (offset, text, size, color)) in [
                         (
                             if desktop {
-                                26.0 * scale
+                                desktop_name_y
                             } else if tv {
                                 name_y
                             } else {
@@ -736,7 +744,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         ),
                         (
                             if desktop {
-                                57.0 * scale
+                                desktop_epg_y
                             } else if tv {
                                 current_y
                             } else {
@@ -754,7 +762,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         ),
                         (
                             if desktop {
-                                57.0 * scale
+                                desktop_epg_y
                             } else if tv {
                                 next_y
                             } else {
@@ -796,6 +804,9 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     });
     if let Some(index) = selected {
         let channel = app.library.channels[index].clone();
+        if handheld {
+            app.nav_collapsed = true;
+        }
         app.select_live_channel(play_item(&channel));
         ui.ctx().request_repaint();
     }

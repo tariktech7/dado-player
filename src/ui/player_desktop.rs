@@ -243,7 +243,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let a = super::desktop::appearance();
     let safe = super::desktop::safe_rect(&ctx, false).intersect(full);
     let s = super::desktop::scale(&ctx)
-        .max(if cfg!(windows) { 0.66 } else { 0.54 })
+        .max(if super::desktop::handheld() {
+            0.62
+        } else if cfg!(windows) {
+            0.66
+        } else {
+            0.54
+        })
         .min(safe.width() / 610.0)
         .min(safe.height() / 480.0);
     let top_size = vec2(

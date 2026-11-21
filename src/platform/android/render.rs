@@ -582,7 +582,7 @@ fn paint(info: egui::PaintCallbackInfo, painter: &egui_glow::Painter) {
         fbo: selected.fbo.0.get() as i32,
         w: render_width,
         h: render_height,
-        internal_format: 0,
+        internal_format: glow::RGBA8 as i32,
     };
     // OpenGL's framebuffer origin is bottom-left and mpv's is top-left.
     // `FLIP_Y=1` is what makes the picture upright; if a frame ever comes out
