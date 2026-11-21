@@ -15,7 +15,7 @@ android {
         // treats an APK as an *update* when versionCode grows; with a frozen
         // value the installer keeps reporting the same version and some OEM
         // installers refuse the package outright.
-        versionCode 32
+        versionCode 33
         versionName "0.8.0"
 
         // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the

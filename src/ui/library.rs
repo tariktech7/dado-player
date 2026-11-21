@@ -262,7 +262,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
         .auto_shrink([false, false])
         .show_viewport(ui, |ui, viewport| {
             let row_height = if desktop {
-                58.0 * scale
+                super::desktop::handheld_size(58.0 * scale, 46.0)
             } else if tv {
                 39.0
             } else {
@@ -309,7 +309,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
                         tokens::reg(if desktop {
-                            super::desktop::handheld_type((21.0 * scale).max(11.0), 12.0)
+                            super::desktop::handheld_type((21.0 * scale).max(11.0), 16.0)
                         } else if tv {
                             12.0
                         } else {

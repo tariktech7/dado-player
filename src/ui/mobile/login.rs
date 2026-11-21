@@ -472,7 +472,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout, blocked: bool, viewport: Rect) {
 }
 
 /// One field, reporting the rect of the field that just gained focus.
-fn field(
+pub(super) fn field(
     ui: &mut Ui,
     label: &str,
     text: &mut String,
@@ -555,7 +555,7 @@ fn follow_focus(
 // ------------------------------------------------------- delete confirm ----
 
 /// Has the "Profil löschen" dialog already taken focus this time round?
-fn confirm_shown_key() -> egui::Id {
+pub(super) fn confirm_shown_key() -> egui::Id {
     egui::Id::new("m-confirm-shown")
 }
 
@@ -587,7 +587,7 @@ fn dialog_name(name: &str) -> String {
     out
 }
 
-fn confirm_delete(app: &mut App, ctx: &Context) {
+pub(super) fn confirm_delete(app: &mut App, ctx: &Context) {
     let Some(id) = app.pending_delete.clone() else {
         return;
     };

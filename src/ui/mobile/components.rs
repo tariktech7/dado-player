@@ -1117,9 +1117,12 @@ pub fn field(
     show_password: &mut bool,
 ) -> Response {
     if !label.is_empty() {
+        let label_size = ui.style().text_styles[&egui::TextStyle::Small]
+            .size
+            .max(FS_LABEL);
         ui.label(
             egui::RichText::new(label)
-                .font(reg(FS_LABEL))
+                .font(reg(label_size))
                 .color(muted(ui)),
         );
         ui.add_space(6.0);
@@ -1136,6 +1139,7 @@ pub fn field(
         .id(ui.id().with(("mobile-text-field", label, hint)))
         .frame(false)
         .hint_text(hint)
+        .min_size(vec2(text_w, TOUCH))
         .desired_width(f32::INFINITY);
     if kb == Kb::Password {
         te = te.password(!*show_password);
@@ -1144,7 +1148,7 @@ pub fn field(
     ui.painter().rect_filled(rect, RADIUS_SM, surface(ui));
     ui.painter()
         .rect_stroke(rect, RADIUS_SM, Stroke::new(1.0_f32, hairline(ui)));
-    let resp = ui.add_sized([text_w, TOUCH], te.margin(vec2(12.0, 10.0)));
+    let resp = ui.put(rect, te.margin(vec2(12.0, 10.0)));
     #[cfg(target_os = "ios")]
     {
         let id = resp.id.value();
@@ -1169,7 +1173,7 @@ pub fn field(
     // into.
     if resp.has_focus() {
         ui.painter().rect_stroke(
-            resp.rect,
+            rect,
             Rounding::same(RADIUS_SM),
             Stroke::new(SEL_RING, accent_text(ui)),
         );
@@ -1179,13 +1183,7 @@ pub fn field(
     }
     if kb == Kb::Password {
         // Sits in the reserved column, vertically centred on the text row.
-        let eye_rect = Rect::from_min_max(
-            pos2(resp.rect.right(), resp.rect.center().y - TOUCH * 0.5),
-            pos2(
-                resp.rect.right() + eye_w,
-                resp.rect.center().y + TOUCH * 0.5,
-            ),
-        );
+        let eye_rect = Rect::from_min_size(rect.right_top(), vec2(eye_w, TOUCH));
         let eye_resp = ui.interact(eye_rect, resp.id.with("password_toggle"), Sense::click());
         let pill = Rect::from_center_size(eye_rect.center(), vec2(TOUCH - 8.0, TOUCH - 8.0));
         ui.painter()

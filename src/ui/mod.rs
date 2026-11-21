@@ -83,7 +83,7 @@ pub fn catalog_banner(app: &mut App, ui: &mut Ui) {
 /// A small star toggle bound to a favorite key.
 pub fn fav_button(app: &mut App, ui: &mut Ui, key: &str) -> Response {
     let marked = app.is_favorite(key);
-    let size = (42.0 * desktop::scale(ui.ctx())).max(20.0);
+    let size = desktop::handheld_size((42.0 * desktop::scale(ui.ctx())).max(20.0), 40.0);
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
     let response = response.on_hover_text(if marked {
         "Favorit entfernen"

@@ -144,10 +144,9 @@ pub fn apply(ctx: &Context, dark: bool) {
     };
 
     style.text_styles = text_styles();
-    #[cfg(windows)]
-    {
-        style.interaction.selectable_labels = false;
-    }
+    // Labels inside a tile must leave taps to the tile. Text editors and
+    // explicit copy buttons still handle text selection or copying.
+    style.interaction.selectable_labels = false;
     ctx.set_style(style);
 }
 

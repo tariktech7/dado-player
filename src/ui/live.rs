@@ -62,7 +62,12 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
     let category_w = super::desktop::category_width(body.width(), s);
     let preview_w = (a.live_preview_width * s)
         .min((body.width() - category_w - 2.0 * gap).max(1.0) * 0.72)
-        .min(body.height() * 0.58 * 16.0 / 9.0);
+        .min(body.height() * 0.58 * 16.0 / 9.0)
+        .min(if super::desktop::handheld() {
+            body.width() * 0.33
+        } else {
+            body.width()
+        });
     let cr = Rect::from_min_max(body.min, pos2(body.left() + category_w, body.bottom()));
     let pr = Rect::from_min_max(pos2(body.right() - preview_w, body.top()), body.max);
     let lr = Rect::from_min_max(
@@ -112,7 +117,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
             .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
     );
     if let Some(item) = &item {
-        let size = (42.0 * s).max(20.0);
+        let size = super::desktop::handheld_size((42.0 * s).max(20.0), 40.0);
         let bounds =
             Rect::from_min_size(pos2(header.right() - size, header.top()), Vec2::splat(size));
         let mut favorite = ui.child_ui(bounds, Layout::top_down(Align::Min));
@@ -159,7 +164,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
         return None;
     };
     let open = ui.add_sized(
-        [w, 40.0 * s],
+        [w, super::desktop::handheld_size(40.0 * s, 44.0)],
         egui::Button::new("Vollbild öffnen  ↗").frame(false),
     );
     if activated(ui, &response, app.tv) | activated(ui, &open, app.tv) {
@@ -171,7 +176,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
     }
     let mut title = egui::text::LayoutJob::simple(
         item.title.clone(),
-        egui::FontId::proportional(32.0 * s),
+        egui::FontId::proportional(super::desktop::handheld_type(32.0 * s, 18.0)),
         ui.visuals().text_color(),
         w,
     );
@@ -446,7 +451,7 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                     ui,
                     ("category", &id),
                     if desktop {
-                        58.0 * s
+                        super::desktop::handheld_size(58.0 * s, 46.0)
                     } else if tv {
                         34.0
                     } else {
@@ -460,7 +465,7 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                         pos2(r.rect.left() + 12.0, r.rect.center().y),
                         &name,
                         tokens::medium(if desktop {
-                            21.0 * s
+                            super::desktop::handheld_type(21.0 * s, 16.0)
                         } else if tv {
                             16.0
                         } else {
@@ -592,15 +597,15 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         (
             super::desktop::handheld_type(
                 super::desktop::appearance().channel_name_font * scale,
-                13.0,
+                18.0,
             ),
-            super::desktop::handheld_type(super::desktop::appearance().epg_font * scale, 11.0),
+            super::desktop::handheld_type(super::desktop::appearance().epg_font * scale, 15.0),
         )
     } else {
         (13.0, 10.0)
     };
     let row_h = if handheld {
-        ((super::desktop::appearance().channel_row_height - 6.0) * scale * 1.15).max(38.0)
+        ((super::desktop::appearance().channel_row_height - 6.0) * scale * 1.25).max(54.0)
     } else if desktop {
         (super::desktop::appearance().channel_row_height - 6.0) * scale
     } else if tv {

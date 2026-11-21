@@ -3,13 +3,116 @@ use crate::theme;
 use crate::types::{PlayItem, PlayKind};
 use crate::ui;
 use crate::ui::mobile::{active as mobile_active, tokens::GAP};
-use egui::{Align, Color32, Layout, RichText, Sense, Stroke, Ui, Vec2};
+use egui::{Align, Color32, Id, Layout, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2};
+use std::hash::Hash;
 
 const POSTER_W: f32 = 112.0;
 const POSTER_H: f32 = 166.0;
 
+#[derive(Clone, Copy)]
+struct HomeSwipe {
+    origin: Pos2,
+    last: Pos2,
+    horizontal: Option<bool>,
+}
+
+/// Choose an axis once. egui's nested ScrollAreas otherwise give the entire
+/// drag to one area, even when the finger moves across the other axis.
+fn prepare_swipe(ui: &Ui) {
+    let key = ui.id().with("home-swipe");
+    let delta_key = Id::new("home-touch-delta");
+    let (start, position, down) = ui.input(|i| {
+        (
+            i.events.iter().find_map(|event| match event {
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    ..
+                } => Some(*pos),
+                _ => None,
+            }),
+            i.pointer.interact_pos(),
+            i.pointer.primary_down(),
+        )
+    });
+    ui.data_mut(|data| {
+        let mut swipe = start
+            .map(|origin| HomeSwipe {
+                origin,
+                last: origin,
+                horizontal: None,
+            })
+            .or_else(|| data.get_temp::<HomeSwipe>(key));
+        data.remove::<(Pos2, bool, f32)>(delta_key);
+        if let (Some(swipe), Some(position)) = (&mut swipe, position) {
+            let displacement = position - swipe.origin;
+            if swipe.horizontal.is_none() && displacement.length() > 6.0 {
+                swipe.horizontal = Some(displacement.x.abs() > displacement.y.abs());
+            }
+            if let Some(horizontal) = swipe.horizontal {
+                let delta = position - swipe.last;
+                swipe.last = position;
+                data.insert_temp(
+                    delta_key,
+                    (
+                        swipe.origin,
+                        horizontal,
+                        if horizontal { delta.x } else { delta.y },
+                    ),
+                );
+            }
+        }
+        if let Some(swipe) = swipe.filter(|_| down) {
+            data.insert_temp(key, swipe);
+        } else {
+            data.remove::<HomeSwipe>(key);
+        }
+    });
+}
+
+fn home_scroll(ui: &Ui, id: impl Hash + Copy, horizontal: bool, height: f32) -> egui::ScrollArea {
+    let handheld = super::desktop::handheld();
+    let mut scroll = if horizontal {
+        egui::ScrollArea::horizontal()
+    } else {
+        egui::ScrollArea::vertical()
+    };
+    scroll = scroll.id_source(id).drag_to_scroll(!handheld);
+    if !handheld {
+        return scroll;
+    }
+    let viewport = Rect::from_min_size(
+        ui.next_widget_position(),
+        Vec2::new(ui.available_width(), height),
+    )
+    .intersect(ui.clip_rect());
+    if let Some((origin, on_rail, delta)) =
+        ui.data(|data| data.get_temp::<(Pos2, bool, f32)>(Id::new("home-touch-delta")))
+    {
+        if delta != 0.0 && on_rail == horizontal && viewport.contains(origin) {
+            let offset =
+                egui::scroll_area::State::load(ui.ctx(), ui.make_persistent_id(Id::new(id)))
+                    .unwrap_or_default()
+                    .offset;
+            scroll = if horizontal {
+                scroll.horizontal_scroll_offset((offset.x - delta).max(0.0))
+            } else {
+                scroll.vertical_scroll_offset((offset.y - delta).max(0.0))
+            };
+            ui.ctx().request_repaint();
+        }
+    }
+    scroll
+}
+
 /// Full-width content dashboard inspired by the supplied reference capture.
 pub fn show(app: &mut App, ui: &mut Ui) {
+    if super::desktop::handheld() {
+        prepare_swipe(ui);
+        show_content(app, ui, true);
+        return;
+    }
     let shared = super::desktop::active(ui.ctx());
     if !shared && mobile_active(ui.ctx()) && !app.tv && ui.available_width() < 940.0 {
         let pad = if ui.available_width() < 360.0 {
@@ -77,8 +180,7 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
     for id in series.into_iter().take(3) {
         app.request_series(id);
     }
-    egui::ScrollArea::vertical()
-        .id_source("home-page-scroll")
+    home_scroll(ui, "home-page-scroll", false, ui.available_height())
         .auto_shrink([false, false])
         .show(ui, |ui| {
             theme::ambient(ui,ui.max_rect());
@@ -88,9 +190,9 @@ fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
             ui::catalog_banner(app, ui);
             let name=app.active_profile.as_ref().map(|p|p.name.as_str()).unwrap_or("");
             let desktop=super::desktop::active(ui.ctx());let scale=super::desktop::scale(ui.ctx());
-            if desktop {ui.label(RichText::new("DEIN PROGRAMM").size(18.0*scale).color(theme::muted(ui)));}
-            ui.label(RichText::new(format!("Guten Tag, {name}.")).size(if desktop{44.0*scale}else if app.tv{22.0}else{26.0}).strong());
-            ui.label(RichText::new("Dein Programm. Dein Überblick.").small().color(theme::muted(ui)));
+            if desktop && !super::desktop::handheld() {ui.label(RichText::new("DEIN PROGRAMM").size(18.0*scale).color(theme::muted(ui)));}
+            ui.label(RichText::new(format!("Guten Tag, {name}.")).size(if desktop{super::desktop::handheld_type(44.0*scale, 26.0)}else if app.tv{22.0}else{26.0}).strong());
+            if !super::desktop::handheld() { ui.label(RichText::new("Dein Programm. Dein Überblick.").small().color(theme::muted(ui))); }
             ui.add_space(10.0);
             let featured = featured_item(app);
             if let Some(item) = featured {
@@ -498,8 +600,7 @@ fn poster_rail(
 ) {
     section_title(app, ui, title, items.len(), target);
     let mut play = None;
-    egui::ScrollArea::horizontal()
-        .id_source(("home-poster-rail", title))
+    home_scroll(ui, ("home-poster-rail", title), true, POSTER_H + 60.0)
         .auto_shrink([false, true])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -527,12 +628,12 @@ fn poster_rail(
                             }
                         }
                         ui.add_space(3.0);
-                        ui::one_line(ui, name, 12.0, true);
+                        ui::one_line(ui, name, super::desktop::handheld_type(12.0, 16.0), true);
                         if show_progress {
                             if let Some(pos) = app.progress.get(key) {
                                 ui.label(
                                     RichText::new(format!("Bei {}", ui::fmt_time(*pos as f64)))
-                                        .size(10.0)
+                                        .size(super::desktop::handheld_type(10.0, 14.0))
                                         .color(theme::muted(ui)),
                                 );
                             }
@@ -663,14 +764,15 @@ fn live_rail(
 ) {
     section_title(app, ui, title, items.len(), target);
     let mut play = None;
-    egui::ScrollArea::horizontal()
-        .id_source(("home-live-rail", title))
+    let height = super::desktop::handheld_size(58.0, 68.0);
+    let width = super::desktop::handheld_size(148.0, 190.0);
+    home_scroll(ui, ("home-live-rail", title), true, height)
         .auto_shrink([false, true])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 for (key, name, logo, url) in items {
                     let (rect, resp) =
-                        ui.allocate_exact_size(Vec2::new(148.0, 58.0), Sense::click());
+                        ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
                     if super::desktop::active(ui.ctx()) && resp.gained_focus() {
                         resp.scroll_to_me(None);
                     }
@@ -682,7 +784,7 @@ fn live_rail(
                             key,
                             logo,
                             egui::Rect::from_min_size(
-                                rect.min + Vec2::new(8.0, 9.0),
+                                egui::pos2(rect.left() + 8.0, rect.center().y - 20.0),
                                 Vec2::splat(40.0),
                             ),
                             name,
@@ -692,8 +794,17 @@ fn live_rail(
                             rect.max - Vec2::new(8.0, 8.0),
                         );
                         let mut child = ui.child_ui(text_rect, Layout::top_down(Align::Min));
-                        ui::one_line(&mut child, name, 12.0, true);
-                        child.label(RichText::new("Live-TV").size(10.0).color(theme::muted(ui)));
+                        ui::one_line(
+                            &mut child,
+                            name,
+                            super::desktop::handheld_type(12.0, 16.0),
+                            true,
+                        );
+                        child.label(
+                            RichText::new("Live-TV")
+                                .size(super::desktop::handheld_type(10.0, 14.0))
+                                .color(theme::muted(ui)),
+                        );
                     }
                     #[cfg(windows)]
                     super::desktop::remember_favorite_target(&resp, key);
@@ -715,6 +826,9 @@ fn live_rail(
         } else {
             app.start_preview(item);
             app.navigate(View::Live);
+            if super::desktop::handheld() {
+                app.nav_collapsed = true;
+            }
         }
         ui.ctx().request_repaint();
     }
@@ -860,10 +974,14 @@ fn favorite_epg(app: &mut App, ui: &mut Ui) {
 fn section_title(app: &mut App, ui: &mut Ui, title: &str, count: usize, target: Option<View>) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new(title).size(15.0).strong());
+        ui.label(
+            RichText::new(title)
+                .size(super::desktop::handheld_type(15.0, 20.0))
+                .strong(),
+        );
         ui.label(
             RichText::new(format!("({})", count))
-                .size(11.0)
+                .size(super::desktop::handheld_type(11.0, 15.0))
                 .color(theme::muted(ui)),
         );
         if let Some(view) = target {
@@ -871,7 +989,7 @@ fn section_title(app: &mut App, ui: &mut Ui, title: &str, count: usize, target: 
                 let btn = ui.add(
                     egui::Button::new(
                         RichText::new("Alle anzeigen  ›")
-                            .size(11.0)
+                            .size(super::desktop::handheld_type(11.0, 15.0))
                             .color(theme::accent(ui)),
                     )
                     .frame(false),

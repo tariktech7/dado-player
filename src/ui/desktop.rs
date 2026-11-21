@@ -106,13 +106,20 @@ pub(super) fn handheld() -> bool {
 
 pub(super) fn handheld_type(size: f32, minimum: f32) -> f32 {
     if handheld() {
-        (size * 1.14).max(minimum)
+        (size * 1.25).max(minimum)
+    } else {
+        size
+    }
+}
+pub(super) fn handheld_size(size: f32, minimum: f32) -> f32 {
+    if handheld() {
+        size.max(minimum)
     } else {
         size
     }
 }
 pub(crate) fn category_width(width: f32, scale: f32) -> f32 {
-    (appearance().category_width * scale).min(width * 0.33)
+    handheld_size(appearance().category_width * scale, 128.0).min(width * 0.33)
 }
 
 pub(super) fn search_field(
@@ -121,7 +128,7 @@ pub(super) fn search_field(
     hint: &str,
     remote: bool,
 ) -> egui::Response {
-    let height = (56.0 * scale(ui.ctx())).max(26.0);
+    let height = handheld_size((56.0 * scale(ui.ctx())).max(26.0), 44.0);
     let response = ui.add_sized(
         [ui.available_width().max(1.0), height],
         egui::TextEdit::singleline(value).hint_text(hint),
@@ -252,7 +259,7 @@ fn motion(ctx: &Context, target: f32) -> f32 {
         from: 0.0,
         started: now,
     });
-    if reduced_motion(ctx) {
+    if handheld() || reduced_motion(ctx) {
         m = Motion {
             target,
             from: 0.0,
@@ -297,12 +304,13 @@ pub fn offset(ctx: &Context) -> f32 {
 }
 pub fn heading(ui: &mut Ui, text: &str) -> Rect {
     let s = scale(ui.ctx());
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 60.0 * s), Sense::hover());
+    let h = handheld_size(60.0 * s, 32.0);
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     ui::mobile::components::draw_line(
         ui,
         pos2(r.left(), r.center().y),
         text,
-        ui::mobile::tokens::bold(handheld_type(appearance().heading_font * s, 16.0)),
+        ui::mobile::tokens::bold(handheld_type(appearance().heading_font * s, 21.0)),
         ui.visuals().text_color(),
         r.width(),
     );
@@ -310,12 +318,13 @@ pub fn heading(ui: &mut Ui, text: &str) -> Rect {
 }
 pub fn catalog_heading(ui: &mut Ui, text: &str) -> Rect {
     let s = scale(ui.ctx());
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0 * s), Sense::hover());
+    let h = handheld_size(40.0 * s, 30.0);
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
     ui::mobile::components::draw_line(
         ui,
         pos2(r.left(), r.center().y),
         text,
-        ui::mobile::tokens::bold(handheld_type(appearance().catalog_heading_font * s, 13.0)),
+        ui::mobile::tokens::bold(handheld_type(appearance().catalog_heading_font * s, 19.0)),
         ui.visuals().text_color(),
         r.width(),
     );
@@ -330,6 +339,20 @@ pub fn column<R>(
     dx: f32,
     render: impl FnOnce(&mut Ui) -> R,
 ) -> R {
+    let content =
+        if name.ends_with("categories") || name == "live-channels" || name == "catalog-posters" {
+            rect.shrink(6.0 * scale(ui.ctx()))
+        } else {
+            rect
+        };
+    let clip = rect.intersect(ui.clip_rect());
+    if handheld() {
+        // Touch columns stay in one hit-test layer. An Area can retain a
+        // previous frame's bounds after the navigation width changes.
+        let mut child = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), name);
+        child.set_clip_rect(clip);
+        return render(&mut child);
+    }
     let layer = LayerId::new(Order::Middle, Id::new(("desktop-column", ui.id(), name)));
     ui.ctx().set_transform_layer(
         layer,
@@ -343,27 +366,13 @@ pub fn column<R>(
             area.set_min_size(rect.size());
             // The rect is already known: skip Area's invisible measurement
             // frame so a freshly opened catalogue paints immediately.
-            let content = if name.ends_with("categories")
-                || name == "live-channels"
-                || name == "catalog-posters"
-            {
-                rect.shrink(6.0 * scale(ui.ctx()))
-            } else {
-                rect
-            };
-            let mut child = Ui::new(
-                ui.ctx().clone(),
-                layer,
-                layer.id,
-                content,
-                rect.intersect(ui.clip_rect()),
-            );
+            let mut child = Ui::new(ui.ctx().clone(), layer, layer.id, content, clip);
             render(&mut child)
         })
         .inner
 }
 fn style(ctx: &Context, s: f32) {
-    let minimum_control_height = if handheld() { 28.0 } else { 23.0 };
+    let minimum_control_height = handheld_size(23.0, 44.0);
     ctx.style_mut(|style| {
         style.spacing.item_spacing = vec2(12.0 * s, 12.0 * s);
         style.spacing.interact_size.y = (48.0 * s).max(minimum_control_height);
@@ -378,9 +387,14 @@ fn style(ctx: &Context, s: f32) {
             style.text_styles.insert(
                 kind.clone(),
                 if kind == egui::TextStyle::Heading {
-                    ui::mobile::tokens::bold(handheld_type((size * s).max(12.0), 16.0))
+                    ui::mobile::tokens::bold(handheld_type((size * s).max(12.0), 22.0))
                 } else {
-                    FontId::proportional(handheld_type((size * s).max(11.0), 12.0))
+                    let minimum = if kind == egui::TextStyle::Small {
+                        15.0
+                    } else {
+                        17.0
+                    };
+                    FontId::proportional(handheld_type((size * s).max(11.0), minimum))
                 },
             );
         }
@@ -595,7 +609,9 @@ pub fn show(app: &mut App, ctx: &Context) {
         return;
     }
     if app.active_profile.is_none() {
-        if cfg!(any(target_os = "android", target_os = "ios")) {
+        if handheld() {
+            ui::mobile::show_handheld_login(app, ctx);
+        } else if cfg!(any(target_os = "android", target_os = "ios")) {
             ui::mobile::show_landscape_login(app, ctx);
         } else {
             ui::login::show(app, ctx);
@@ -607,12 +623,17 @@ pub fn show(app: &mut App, ctx: &Context) {
     style(ctx, s);
     let screen = safe_rect(ctx, true);
     let background = ctx.screen_rect();
-    let expanded = a.navigation_expanded * s;
-    let collapsed = a.navigation_collapsed * s;
+    let expanded = handheld_size(a.navigation_expanded * s, 178.0);
+    let collapsed = handheld_size(a.navigation_collapsed * s, 52.0);
     if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
         app.nav_collapsed = false;
     }
-    let left = screen.left() + a.navigation_edge * s;
+    let left = screen.left()
+        + if handheld() {
+            4.0
+        } else {
+            a.navigation_edge * s
+        };
     let rail = |width| {
         Rect::from_min_max(
             pos2(left, screen.top()),
@@ -652,7 +673,8 @@ pub fn show(app: &mut App, ctx: &Context) {
                         } else {
                             pad
                         },
-                    (screen.bottom() - 30.0 * s).max(screen.top() + pad + 1.0),
+                    (screen.bottom() - if handheld() { 5.0 } else { 30.0 * s })
+                        .max(screen.top() + pad + 1.0),
                 ),
             );
             let view = app.view;
@@ -827,20 +849,20 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
     let text = nav.visuals().text_color();
     let muted = theme::muted(&nav);
     let label_alpha = visibility.clamp(0.0, 1.0);
+    let icon_x = rect.left() + handheld_size(40.0 * s, 26.0);
+    let brand_y = rect.top() + handheld_size(53.0 * s, 25.0);
+    let mark_size = handheld_size(44.0 * s, 30.0);
     let focus_requested = ui.data_mut(|data| {
         let id = Id::new("desktop-navigation-focus");
         let requested = data.get_temp::<bool>(id).unwrap_or(false);
         data.remove::<bool>(id);
         requested
     });
-    let mark = Rect::from_center_size(
-        pos2(rect.left() + 40.0 * s, rect.top() + 53.0 * s),
-        vec2(44.0 * s, 44.0 * s),
-    );
+    let mark = Rect::from_center_size(pos2(icon_x, brand_y), egui::Vec2::splat(mark_size));
     let mut mark_ui = nav.child_ui(mark, Layout::top_down(Align::Min));
-    ui::brand_mark(&mut mark_ui, 44.0 * s);
+    ui::brand_mark(&mut mark_ui, mark_size);
     if handheld() {
-        let row = Rect::from_center_size(mark.center(), egui::Vec2::splat(70.0 * s));
+        let row = Rect::from_min_max(rect.min, pos2(rect.right(), brand_y + 23.0));
         if nav
             .interact(
                 row,
@@ -855,10 +877,10 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
     }
     if label_alpha > 0.01 {
         nav.painter().text(
-            pos2(rect.left() + 76.0 * s, rect.top() + 53.0 * s),
+            pos2(rect.left() + handheld_size(76.0 * s, 50.0), brand_y),
             Align2::LEFT_CENTER,
             "Dado Player",
-            ui::mobile::tokens::bold(27.0 * s),
+            ui::mobile::tokens::bold(handheld_type(27.0 * s, 18.0)),
             text.gamma_multiply(label_alpha),
         );
     }
@@ -871,9 +893,22 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
         let mut b = nav.child_ui(badge, Layout::top_down(Align::Min));
         crate::licensing::trial_badge(&mut b, is_collapsed);
     }
+    let footer_height = if handheld() {
+        if is_collapsed {
+            6.0
+        } else {
+            52.0
+        }
+    } else {
+        140.0 * s
+    };
+    let list_inset = if handheld() { 3.0 } else { 8.0 * s };
     let list_rect = Rect::from_min_max(
-        pos2(rect.left() + 8.0 * s, rect.top() + 112.0 * s),
-        pos2(rect.right() - 8.0 * s, rect.bottom() - 140.0 * s),
+        pos2(
+            rect.left() + list_inset,
+            rect.top() + handheld_size(112.0 * s, 50.0),
+        ),
+        pos2(rect.right() - list_inset, rect.bottom() - footer_height),
     );
     let mut list = nav.child_ui(list_rect, Layout::top_down(Align::Min));
     list.set_clip_rect(list_rect.intersect(rect));
@@ -924,8 +959,11 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
             let refresh_label = language.text("Liste aktualisieren", "Refresh library");
             let spacing = nav.spacing().item_spacing.y;
             let total_rows = (rows.len() + 1) as f32;
-            let row_height = (appearance().navigation_row_height * s - spacing)
-                .min(((list_rect.height() + spacing) / total_rows - spacing).max(23.0));
+            let row_height = handheld_size(
+                (appearance().navigation_row_height * s - spacing)
+                    .min(((list_rect.height() + spacing) / total_rows - spacing).max(23.0)),
+                46.0,
+            );
             for (label, view, symbol) in rows
                 .into_iter()
                 .map(|(label, view, icon)| (label, Some(view), icon))
@@ -970,8 +1008,8 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                     );
                 }
                 let icon_rect = Rect::from_center_size(
-                    pos2(rect.left() + 40.0 * s, r.center().y),
-                    vec2(30.0 * s, 30.0 * s),
+                    pos2(icon_x, r.center().y),
+                    egui::Vec2::splat(handheld_size(30.0 * s, 22.0)),
                 );
                 if view.is_none() {
                     refresh_icon(app, nav, icon_rect, color, response.id);
@@ -979,12 +1017,15 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                     icon(nav, icon_rect, symbol, color);
                 }
                 if label_alpha > 0.01 {
-                    let label_x = rect.left() + 70.0 * s;
+                    let label_x = rect.left() + handheld_size(70.0 * s, 47.0);
                     ui::mobile::components::draw_line(
                         nav,
                         pos2(label_x, r.center().y),
                         label,
-                        FontId::proportional((appearance().navigation_font * s).max(11.0)),
+                        FontId::proportional(handheld_type(
+                            (appearance().navigation_font * s).max(11.0),
+                            16.0,
+                        )),
                         color.gamma_multiply(label_alpha),
                         (r.right() - label_x - 8.0 * s).max(0.0),
                     );
@@ -1008,7 +1049,9 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 } else {
                     response.clicked()
                 } {
-                    app.nav_collapsed = false;
+                    if !handheld() {
+                        app.nav_collapsed = false;
+                    }
                     if let Some(view) = view {
                         app.view = view;
                     } else {
@@ -1018,6 +1061,21 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
             }
         });
     if label_alpha > 0.01 {
+        if handheld() {
+            let footer = Rect::from_min_max(
+                pos2(rect.left() + 6.0, list_rect.bottom() + 3.0),
+                pos2(rect.right() - 6.0, rect.bottom() - 3.0),
+            );
+            let mut controls = nav.child_ui(footer, Layout::top_down(Align::Min));
+            controls.set_clip_rect(footer);
+            if controls
+                .add_sized(footer.size(), egui::Button::new("Abmelden"))
+                .clicked()
+            {
+                app.logout();
+            }
+            return;
+        }
         let name = app
             .active_profile
             .as_ref()

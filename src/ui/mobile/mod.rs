@@ -14,6 +14,7 @@ mod continue_watching;
 mod favorites;
 mod live;
 mod login;
+mod login_landscape;
 mod more;
 mod movies;
 mod player;
@@ -215,6 +216,11 @@ pub(crate) fn handheld_landscape(ctx: &Context) -> bool {
 pub(super) fn show_landscape_login(app: &mut App, ctx: &Context) {
     touch_style(ctx);
     login::show(app, ctx, &Layout::new(ctx));
+}
+
+pub(super) fn show_handheld_login(app: &mut App, ctx: &Context) {
+    touch_style(ctx);
+    login_landscape::show(app, ctx);
 }
 
 /// Entry point, called from `App::draw`.

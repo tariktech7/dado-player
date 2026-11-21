@@ -242,16 +242,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let ppp = ctx.pixels_per_point();
     let a = super::desktop::appearance();
     let safe = super::desktop::safe_rect(&ctx, false).intersect(full);
+    let handheld = super::desktop::handheld();
     let s = super::desktop::scale(&ctx)
-        .max(if super::desktop::handheld() {
-            0.62
+        .max(if handheld {
+            0.84
         } else if cfg!(windows) {
             0.66
         } else {
             0.54
         })
         .min(safe.width() / 610.0)
-        .min(safe.height() / 480.0);
+        .min(safe.height() / if handheld { 370.0 } else { 480.0 });
     let top_size = vec2(
         (safe.width() - 2.0 * a.player_top_inset_x * s).min(a.player_top_max_width * s),
         a.player_top_height * s,
@@ -259,7 +260,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let title = Rect::from_center_size(
         pos2(
             safe.center().x,
-            safe.top() + a.player_top_inset_y * s + top_size.y / 2.0,
+            safe.top()
+                + if handheld {
+                    8.0
+                } else {
+                    a.player_top_inset_y * s
+                }
+                + top_size.y / 2.0,
         ),
         top_size,
     );
@@ -270,7 +277,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let bottom = Rect::from_center_size(
         pos2(
             safe.center().x,
-            safe.bottom() - a.player_controls_inset_y * s - bottom_size.y / 2.0,
+            safe.bottom()
+                - if handheld {
+                    8.0
+                } else {
+                    a.player_controls_inset_y * s
+                }
+                - bottom_size.y / 2.0,
         ),
         bottom_size,
     );
