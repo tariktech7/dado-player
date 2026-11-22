@@ -1,5 +1,7 @@
 use crate::app::App;
-use crate::types::{AppLanguage, ClockFormat, HwDec, SettingsMode, Theme, VideoOut, VideoSync};
+use crate::types::{
+    AppLanguage, ClockFormat, HwDec, InterfaceLayout, SettingsMode, Theme, VideoOut, VideoSync,
+};
 use egui::{RichText, Ui};
 
 /// Content is kept in a readable column instead of stretching across the
@@ -287,6 +289,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     }
 }
 
+pub(super) fn open_profiles(ctx: &egui::Context) {
+    if let Some(index) = sections()
+        .iter()
+        .position(|section| section.id == "profiles")
+    {
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("settings-current-section"), index));
+    }
+}
+
 fn panel(
     app: &mut App,
     ui: &mut Ui,
@@ -306,6 +317,15 @@ fn panel(
             ui.set_width(ui.available_width());
             match section {
                 "general" => {
+                    *changed |= select(
+                        ui,
+                        t("Oberfläche", "Interface layout"),
+                        &mut app.settings.interface_layout,
+                        &[
+                            (InterfaceLayout::Modern, t("Modern", "Modern")),
+                            (InterfaceLayout::Classic, t("Klassisch", "Classic")),
+                        ],
+                    );
                     *changed |= select(
                         ui,
                         t("App-Sprache", "App language"),

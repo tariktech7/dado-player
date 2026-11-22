@@ -425,6 +425,13 @@ pub enum DesktopAspect {
     Stretch,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InterfaceLayout {
+    Modern,
+    #[default]
+    Classic,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -450,6 +457,8 @@ pub struct Settings {
     pub network_timeout_s: u64,
     #[serde(default)]
     pub theme: Theme,
+    #[serde(default)]
+    pub interface_layout: InterfaceLayout,
     #[serde(default)]
     pub settings_mode: SettingsMode,
     #[serde(default = "default_auto_play_last")]
@@ -535,6 +544,7 @@ impl Default for Settings {
             cache_secs: default_cache(),
             network_timeout_s: default_timeout(),
             theme: Theme::Warm,
+            interface_layout: InterfaceLayout::default(),
             settings_mode: SettingsMode::Easy,
             auto_play_last: default_auto_play_last(),
             default_profile: None,

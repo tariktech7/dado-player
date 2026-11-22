@@ -307,7 +307,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     );
     let title = Rect::from_center_size(
         pos2(
-            safe.center().x,
+            safe.left() + a.player_top_inset_x * s + top_size.x / 2.0,
             safe.top()
                 + if handheld {
                     8.0
@@ -403,105 +403,93 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let t = |de, en| language.text(de, en);
     let is_english = t("de", "en") == "en";
     let mut layers = Vec::with_capacity(4);
-    let (back, layer) = pane(&ctx, "top", title, s, |ui| {
-        let center = title.center().y;
-        let control = |offset: f32, width: f32| {
-            Rect::from_min_size(
-                pos2(title.left() + offset * s, center - 20.0 * s),
-                vec2(width, 40.0) * s,
-            )
-        };
-        let back = button(
-            ui,
-            "back",
-            control(12.0, 113.0),
-            t("← Zurück", "← Back"),
-            22.0 * s,
-            false,
-        );
-        let favorite_x = title.width() / s - if cfg!(windows) { 108.0 } else { 54.0 };
-        let favorite = app.is_favorite(&item.progress_key);
-        let favorite_rect = control(favorite_x, 42.0);
-        if button(ui, "favorite", favorite_rect, "", 24.0 * s, favorite) {
-            app.toggle_favorite(&item.progress_key);
-        }
-        let marked = app.is_favorite(&item.progress_key);
-        super::draw_favorite_star(
-            ui,
-            favorite_rect.center(),
-            (13.0 * s).max(6.0),
-            marked,
-            if marked {
-                Color32::from_rgb(255, 211, 107)
+    if !live {
+        let (back, layer) = pane(&ctx, "top", title, s, |ui| {
+            let center = title.center().y;
+            let control = |offset: f32, width: f32| {
+                Rect::from_min_size(
+                    pos2(title.left() + offset * s, center - 20.0 * s),
+                    vec2(width, 40.0) * s,
+                )
+            };
+            let back = button(
+                ui,
+                "back",
+                control(12.0, 113.0),
+                t("← Zurück", "← Back"),
+                22.0 * s,
+                false,
+            );
+            let favorite_x = title.width() / s - if cfg!(windows) { 108.0 } else { 54.0 };
+            let favorite = app.is_favorite(&item.progress_key);
+            let favorite_rect = control(favorite_x, 42.0);
+            if button(ui, "favorite", favorite_rect, "", 24.0 * s, favorite) {
+                app.toggle_favorite(&item.progress_key);
+            }
+            let marked = app.is_favorite(&item.progress_key);
+            super::draw_favorite_star(
+                ui,
+                favorite_rect.center(),
+                (13.0 * s).max(6.0),
+                marked,
+                if marked {
+                    Color32::from_rgb(255, 211, 107)
+                } else {
+                    Palette::get().text
+                },
+            );
+            #[cfg(windows)]
+            if button(
+                ui,
+                "fullscreen",
+                control(title.width() / s - 54.0, 42.0),
+                "⛶",
+                22.0 * s,
+                false,
+            ) {
+                app.fullscreen = !app.fullscreen;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(app.fullscreen));
+            }
+            let label = if item.kind == PlayKind::Episode {
+                t("SERIE", "SERIES")
             } else {
-                Palette::get().text
-            },
-        );
-        #[cfg(windows)]
-        if button(
-            ui,
-            "fullscreen",
-            control(title.width() / s - 54.0, 42.0),
-            "⛶",
-            22.0 * s,
-            false,
-        ) {
-            app.fullscreen = !app.fullscreen;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(app.fullscreen));
+                t("FILM", "MOVIE")
+            };
+            let left = title.left() + 144.0 * s;
+            let available = (favorite_x - 160.0) * s;
+            line(
+                ui,
+                pos2(left, center - 12.0 * s),
+                available,
+                label,
+                15.0 * s,
+                false,
+            );
+            line(
+                ui,
+                pos2(left, center + 9.0 * s),
+                available,
+                &item.title,
+                25.0 * s,
+                true,
+            );
+            back
+        });
+        if back {
+            dismiss_menus(app, &ctx);
+            app.back_from_player();
+            return;
         }
-        let label = if live {
-            "LIVE"
-        } else if item.kind == PlayKind::Episode {
-            t("SERIE", "SERIES")
-        } else {
-            t("FILM", "MOVIE")
-        };
-        let left = title.left() + 144.0 * s;
-        let available = (favorite_x - 160.0) * s;
-        line(
-            ui,
-            pos2(left, center - 12.0 * s),
-            available,
-            label,
-            15.0 * s,
-            false,
-        );
-        line(
-            ui,
-            pos2(left, center + 9.0 * s),
-            available,
-            &item.title,
-            25.0 * s,
-            true,
-        );
-        back
-    });
-    if back {
-        dismiss_menus(app, &ctx);
-        app.back_from_player();
-        return;
+        layers.push(layer);
     }
-    layers.push(layer);
 
     let (position, duration, paused) = app
         .player
         .as_ref()
         .map(|player| (player.position, player.duration, player.paused))
         .unwrap_or_default();
-    let names = [
-        if live {
-            t("‹ Sender", "‹ Channel")
-        } else {
-            "-10 s"
-        },
-        if paused { "▶" } else { "⏸" },
-        if live {
-            t("Sender ›", "Channel ›")
-        } else {
-            "+10 s"
-        },
-        t("Optionen", "Options"),
-    ];
+    let next = app.next_episode(&item.progress_key);
+    let play_icon = if paused { "▶" } else { "⏸" };
     let (action, layer) = pane(&ctx, "transport", bottom, s, |ui| {
         if ctx.data_mut(|data| {
             let id = Id::new("player-focus-transport");
@@ -511,88 +499,162 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }) {
             crate::ui::mobile::focus::request_id(ui.id().with(1_usize));
         }
-        let widths = [104.0, 132.0, 104.0, 112.0];
-        let mut x = bottom.center().x - (widths.iter().sum::<f32>() + 34.0) * s / 2.0;
         let mut action = None;
-        for (i, (name, width)) in names.into_iter().zip(widths).enumerate() {
-            let r = Rect::from_min_size(
-                pos2(x, bottom.top() + 10.0 * s),
-                vec2(width, a.player_button_height) * s,
-            );
+        let mut controls: Vec<(usize, &str, f32)> = if live {
+            vec![
+                (6, t("← Zurück", "← Back"), 96.0),
+                (0, t("‹ Sender", "‹ Channel"), 82.0),
+                (1, play_icon, 50.0),
+                (2, t("Sender ›", "Channel ›"), 82.0),
+                (
+                    7,
+                    if app.is_favorite(&item.progress_key) {
+                        "★"
+                    } else {
+                        "☆"
+                    },
+                    42.0,
+                ),
+            ]
+        } else {
+            vec![
+                (0, "−10 s", 58.0),
+                (2, "+10 s", 58.0),
+                (4, t("Ton & Untertitel", "Audio & subtitles"), 156.0),
+            ]
+        };
+        if next.is_some() {
+            controls.push((5, t("Nächste Folge", "Next episode"), 132.0));
+        }
+        controls.push((3, t("Optionen", "Options"), 103.0));
+        let gap = 7.0;
+        let total = controls
+            .iter()
+            .map(|&(_, _, width)| width + gap)
+            .sum::<f32>()
+            - gap;
+        let mut x = bottom.right() - (total + 12.0) * s;
+        let row_y = bottom.bottom() - 43.0 * s;
+        for (i, name, width) in controls {
+            let r = Rect::from_min_size(pos2(x, row_y), vec2(width, 34.0) * s);
             if button(
                 ui,
                 i,
                 r,
                 name,
-                a.player_button_font * s,
+                a.player_button_font * 0.88 * s,
                 i == 1 || (i == 3 && options_open),
             ) {
                 action = Some(i);
             }
-            x += (width + if i == 2 { 18.0 } else { 8.0 }) * s;
+            x += (width + gap) * s;
         }
-        let y = bottom.bottom() - 22.0 * s;
-        let guide = if live {
+        if live {
             let utc = chrono::Utc::now().timestamp();
-            item.progress_key
+            let channel_id = item
+                .progress_key
                 .strip_prefix("live:")
-                .and_then(|id| id.parse().ok())
+                .and_then(|id| id.parse::<u32>().ok());
+            let channel = channel_id
+                .and_then(|id| app.library.channels.iter().find(|entry| entry.id == id))
+                .map(|entry| (entry.id, entry.num, entry.logo.clone()));
+            let badge = match &channel {
+                Some((_, number, _)) if *number != 0 => format!("LIVE · {number}"),
+                _ => "LIVE".into(),
+            };
+            let y = bottom.top() + 28.0 * s;
+            line(
+                ui,
+                pos2(bottom.left() + 16.0 * s, y),
+                110.0 * s,
+                &badge,
+                20.0 * s,
+                true,
+            );
+            let mut title_left = bottom.left() + 126.0 * s;
+            if let Some((id, _, logo)) = channel.filter(|(_, _, logo)| !logo.is_empty()) {
+                let rect =
+                    Rect::from_center_size(pos2(title_left + 19.0 * s, y), vec2(38.0, 31.0) * s);
+                super::mobile::components::thumb(
+                    app,
+                    ui,
+                    &format!("logo:{id}"),
+                    &logo,
+                    rect,
+                    &item.title,
+                );
+                title_left += 48.0 * s;
+            }
+            let available = (bottom.right() - title_left - 18.0 * s).max(1.0);
+            let now = channel_id
                 .and_then(|id| app.epg_for(id))
-                .and_then(|entries| entries.iter().find(|e| e.start <= utc && utc < e.end))
-                .map(|e| {
-                    (
-                        e.title.as_str(),
-                        (utc - e.start) as f32 / (e.end - e.start).max(1) as f32,
-                    )
-                })
-        } else {
-            None
-        };
-        let start = if live {
-            "● LIVE".into()
-        } else {
-            super::fmt_time(position)
-        };
-        let end = if live {
-            guide.map_or("", |(title, _)| title).to_owned()
-        } else {
-            super::fmt_time(duration)
-        };
-        let program_width = if live && !end.is_empty() {
-            bottom.width() * 0.32
-        } else {
-            64.0 * s
-        };
+                .and_then(|entries| {
+                    entries
+                        .iter()
+                        .find(|entry| entry.start <= utc && utc < entry.end)
+                });
+            if let Some(now) = now {
+                line(
+                    ui,
+                    pos2(title_left, y - 8.0 * s),
+                    available,
+                    &item.title,
+                    22.0 * s,
+                    true,
+                );
+                line(
+                    ui,
+                    pos2(title_left, y + 12.0 * s),
+                    available,
+                    &now.title,
+                    16.0 * s,
+                    false,
+                );
+            } else {
+                line(
+                    ui,
+                    pos2(title_left, y),
+                    available,
+                    &item.title,
+                    24.0 * s,
+                    true,
+                );
+            }
+            return action;
+        }
+        let y = bottom.top() + 29.0 * s;
+        let play = Rect::from_center_size(pos2(bottom.left() + 39.0 * s, y), vec2(51.0, 36.0) * s);
+        if button(ui, 1_usize, play, play_icon, a.player_button_font * s, true) {
+            action = Some(1);
+        }
+        let start = super::fmt_time(position);
+        let end = super::fmt_time(duration);
         line(
             ui,
-            pos2(bottom.left() + 24.0 * s, y),
-            110.0 * s,
+            pos2(bottom.left() + 78.0 * s, y),
+            70.0 * s,
             &start,
             23.0 * s,
             false,
         );
         line(
             ui,
-            pos2(bottom.right() - program_width - 16.0 * s, y),
-            program_width,
+            pos2(bottom.right() - 82.0 * s, y),
+            66.0 * s,
             &end,
             23.0 * s,
             false,
         );
         let track = Rect::from_min_max(
-            pos2(bottom.left() + 92.0 * s, y - 3.0 * s),
-            pos2(bottom.right() - program_width - 32.0 * s, y + 3.0 * s),
+            pos2(bottom.left() + 156.0 * s, y - 3.0 * s),
+            pos2(bottom.right() - 96.0 * s, y + 3.0 * s),
         );
-        let fraction = guide
-            .map(|(_, value)| value)
-            .unwrap_or_else(|| {
-                if duration > 0.0 {
-                    (position / duration) as f32
-                } else {
-                    0.0
-                }
-            })
-            .clamp(0.0, 1.0);
+        let fraction = if duration > 0.0 {
+            (position / duration) as f32
+        } else {
+            0.0
+        }
+        .clamp(0.0, 1.0);
         let p = Palette::get();
         ui.painter()
             .rect_filled(track, 3.0 * s, Color32::from_rgb(128, 161, 194));
@@ -601,7 +663,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             3.0 * s,
             p.focus,
         );
-        if !live && duration > 0.0 {
+        if duration > 0.0 {
+            ui.painter().circle_filled(
+                pos2(track.left() + track.width() * fraction, y),
+                6.0 * s,
+                p.text,
+            );
             let hit = ui.interact(
                 track.expand2(vec2(0.0, 10.0 * s)),
                 ui.id().with("seek"),
@@ -640,6 +707,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             app.sub_menu_open = false;
             aspect_open = false;
         }
+        Some(4) => {
+            app.audio_menu_open = true;
+            options_open = false;
+            aspect_open = false;
+        }
+        Some(5) => {
+            if let Some(next) = next {
+                app.play(next);
+            }
+        }
+        Some(6) => {
+            dismiss_menus(app, &ctx);
+            app.back_from_player();
+            return;
+        }
+        Some(7) => app.toggle_favorite(&item.progress_key),
         _ => {}
     }
     if options_open {

@@ -1,3 +1,4 @@
+mod classic;
 pub mod continue_watching;
 pub mod desktop;
 pub mod favorites;

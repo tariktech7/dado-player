@@ -1042,7 +1042,14 @@ impl App {
             && !player_options_open
         {
             use crate::platform::RemoteKey;
+            if keys.contains(&RemoteKey::Ok) {
+                self.open_live_list();
+                ctx.request_repaint();
+            }
             for key in &keys {
+                if self.view != View::Player {
+                    break;
+                }
                 match key {
                     RemoteKey::Up => self.step_channel(1),
                     RemoteKey::Down => self.step_channel(-1),
@@ -1061,7 +1068,11 @@ impl App {
             keys.retain(|k| {
                 !matches!(
                     k,
-                    RemoteKey::Up | RemoteKey::Down | RemoteKey::Left | RemoteKey::Right
+                    RemoteKey::Up
+                        | RemoteKey::Down
+                        | RemoteKey::Left
+                        | RemoteKey::Right
+                        | RemoteKey::Ok
                 )
             });
         }
@@ -1587,7 +1598,9 @@ impl App {
             .enable_all()
             .build()
             .unwrap();
-        Self::new(rt)
+        let mut app = Self::new(rt);
+        app.settings.interface_layout = crate::types::InterfaceLayout::Modern;
+        app
     }
 
     pub fn submit_form(&mut self) {
@@ -2458,6 +2471,20 @@ impl App {
         }
         Some((episode.clone(), pos))
     }
+    pub fn next_episode(&mut self, key: &str) -> Option<PlayItem> {
+        let (series, episode) = key.strip_prefix("ep:")?.split_once(':')?;
+        let series_id = series.parse().ok()?;
+        let episode_id = episode.parse::<u32>().ok()?;
+        self.request_series(series_id);
+        let episodes = self.series_episodes_for(series_id)?;
+        let current = episodes.iter().find(|item| item.id == episode_id)?;
+        let order = |item: &Episode| (item.season, item.episode, item.id);
+        let next = episodes
+            .iter()
+            .filter(|item| order(item) > order(current))
+            .min_by_key(|item| order(item))?;
+        self.resolve_play(&format!("ep:{series_id}:{}", next.id))
+    }
     pub fn play_series_resume(&mut self, sid: u32) {
         if let Some((e, pos)) = self.series_resume_target(sid) {
             let key = format!("ep:{sid}:{}", e.id);
@@ -2528,7 +2555,17 @@ impl App {
                     i.key_pressed(egui::Key::Escape),
                     i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals),
                     i.key_pressed(egui::Key::Minus),
-                    i.key_pressed(egui::Key::Enter),
+                    i.events.iter().any(|event| {
+                        matches!(
+                            event,
+                            egui::Event::Key {
+                                key: egui::Key::Enter,
+                                pressed: true,
+                                repeat: false,
+                                ..
+                            }
+                        )
+                    }),
                     i.key_pressed(egui::Key::A),
                     i.key_pressed(egui::Key::S),
                 )
@@ -2546,9 +2583,15 @@ impl App {
                 .as_ref()
                 .map(|p| p.kind == PlayKind::Live)
                 .unwrap_or(false);
-        let menus_open = self.audio_menu_open || self.sub_menu_open;
-        #[cfg(windows)]
-        let menus_open = menus_open || crate::ui::player_desktop::menus_open(ctx);
+        let menus_open = self.audio_menu_open
+            || self.sub_menu_open
+            || crate::ui::player_desktop::menus_open(ctx);
+        if enter && in_player && is_live && !menus_open {
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            self.open_live_list();
+            ctx.request_repaint();
+            return;
+        }
         if in_player && is_live && !menus_open {
             if up {
                 self.step_channel(1);
@@ -2603,6 +2646,7 @@ impl App {
 
         // Enter moves the running preview into the big player.
         if enter && has_preview && !in_player && !self.tv {
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
             self.promote_preview(false);
             return;
         }
@@ -2949,6 +2993,35 @@ impl App {
             return;
         }
         self.stop_play();
+    }
+
+    fn open_live_list(&mut self) {
+        if let Some(item) = &self.current_play {
+            if let Some(channel) = item
+                .progress_key
+                .strip_prefix("live:")
+                .and_then(|value| value.parse::<u32>().ok())
+                .and_then(|id| self.library.channels.iter().find(|entry| entry.id == id))
+            {
+                let in_category = match self.live_cat.as_str() {
+                    "all" => true,
+                    "favorites" => self.is_favorite(&item.progress_key),
+                    category => channel.category_id == category,
+                };
+                if !in_category {
+                    self.live_cat = "all".into();
+                }
+                if !channel
+                    .name
+                    .to_lowercase()
+                    .contains(&self.live_q.trim().to_lowercase())
+                {
+                    self.live_q.clear();
+                }
+            }
+        }
+        self.previous_view = View::Live;
+        self.back_from_player();
     }
 
     pub fn stop_play(&mut self) {
@@ -4738,6 +4811,41 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn live_ok_returns_from_home_to_the_current_channel() {
+        let mut app = App::test_app();
+        app.load_demo();
+        app.view = View::Home;
+        app.live_cat = "different category".into();
+        app.live_q = "different channel".into();
+        let id = app.library.channels[0].id;
+        let key = format!("live:{id}");
+        app.play(app.resolve_play(&key).unwrap());
+        let ctx = egui::Context::default();
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                ..Default::default()
+            },
+            |ctx| app.handle_keys(ctx),
+        );
+        assert!(app.view == View::Live);
+        assert_eq!(app.live_cat, "all");
+        assert!(app.live_q.is_empty());
+        assert_eq!(app.scroll_to, Some(id));
+        assert_eq!(
+            app.preview.as_ref().map(|item| item.progress_key.as_str()),
+            Some(key.as_str())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn color_shortcuts_use_focused_rows_and_do_not_repeat_favorites() {
         let mut app = App::test_app();
         app.load_demo();
@@ -4832,6 +4940,19 @@ mod tests {
                 });
             });
         }
+    }
+
+    #[test]
+    fn interface_layout_defaults_to_classic_and_round_trips_modern() {
+        use crate::types::{InterfaceLayout, Settings};
+        let mut settings = serde_json::to_value(Settings::default()).unwrap();
+        settings.as_object_mut().unwrap().remove("interface_layout");
+        let mut restored: Settings = serde_json::from_value(settings).unwrap();
+        assert_eq!(restored.interface_layout, InterfaceLayout::Classic);
+        restored.interface_layout = InterfaceLayout::Modern;
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&restored).unwrap()).unwrap();
+        assert_eq!(restored.interface_layout, InterfaceLayout::Modern);
     }
 
     #[test]

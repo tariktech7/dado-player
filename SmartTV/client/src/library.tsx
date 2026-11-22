@@ -197,19 +197,21 @@ function PosterGrid({
   select,
   favoriteKeys,
   emptyMessage,
+  classic,
 }: {
   items: Item[];
   selected: Item | null;
   select: (i: Item) => void;
   favoriteKeys: ReadonlySet<string>;
   emptyMessage: string;
+  classic: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0),
     [width, setWidth] = useState(600),
     [height, setHeight] = useState(700);
-  const columns = Math.max(2, Math.floor(width / appearance.catalogPosterWidth)),
-    rowHeight = 248;
+  const columns = Math.max(2, Math.floor(width / (classic ? appearance.classicPosterWidth : appearance.catalogPosterWidth))),
+    rowHeight = classic ? appearance.classicPosterRowHeight : 248;
   useLayoutEffect(() => {
     const el = root.current!;
     const resize = () => {
@@ -298,6 +300,7 @@ function PosterGrid({
 export function CatalogBrowser({
   kind,
   t,
+  classic,
   items,
   categories,
   category,
@@ -315,6 +318,7 @@ export function CatalogBrowser({
 }: {
   kind: "series" | "vod";
   t: (de: string, en: string) => string;
+  classic: boolean;
   items: Item[];
   categories: Category[];
   category: string;
@@ -332,17 +336,39 @@ export function CatalogBrowser({
 }) {
   const favoriteKeys = useMemo(() => new Set(favorites.map(itemKey)), [favorites]);
   const categoryFavorites = category === "favorites" ? favoriteKeys : null;
+  const [alphabetic, setAlphabetic] = useState(false);
+  const continueIds = useMemo(() => category === "continue" ? new Set(history.flatMap(({item}) =>
+    kind === "series" && item.seriesId ? [item.seriesId] : kind === "vod" && item.kind === "vod" ? [item.id] : [],
+  )) : null, [category, history, kind]);
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (classic) for (const item of items) counts.set(item.category, (counts.get(item.category) || 0) + 1);
+    return counts;
+  }, [classic, items]);
+  const choices = [
+    { id: "favorites", name: t("Favoriten", "Favorites") },
+    { id: "all", name: t("Alle Titel", "All titles") },
+    ...(classic ? [
+      { id: "recent", name: t("Neu hinzugefügt", "Recently added") },
+      { id: "continue", name: t("Fortsetzen", "Continue watching") },
+    ] : []),
+    ...categories,
+  ];
+  const count = (id: string) => id === "all" ? items.length : id === "favorites" ? favorites.filter((i) => i.kind === kind).length : categoryCounts.get(id);
   const filtered = useMemo(() => {
-    const q = query.toLocaleLowerCase();
-    return items.filter(
+    const q = query.trim().toLocaleLowerCase();
+    const result = items.filter(
       (i) =>
-        (category === "all" ||
+        (category === "all" || category === "recent" ||
           (category === "favorites"
             ? categoryFavorites?.has(itemKey(i))
-            : i.category === category)) &&
+            : category === "continue" ? continueIds?.has(i.id) : i.category === category)) &&
         i.name.toLocaleLowerCase().includes(q),
     );
-  }, [items, category, query, categoryFavorites]);
+    if (classic && alphabetic) result.sort((left, right) => left.name.localeCompare(right.name));
+    else if (category === "recent") result.sort((left, right) => (right.added || 0) - (left.added || 0));
+    return result;
+  }, [items, category, query, categoryFavorites, continueIds, classic, alphabetic]);
   const item = detail?.id === selected?.id ? detail : selected;
   const preview = useRef<HTMLElement>(null);
   const [activation, setActivation] = useState(0);
@@ -372,34 +398,37 @@ export function CatalogBrowser({
     <div class={`catalog-browser${item ? ' has-preview' : ''}`}>
       <section class="categories" data-focus-zone="categories">
         <h1>{t("Kategorien", "Categories")}</h1>
+        {classic && <div class="classic-catalog-tools">
+          <TVInput type="search" aria-label={t("Titel suchen", "Search titles")} placeholder={t("Titel suchen", "Search titles")} value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
+          <button onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
+            {alphabetic ? t("Sortierung: A–Z", "Sort: A–Z") : t("Sortierung: Anbieter", "Sort: Provider")}
+          </button>
+        </div>}
         <div class="category-list">
-          {[
-            { id: "favorites", name: t("Favoriten", "Favorites") },
-            { id: "all", name: t("Alle Titel", "All titles") },
-            ...categories,
-          ].map((c) => (
+          {choices.map((c) => (
             <button
               key={c.id}
               data-focus-key={`category:${c.id}`}
-              class={category === c.id ? "selected" : ""}
+              class={`${category === c.id ? "selected" : ""}${classic && count(c.id) !== undefined ? " with-category-count" : ""}`}
               title={c.name}
               onClick={() => setCategory(c.id)}
             >
               {c.name}
+              {classic && count(c.id) !== undefined && <small class="category-count">{count(c.id)}</small>}
             </button>
           ))}
         </div>
       </section>
       <section class="catalog-titles" data-focus-zone="titles">
-        <h1>{kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
-        <TVInput
+        <h1>{classic ? choices.find((choice) => choice.id === category)?.name : kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
+        {!classic && <TVInput
           type="search"
           aria-label={t("Titel suchen", "Search titles")}
           placeholder={t("Titel suchen", "Search titles")}
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
-        />
-        <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys}
+        />}
+        <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} classic={classic}
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
       {item && <aside ref={preview} class="catalog-details" data-focus-zone="details">

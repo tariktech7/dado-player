@@ -136,6 +136,8 @@ export class Provider {
                 id: String(kind === "series" ? row.series_id : row.stream_id),
                 kind,
                 name: String(row.name || "Ohne Titel"),
+                number: kind === "live" ? Number(row.num) || undefined : undefined,
+                added: Number(row.added ?? row.last_modified) || undefined,
                 category: String(row.category_id ?? ""),
                 logo: safeImage(row.stream_icon || row.cover),
                 url:

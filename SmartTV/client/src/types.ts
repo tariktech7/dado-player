@@ -25,6 +25,8 @@ export interface Item {
   season?: number;
   episode?: number;
   seriesId?: string;
+  number?: number;
+  added?: number;
 }
 export interface Epg {
   title: string;
@@ -59,6 +61,7 @@ export interface Settings {
   language: "de" | "en";
   clockFormat: "H24" | "H12";
   theme: "warm" | "dark" | "light" | "system";
+  interfaceLayout: "modern" | "classic";
   appearanceVersion?: number;
   autoplayLast: boolean;
   liveFormat: "m3u8" | "ts";

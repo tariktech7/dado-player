@@ -9,6 +9,7 @@ Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
 | Funktion | Gemeinsamer Vertrag |
 | --- | --- |
 | Anmeldung | Gespeichertes Profil beim Neustart wieder öffnen, explizites Abmelden beachten. |
+| Oberfläche | Klassisch ist der Standard. Es bietet eine eigene Übersicht, kompakte Live-Zeilen mit Programmliste und größere Poster mit Suche und Sortierung. Die gespeicherte Auswahl bleibt beim Neustart erhalten. |
 | Daten je Anbieter | Favoriten, Verlauf, Positionen und Laufzeiten je Profil isolieren. Gleiche Sender-/Film-IDs anderer Anbieter dürfen nicht kollidieren. Alte native Dateien werden einmal dem bisherigen Standardprofil zugeordnet und als Sicherung erhalten. |
 | Startseite | Fortsetzen mit Artwork, kompakte Senderlogos, unabhängiges aktuelles Favoritenprogramm. |
 | Favoriten / Fortsetzen | Live-TV, Filme und Serien getrennt anzeigen. |
@@ -21,7 +22,7 @@ Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
 | Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |
 | Fortsetzen | Startseite und Fortsetzen zeigen die zuletzt angesehene Folge pro Serie. Beim Starten bei höchstens 60 Sekunden Rest zur nächsten Folge wechseln. Fertige Filme beginnen erneut. Fehlende Episodendaten werden asynchron geladen. |
 | Farbtasten | Rot/F1 öffnet die PIN-Verwaltung, Grün/F2 wechselt zu Live-TV, Gelb/F3 ändert den Favoritenstatus und Blau/F4 öffnet Einstellungen oder Player-Optionen. Die Zurück-Taste steuert die Navigation. |
-| Player | Eigene Dado-Steuerung mit Play-/Pause-Symbol und deutlichem Fokus. Bei Filmen und Folgen spulen Links/Rechts in 10-Sekunden-Schritten. Hoch/Runter fokussiert zuerst Play/Pause und aktiviert die Menünavigation, bis die Steuerung ausgeblendet wird. Bei Live-TV schaltet Hoch/Runter den Sender, 0 ruft den vorherigen Sender auf. |
+| Player | Beide Layouts verwenden denselben Player. Live-TV zeigt Sender und Programm in einer unteren Leiste. OK führt zur Senderliste und zum laufenden Sender. Filme und Folgen haben Play/Pause neben der Timeline und Direktzugriff auf Ton und vorhandene nächste Folgen. Links/Rechts spult in Zehn-Sekunden-Schritten. Hoch/Runter fokussiert bei Filmen und Folgen zuerst Play/Pause. Bei Live-TV schaltet Hoch/Runter den Sender und 0 ruft den vorherigen Sender auf. |
 | Ton / Untertitel | Bevorzugte Sprachen mit gemeinsamen ISO-Aliasen, Untertitel automatisch ein/aus. Manuelle Auswahl bleibt während des Streams erhalten. Verfügbare Spuren kommen vom Stream/Player. |
 | Verlauf | Maximal 150 Einträge. Automatischer Start des letzten Streams bei neuen Installationen aus; vorhandene bewusste Einstellung erhalten. |
 

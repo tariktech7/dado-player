@@ -83,6 +83,49 @@ test('catalogue gives the posters the full width until a title opens a sliding p
   await expect(page.locator('.preview-panel')).toBeVisible();
 });
 
+test('Classic persists, keeps its navigation usable and shares the playback layout with Modern', async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto('/');
+  await expect(page.locator('.classic-dashboard')).toBeVisible();
+  await page.screenshot({path: 'test-results/classic-dashboard.png'});
+  await page.locator('.classic-primary [data-focus-key="vod"]').click();
+  await expect(page.getByRole('button', {name: 'Sortierung: Anbieter'})).toBeVisible();
+  await page.getByRole('button', {name: 'Sortierung: Anbieter'}).click();
+  await expect(page.getByRole('button', {name: 'Sortierung: A–Z'})).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', {name: /Fortsetzen/}).click();
+  await expect(page.getByText('Keine passenden Titel.')).toBeVisible();
+  await page.getByRole('button', {name: /Alle Titel/}).click();
+  await page.locator('.catalog-poster').first().click();
+  await page.screenshot({path: 'test-results/classic-movies.png'});
+  await page.locator('.catalog-details button.primary').click();
+  await expect(page.locator('.vod-player .seek-transport .player-play-toggle')).toBeVisible();
+  await expect(page.locator('.vod-player .transport').getByRole('button', {name: 'Ton & Untertitel'})).toBeVisible();
+  await page.screenshot({path: 'test-results/compact-vod-player.png'});
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.catalog-details')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.locator('.classic-primary [data-focus-key="live"]').click();
+  await expect(page.locator('.channel .epg-pair')).toHaveCount(0);
+  await page.locator('.channel').first().click();
+  await expect(page.locator('.classic-epg')).toBeVisible();
+  await page.screenshot({path: 'test-results/classic-live-tv.png'});
+  await page.getByRole('button', {name: /Vollbild öffnen/}).click();
+  await expect(page.locator('.live-player .on-air')).toContainText('Dado Kanal 0001');
+  await expect(page.locator('.live-player .player-top')).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.fullscreen')).toHaveCount(0);
+  await expect(page.locator('.channel').first()).toBeFocused();
+  expect(await page.evaluate(() => (window as any).webapis.avplay.getState())).toBe('PLAYING');
+  await page.getByRole('button', {name: /Übersicht/}).click();
+  await page.locator('.classic-actions').getByRole('button', {name: 'Einstellungen'}).click();
+  await page.getByRole('combobox', {name: 'Oberfläche'}).click();
+  await page.getByRole('option', {name: 'Modern', exact: true}).click();
+  await expect(page.locator('.navigation')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.navigation')).toBeVisible();
+});
+
 test('long live-preview metadata stays inside its own panel and retains a usable video area',async({page})=>{
   await fixture(page,true,true);
   await page.route('https://provider.invalid/**',async route=>{
@@ -209,9 +252,12 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
     };
     const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, value, i) =>
       sum + linear(value) * [0.2126, 0.7152, 0.0722][i], 0);
-    const contrast = (fg: number[], bg: number[]) => (luminance(fg) + 0.05) / (luminance(bg) + 0.05);
+    const contrast = (fg: number[], bg: number[]) => {
+      const [a, b] = [luminance(fg) + 0.05, luminance(bg) + 0.05];
+      return Math.max(a, b) / Math.min(a, b);
+    };
     const panel = rgba(getComputedStyle(node).backgroundColor);
-    const label = rgba(getComputedStyle(node.querySelector(".timeline")!).color);
+    const label = rgba(getComputedStyle(node.querySelector(".on-air-copy small") || node).color);
     const buttons = [...node.querySelectorAll("button")].map(button => {
       const style = getComputedStyle(button);
       return contrast(rgba(style.color), rgba(style.backgroundColor));
@@ -227,7 +273,7 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
   expect(measurements.alpha).toBeGreaterThan(0.7);
   expect(measurements.alpha).toBeLessThan(0.95);
   expect(measurements.radius).toBeGreaterThan(12);
-  expect(await controls.evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(721);
+  expect(await controls.evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(1081);
   expect(measurements.guide).toBeGreaterThan(4.5);
   expect(measurements.buttons).toBeGreaterThan(4.5);
 });
@@ -309,7 +355,7 @@ test('parental controls persist, block live previews and require PIN for every n
   await parentalPin(page,'0123');await modal.getByRole('button',{name:'Elternsperre ausschalten'}).click();
   await expect(modal).not.toBeVisible();
 });
-async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent') {
+async function fixture(page: Page, seed = true, native = false, licenseKind: 'permanent'|'expired'|'missing' = 'permanent', withoutLayout = false) {
   if(process.env.DADO_TIZEN_PROFILE==='2019')await page.addInitScript(()=>{
     (String.prototype as any).replaceAll=undefined;
     (Array.prototype as any).flatMap=undefined;
@@ -431,15 +477,16 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
       body: `<svg xmlns="http://www.w3.org/2000/svg" width="${route.request().url().includes("wide") ? 320 : 80}" height="${route.request().url().includes("wide") ? 80 : 160}"><rect width="100%" height="100%" rx="12" fill="#71dfd1"/><circle cx="50%" cy="50%" r="22" fill="white"/></svg>`,
     }),
   );
+  const s = fresh();
+  s.settings.interfaceLayout = 'modern';
   if (seed) {
-    const s = fresh();
     s.profiles = [profile];
     s.activeProfile = profile.id;
-    await page.addInitScript((state) => {
-      if (!localStorage.getItem("dado.tv.v1"))
-        localStorage.setItem("dado.tv.v1", JSON.stringify(state));
-    }, s);
   }
+  const serialized = JSON.stringify(s, (key, value) => withoutLayout && key === 'interfaceLayout' ? undefined : value);
+  await page.addInitScript((value) => {
+    if (!localStorage.getItem("dado.tv.v1")) localStorage.setItem("dado.tv.v1", value);
+  }, serialized);
   if (native) {
     await page.route("**/$WEBAPIS/webapis/webapis.js", (route) =>
       route.fulfill({ contentType: "text/javascript", body: "" }),
@@ -733,7 +780,7 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     .toBe(1);
   await page.locator(".channel").first().click();
   await expect(page.locator(".fullscreen")).toBeVisible();
-  await expect(page.locator(".transport > button")).toHaveCount(4);
+  await expect(page.locator(".transport > button")).toHaveCount(6);
   await expect(page.getByRole("button", { name: "Ton & Untertitel" })).toHaveCount(0);
   await page.getByRole("button", { name: "Optionen", exact: true }).click();
   await page.getByRole("button", { name: "Ton & Untertitel" }).click();
@@ -742,7 +789,7 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".fullscreen")).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
   await expect(page.locator(".fullscreen")).toHaveCount(0);
   await expect(page.locator(".preview-panel")).toBeVisible();
   expect(
@@ -833,7 +880,7 @@ test("Back restores focus to the watched channel, movie and episode", async ({ p
   await row.click();
   const adjacent = page.locator('.channel[data-channel="2"]');
   await page.keyboard.press("ArrowUp");
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0002");
   await page.keyboard.press("Escape");
   await expect(adjacent).toBeFocused();
   await page.keyboard.press("ArrowDown");
@@ -1149,16 +1196,16 @@ test("live remote up/down zaps and zero toggles the last two channels", async ({
   await page.locator(".channel").first().click();
   await page.locator(".channel").first().click();
   await page.keyboard.press("ArrowUp");
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0002");
   await page.keyboard.press("0");
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0001");
   await page.keyboard.press("0");
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0002");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0002");
   await expect(page.locator(".fullscreen")).toHaveClass(/controls-hidden/, {
     timeout: 3500,
   });
   await page.keyboard.press("ArrowDown");
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0001");
 });
 
 test("live left and right seek in the DVR window without changing channels", async ({ page }) => {
@@ -1167,7 +1214,7 @@ test("live left and right seek in the DVR window without changing channels", asy
   await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
   await page.locator(".channel").first().click();
   await page.locator(".channel").first().click();
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0001");
   const calls = (action: string) => page.evaluate(action =>
     (window as any).__avLog.filter((entry: any[]) => entry[0] === action), action);
   await expect.poll(async () => (await calls("play")).length).toBeGreaterThan(0);
@@ -1185,7 +1232,7 @@ test("live left and right seek in the DVR window without changing channels", asy
   await page.keyboard.press("ArrowLeft");
   await expect.poll(() => calls("seek")).toEqual([["seek", 10000], ["seek", 20000], ["seek", 10000]]);
   expect(await calls("open")).toHaveLength(opens);
-  await expect(page.locator(".player-top")).toContainText("Dado Kanal 0001");
+  await expect(page.locator(".on-air")).toContainText("Dado Kanal 0001");
 });
 
 test("all home rails scroll horizontally with remote focus and both menus split by kind", async ({
@@ -1721,6 +1768,8 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   const before=(await seeks()).length;await page.keyboard.press('ArrowRight');expect((await seeks()).length).toBe(before);
   await expect(page.locator('.fullscreen')).toHaveClass(/controls-hidden/,{timeout:7000});
   await page.keyboard.press('ArrowRight');await expect.poll(async()=> (await seeks()).length).toBe(before+1);
+  await page.getByRole('button', {name: 'Nächste Folge', exact: true}).click();
+  await expect(page.locator('.player-top')).toContainText('Staffel 1 · Folge 2');
 });
 
 test('remote scrolling progresses through intermediate positions and honors reduced motion',async({page})=>{

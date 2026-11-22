@@ -14,6 +14,10 @@ eine genehmigte Dauerlizenz; ohne Freigabe erscheint eine entsprechende Meldung.
 stehen verbleibende Tage unter dem App-Namen, bei eingeklappter Navigation als kurze Anzeige.
 Alle Apps verwenden die gleiche Spaltennavigation und ein virtualisiertes Poster-Raster. Auf Telefonen
 und Tablets ist die Oberfläche fürs Querformat mit Touch und sicheren Bildschirmrändern ausgelegt.
+Unter **Einstellungen → Allgemein → Oberfläche** stehen **Modern** und **Klassisch** zur Wahl.
+Klassisch ist die Voreinstellung. Die App speichert die gewählte Ansicht.
+Klassisch öffnet eine Bibliotheksübersicht mit großen Medienkacheln und nutzt eine kompakte Senderliste
+sowie größere Poster. Beide Modi verwenden dieselbe Wiedergabe und dieselben Profile.
 Die Detailspalte erscheint bei Filmen und Serien nach der Auswahl. In Live-TV ist die Vorschau dauerhaft
 sichtbar. In Seriendetails lassen sich die Staffeln horizontal und die Folgen vertikal durchblättern.
 Der Play-Button setzt die zuletzt gesehene Folge fort und geht bei höchstens 60 Sekunden Rest
@@ -23,6 +27,9 @@ Pro Serie erscheint dort und unter Fortsetzen die zuletzt angesehene Folge. Der 
 Auf Geräten mit Farbtasten öffnet Rot die Elternsperre. Unter Windows entspricht das F1.
 Im Live-Vollbild schalten Hoch/Runter die Sender, 0 wechselt zum vorherigen Sender; die eigene
 Player-Steuerung blendet sich nach zwei Sekunden aus.
+OK im Live-Vollbild öffnet die Senderliste und setzt den Fokus auf den laufenden Sender.
+Der Live-Player bündelt Sender und aktuelles Programm unten. Filme und Folgen zeigen dort Play/Pause,
+Zeiten und Spulleiste. Tonspuren und die nächste verfügbare Folge sind direkt erreichbar.
 
 Der iOS-Build wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly

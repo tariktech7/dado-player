@@ -58,25 +58,40 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32) -> Option<Rect> {
     number_jump(app, ui);
     let a = super::desktop::appearance();
-    let gap = 24.0 * s;
-    let category_w = super::desktop::category_width(body.width(), s);
-    let preview_w = (a.live_preview_width * s)
-        .min((body.width() - category_w - 2.0 * gap).max(1.0) * 0.72)
-        .min(
-            body.height()
-                * if super::desktop::handheld() {
-                    0.64
-                } else {
-                    0.58
-                }
-                * 16.0
-                / 9.0,
-        )
-        .min(if super::desktop::handheld() {
-            body.width() * 0.40
-        } else {
-            body.width()
-        });
+    let classic = super::classic::enabled(app);
+    let gap = if classic {
+        (a.classic_gap * s).max(6.0)
+    } else {
+        24.0 * s
+    };
+    let category_w = if classic {
+        (body.width() * a.classic_live_category_share)
+            .max(100.0)
+            .min(body.width() * 0.29)
+    } else {
+        super::desktop::category_width(body.width(), s)
+    };
+    let preview_w = (if classic {
+        body.width() * a.classic_live_preview_share
+    } else {
+        a.live_preview_width * s
+    })
+    .min((body.width() - category_w - 2.0 * gap).max(1.0) * 0.72)
+    .min(
+        body.height()
+            * if super::desktop::handheld() {
+                0.64
+            } else {
+                0.58
+            }
+            * 16.0
+            / 9.0,
+    )
+    .min(if super::desktop::handheld() {
+        body.width() * 0.40
+    } else {
+        body.width()
+    });
     let cr = Rect::from_min_max(body.min, pos2(body.left() + category_w, body.bottom()));
     let pr = Rect::from_min_max(pos2(body.right() - preview_w, body.top()), body.max);
     let lr = Rect::from_min_max(
@@ -114,6 +129,7 @@ pub fn show_desktop(app: &mut App, ui: &mut Ui, body: Rect, s: f32, offset: f32)
 }
 
 fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
+    let classic = super::classic::enabled(app);
     let item = app.preview.clone().or_else(|| {
         app.live_selected
             .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
@@ -208,16 +224,31 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
                 app.request_epg(id);
                 let now = chrono::Utc::now().timestamp();
                 let entries = app.epg_for(id).cloned().unwrap_or_default();
-                for (label, entry) in [
-                    (
-                        "Jetzt",
-                        entries.iter().find(|e| e.start <= now && now < e.end),
-                    ),
-                    (
-                        app.settings.language.text("Danach", "Next"),
-                        entries.iter().find(|e| e.start > now),
-                    ),
-                ] {
+                let current = entries.iter().find(|e| e.start <= now && now < e.end);
+                let next = entries.iter().find(|e| e.start > now);
+                let programmes: Vec<_> = if classic {
+                    entries
+                        .iter()
+                        .filter(|entry| entry.end > now)
+                        .take(8)
+                        .map(|entry| {
+                            (
+                                if entry.start <= now {
+                                    "Jetzt"
+                                } else {
+                                    "Programm"
+                                },
+                                Some(entry),
+                            )
+                        })
+                        .collect()
+                } else {
+                    vec![
+                        ("Jetzt", current),
+                        (app.settings.language.text("Danach", "Next"), next),
+                    ]
+                };
+                for (label, entry) in programmes {
                     if let Some(e) = entry {
                         ui.small(format!(
                             "{label} · {} – {}",
@@ -229,7 +260,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
                         ui.add_space(12.0 * s);
                     }
                 }
-                if entries.is_empty() {
+                if !entries.iter().any(|entry| entry.end > now) {
                     ui.label(if app.epg_pending(id) {
                         "EPG wird geladen …"
                     } else {
@@ -442,6 +473,16 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
     }
     let language = app.settings.language;
     let categories = &app.library.live_categories;
+    let counts = super::classic::enabled(app).then(|| {
+        super::classic::category_counts(
+            ui,
+            app.catalog_generation(),
+            app.library
+                .channels
+                .iter()
+                .map(|item| item.category_id.as_str()),
+        )
+    });
     let row_height = if desktop {
         super::desktop::handheld_size(58.0 * s, 46.0)
     } else if tv {
@@ -450,7 +491,12 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
         44.0
     };
     let font = tokens::medium(if desktop {
-        super::desktop::handheld_type(21.0 * s, 16.0)
+        let font_size = if counts.is_some() {
+            super::desktop::appearance().classic_category_font
+        } else {
+            21.0
+        };
+        super::desktop::handheld_type(font_size * s, 17.0)
     } else if tv {
         16.0
     } else {
@@ -472,11 +518,25 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                 };
                 let r = row(ui, ("category", id), row_height, app.live_cat == id);
                 if ui.is_rect_visible(r.rect) {
+                    let count = counts.as_ref().map(|counts| match id {
+                        "all" => app.library.channels.len(),
+                        "favorites" => app
+                            .favorites
+                            .iter()
+                            .filter(|key| key.starts_with("live:"))
+                            .count(),
+                        _ => counts.get(id).copied().unwrap_or(0),
+                    });
+                    let text_space = if count.is_some() {
+                        (52.0 * s).max(34.0)
+                    } else {
+                        0.0
+                    };
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
                         font.clone(),
                         ui.visuals().text_color(),
-                        (r.rect.width() - 24.0).max(1.0),
+                        (r.rect.width() - 24.0 - text_space).max(1.0),
                     );
                     job.wrap.max_rows = 2;
                     let galley = ui.fonts(|fonts| fonts.layout_job(job));
@@ -488,6 +548,15 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                         galley,
                         ui.visuals().text_color(),
                     );
+                    if let Some(count) = count {
+                        ui.painter().text(
+                            r.rect.right_center() - vec2(8.0, 0.0),
+                            egui::Align2::RIGHT_CENTER,
+                            count.to_string(),
+                            tokens::reg((18.0 * s).max(12.0)),
+                            theme::muted(ui),
+                        );
+                    }
                 }
                 if activated(ui, &r, tv) {
                     selected = Some(id.to_owned());
@@ -608,10 +677,16 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         );
     }
     let tv_row_h = ((ui.available_height() - 9.0 * 3.0) / 10.0).clamp(34.0, 40.0);
+    let classic = super::classic::enabled(app);
+    let appearance = super::desktop::appearance();
     let (name_size, epg_size) = if desktop {
         (
             super::desktop::handheld_type(
-                super::desktop::appearance().channel_name_font * scale,
+                if classic {
+                    appearance.classic_channel_font
+                } else {
+                    appearance.channel_name_font
+                } * scale,
                 18.0,
             ),
             super::desktop::handheld_type(super::desktop::appearance().epg_font * scale, 15.0),
@@ -619,7 +694,9 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
     } else {
         (13.0, 10.0)
     };
-    let row_h = if handheld {
+    let row_h = if classic {
+        super::desktop::handheld_size((56.0 * scale).max(29.0), 42.0)
+    } else if handheld {
         ((super::desktop::appearance().channel_row_height - 6.0) * scale * 1.25).max(54.0)
     } else if desktop {
         (super::desktop::appearance().channel_row_height - 6.0) * scale
@@ -629,7 +706,13 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         90.0
     };
     let stride = row_h + ui.spacing().item_spacing.y;
-    let desktop_name_y = if handheld { row_h * 0.33 } else { 26.0 * scale };
+    let desktop_name_y = if classic {
+        row_h * 0.5
+    } else if handheld {
+        row_h * 0.33
+    } else {
+        26.0 * scale
+    };
     let desktop_epg_y = if handheld { row_h * 0.76 } else { 57.0 * scale };
     let (name_y, current_y, next_y) = ui.fonts(|fonts| {
         let name_h = fonts.row_height(&tokens::reg(name_size));
@@ -696,30 +779,48 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 }
                 if ui.is_rect_visible(r.rect) {
                     let channel = app.library.channels[index].clone();
+                    let number_width = if classic {
+                        (42.0 * scale).max(28.0)
+                    } else {
+                        0.0
+                    };
+                    if classic && channel.num > 0 {
+                        components::draw_line(
+                            ui,
+                            r.rect.left_center() + vec2(6.0, 0.0),
+                            &channel.num.to_string(),
+                            tokens::reg(epg_size),
+                            theme::muted(ui),
+                            number_width - 5.0,
+                        );
+                    }
                     app.request_epg(id);
                     if app.epg_pending(id) {
                         ui.ctx()
                             .request_repaint_after(std::time::Duration::from_millis(250));
                     }
+                    let logo_size = if classic {
+                        (52.0 * scale).max(28.0).min(row_h - 6.0)
+                    } else if desktop {
+                        48.0 * scale
+                    } else if tv {
+                        24.0
+                    } else {
+                        34.0
+                    };
                     let logo = Rect::from_min_size(
                         r.rect.min
                             + vec2(
-                                8.0,
-                                if desktop {
-                                    (row_h - 48.0 * scale) * 0.5
+                                8.0 + number_width,
+                                if desktop || classic {
+                                    (row_h - logo_size) * 0.5
                                 } else if tv {
                                     (tv_row_h - 24.0) * 0.5
                                 } else {
                                     15.0
                                 },
                             ),
-                        Vec2::splat(if desktop {
-                            48.0 * scale
-                        } else if tv {
-                            24.0
-                        } else {
-                            34.0
-                        }),
+                        Vec2::splat(logo_size),
                     );
                     components::thumb(
                         app,
@@ -747,8 +848,11 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             app.is_favorite(&key),
                         );
                     }
-                    let (current, next) =
-                        epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now);
+                    let (current, next) = if classic {
+                        (None, None)
+                    } else {
+                        epg_lines(app.epg_for(id).map(Vec::as_slice).unwrap_or(&[]), now)
+                    };
                     for (line, (offset, text, size, color)) in [
                         (
                             if desktop {
@@ -796,6 +900,9 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     .into_iter()
                     .enumerate()
                     {
+                        if classic && line > 0 {
+                            continue;
+                        }
                         let epg_width = ((width - 24.0) * 0.5).max(1.0);
                         let line_x = if (desktop || tv) && line == 2 {
                             x + epg_width + 24.0

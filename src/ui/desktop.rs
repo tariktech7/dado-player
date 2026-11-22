@@ -22,6 +22,18 @@ pub struct Appearance {
     pub live_preview_width: f32,
     pub catalog_preview_width: f32,
     pub catalog_poster_width: f32,
+    pub classic_category_share: f32,
+    pub classic_poster_width: f32,
+    pub classic_poster_row_height: f32,
+    pub classic_live_category_share: f32,
+    pub classic_live_preview_share: f32,
+    pub classic_header_height: f32,
+    pub classic_dashboard_height: f32,
+    pub classic_dashboard_icon_size: f32,
+    pub classic_dashboard_title_size: f32,
+    pub classic_category_font: f32,
+    pub classic_channel_font: f32,
+    pub classic_gap: f32,
     pub navigation_row_height: f32,
     pub navigation_font: f32,
     pub heading_font: f32,
@@ -568,6 +580,8 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
                 if !super::player_desktop::dismiss_menus(app, ctx) {
                     app.back_from_player();
                 }
+            } else if super::classic::enabled(app) {
+                super::classic::back(app, ctx);
             } else {
                 let focused = ui::mobile::focus::focused_id()
                     .or_else(|| ctx.memory(|memory| memory.focused()));
@@ -638,6 +652,19 @@ pub(crate) fn exit_prompt(ctx: &Context) -> bool {
     })
 }
 
+pub(super) fn section(app: &mut App, ui: &mut Ui, view: View) {
+    match view {
+        View::Home => ui::home::show(app, ui),
+        View::Movies => ui::vod::show(app, ui),
+        View::Series => ui::series::show(app, ui),
+        View::Search => ui::search::show(app, ui),
+        View::Favorites => ui::favorites::show(app, ui),
+        View::Continue => ui::continue_watching::show(app, ui),
+        View::Settings => ui::settings::show(app, ui),
+        _ => {}
+    }
+}
+
 pub fn show(app: &mut App, ctx: &Context) {
     ctx.data_mut(|data| data.insert_temp(Id::new("shared-landscape-shell"), true));
     if app.view == View::Player && app.current_play.is_some() {
@@ -663,6 +690,7 @@ pub fn show(app: &mut App, ctx: &Context) {
     style(ctx, s);
     let screen = safe_rect(ctx, true);
     let background = ctx.screen_rect();
+    let classic = super::classic::enabled(app);
     let expanded = handheld_size(a.navigation_expanded * s, 178.0);
     let collapsed = handheld_size(a.navigation_collapsed * s, 52.0);
     if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
@@ -680,7 +708,8 @@ pub fn show(app: &mut App, ctx: &Context) {
             pos2(left + width, screen.bottom()),
         )
     };
-    let is_collapsed = navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded));
+    let is_collapsed =
+        !classic && navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded));
     let target = if is_collapsed { collapsed } else { expanded };
     let dx = motion(ctx, target);
     let visual = target + dx;
@@ -689,6 +718,34 @@ pub fn show(app: &mut App, ctx: &Context) {
         .frame(egui::Frame::none())
         .show(ctx, |ui| {
             let backdrop = ui.painter().add(egui::Shape::Noop);
+            if classic {
+                let edge = handheld_size(22.0 * s, 8.0);
+                let mut canvas = screen.shrink(edge);
+                if cfg!(windows) || app.tv {
+                    canvas.max.y -= 20.0 * s;
+                }
+                let preview = super::classic::show(app, ui, canvas, s);
+                ui.painter().set(
+                    backdrop,
+                    theme::ambient_shape(
+                        ui,
+                        background,
+                        preview.filter(|_| cfg!(target_os = "ios")),
+                    ),
+                );
+                if cfg!(windows) || app.tv {
+                    shortcut_legend(
+                        ui.painter(),
+                        screen,
+                        s,
+                        app.settings.language,
+                        theme::muted(ui),
+                        None,
+                        cfg!(windows),
+                    );
+                }
+                return;
+            }
             let nav = rail(visual);
             ui.painter().rect_filled(
                 Rect::from_min_max(screen.min, nav.max),
@@ -738,16 +795,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                         dx
                     },
                     |ui| {
-                        ui.push_id(("section", view as u64), |ui| match view {
-                            View::Home => ui::home::show(app, ui),
-                            View::Movies => ui::vod::show(app, ui),
-                            View::Series => ui::series::show(app, ui),
-                            View::Search => ui::search::show(app, ui),
-                            View::Favorites => ui::favorites::show(app, ui),
-                            View::Continue => ui::continue_watching::show(app, ui),
-                            View::Settings => ui::settings::show(app, ui),
-                            _ => {}
-                        });
+                        ui.push_id(("section", view as u64), |ui| section(app, ui, view));
                     },
                 );
                 None
@@ -807,7 +855,7 @@ pub fn show(app: &mut App, ctx: &Context) {
         }
     }
 }
-fn refresh_icon(app: &App, ui: &Ui, rect: Rect, color: Color32, id: Id) {
+pub(super) fn refresh_icon(app: &App, ui: &Ui, rect: Rect, color: Color32, id: Id) {
     let a = appearance();
     let feedback = app.catalog_refresh_result.and_then(|(success, at)| {
         let remaining = a.refresh_feedback_ms / 1000.0 - at.elapsed().as_secs_f32();

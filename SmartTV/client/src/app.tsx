@@ -87,6 +87,24 @@ function RailIcon({kind}: {kind: "settings" | "refresh" | "success" | "error"}) 
   </svg>;
 }
 
+function LibraryIcon({kind}: {kind: "live" | "vod" | "series"}) {
+  return <svg class="classic-media-icon" viewBox="0 0 48 48" aria-hidden="true" fill="none"
+    stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+    {kind === "live" ? <>
+      <rect x="4" y="10" width="40" height="26" rx="6" />
+      <path d="M15 43h18m-9-7v7m-12-19h7l4-7 4 13 4-6h5" />
+    </> : kind === "vod" ? <>
+      <rect x="5" y="5" width="38" height="38" rx="8" />
+      <path d="M11 13h5m-5 7h5m-5 8h5m-5 7h5m16-22h5m-5 7h5m-5 8h5m-5 7h5" />
+      <path d="M20 17l10 7-10 7z" stroke-width="1.5" fill="currentColor" />
+    </> : <>
+      <path d="M12 12V9a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v20" />
+      <rect x="4" y="14" width="34" height="27" rx="7" />
+      <path d="M12 24h18m-18 7h13" />
+    </>}
+  </svg>;
+}
+
 const nav = [
   ["home", "⌂", "Startseite", "Home"],
   ["live", "▣", "Live TV", "Live TV"],
@@ -184,6 +202,7 @@ function App() {
   const [historyKind, setHistoryKind] = useState("live");
   const [settingsSection, setSettingsSection] = useState<string | null>("general");
   const t = (de: string, en: string) => saved.settings.language === "en" ? en : de;
+  const classic = saved.settings.interfaceLayout === "classic";
   const navCollapsed = useRef(false);
   const navHover = useRef(false);
   const navCloseTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -374,9 +393,16 @@ function App() {
     setFull(false);
     setTracks(false);
   };
-  const leavePlayer = (keepLivePreview = true) => {
+  const leavePlayer = (keepLivePreview = true, openLiveList = false) => {
     playerReturn.current = previewRef.current;
-    if (keepLivePreview && view === "live" && previewRef.current?.kind === "live") {
+    if (keepLivePreview && (view === "live" || openLiveList) && previewRef.current?.kind === "live") {
+      if (openLiveList) {
+        if (view !== "live" || !filteredLive.some((item) => item.id === previewRef.current?.id)) {
+          setCategory("all");
+          setQuery("");
+        }
+        setView("live");
+      }
       setFull(false);
     } else {
       stop();
@@ -636,7 +662,8 @@ function App() {
     detailRequest.current++;
     const memory = memories.current[next];
     setView(next);
-    setCategory(memory?.category || "all");
+    const previousCategory = memory?.category;
+    setCategory(previousCategory && (classic || !["recent", "continue"].includes(previousCategory)) ? previousCategory : "all");
     setQuery(memory?.query || "");
     setSelectedTitle(memory?.detail || null);
     setDetail(memory?.detail || null);
@@ -694,6 +721,24 @@ function App() {
       setEditing(false);
       return;
     }
+    if (classic) {
+      if ((view === "vod" || view === "series") && selectedTitle) {
+        const key = itemKey(selectedTitle);
+        detailRequest.current++;
+        setSelectedTitle(null);
+        setDetail(null);
+        setEpisodes([]);
+        requestAnimationFrame(() => {
+          Array.from(document.querySelectorAll<HTMLElement>(".catalog-poster")).find((element) => element.dataset.focusKey === key)?.focus();
+        });
+      } else if (view === "home") setExit(true);
+      else {
+        const from = view;
+        go("home");
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`.classic-dashboard button[data-focus-key="${from}"]`)?.focus());
+      }
+      return;
+    }
     if (!document.activeElement?.closest(".navigation")) {
       focusNavigation();
       return;
@@ -703,7 +748,8 @@ function App() {
   const goShortcut = (next: View) => {
     go(next);
     requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`.navigation button[data-focus-key="${next}"]`)?.focus();
+      (document.querySelector<HTMLElement>(`.navigation button[data-focus-key="${next}"]`) ||
+        document.querySelector<HTMLElement>(next === "home" ? ".classic-primary button" : ".classic-header button"))?.focus();
     });
   };
   const stepLive = (delta: number) => {
@@ -730,6 +776,17 @@ function App() {
       return;
     }
     const livePlayer = fullRef.current && previewRef.current?.kind === "live";
+    const ok = e.key === "Enter" || code === 13;
+    if (ok && e.repeat && (livePlayer || view === "live") && !document.querySelector(".modal")) {
+      e.preventDefault();
+      return;
+    }
+    if (livePlayer && ok && !tracksRef.current && !playerOptionsRef.current && !parental.open
+      && !document.querySelector(".modal")) {
+      e.preventDefault();
+      leavePlayer(true, true);
+      return;
+    }
     const editingText = (e.target as HTMLElement | null)?.matches(
       'input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]',
     );
@@ -979,6 +1036,11 @@ function App() {
   }, [full]);
   const p = playerRef.current,
     status = p?.status;
+  useLayoutEffect(() => {
+    if (classic && view === "home" && session && !full && !document.activeElement?.closest(".classic-dashboard")) {
+      document.querySelector<HTMLElement>(".classic-primary button")?.focus({preventScroll: true});
+    }
+  }, [classic, view, session, full]);
   useEffect(() => {
     showControls();
     if (!full) {
@@ -1007,7 +1069,38 @@ function App() {
     }
   }, [playerOptions]);
   const resumeRows = useMemo(() => resumeHistory(history), [history]);
-  const [now, next] = preview ? currentNext(epg[preview.id] || []) : [];
+  const liveCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (classic) for (const item of catalog.live) counts.set(item.category, (counts.get(item.category) || 0) + 1);
+    return counts;
+  }, [classic, catalog.live]);
+  const previewPrograms = preview ? epg[preview.id] || [] : [];
+  const [now, next] = currentNext(previewPrograms);
+  const [following, setFollowing] = useState<{source: string; item: Item} | null>(null);
+  useEffect(() => {
+    if (!full || preview?.kind !== "episode" || !preview.seriesId) return;
+    const key = itemKey(preview);
+    const series = catalog.series.find((entry) => entry.id === preview.seriesId);
+    if (!series) return;
+    const order = (left: Item, right: Item) => (left.season || 0) - (right.season || 0) ||
+      (left.episode || 0) - (right.episode || 0) || left.id.localeCompare(right.id);
+    let active = true;
+    const cached = detailCache.current.get(itemKey(series));
+    void Promise.resolve(cached?.episodes || providerRef.current?.episodes(series) || []).then((rows) => {
+      if (!active) return;
+      const list = [...rows].sort(order);
+      const index = list.findIndex((episode) => itemKey(episode) === key);
+      const item = index >= 0 ? list[index + 1] : undefined;
+      setFollowing(item ? {source: key, item} : null);
+    }).catch(() => { if (active) setFollowing(null); });
+    return () => { active = false; };
+  }, [full, preview, catalog.series]);
+  const playToggle = () => <button class="primary player-play-toggle" onClick={() => p?.toggle()}
+    aria-label={status?.state === "paused" ? t("Abspielen", "Play") : t("Pause", "Pause")}>
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor">
+      {status?.state === "paused" ? <path d="M7 4l13 8-13 8z" /> : <path d="M6 4h4v16H6zm8 0h4v16h-4z" />}
+    </svg>
+  </button>;
   const favoriteRows = favorites.filter((i) => i.kind === "live");
   useEffect(() => {
     if (view === "home")
@@ -1023,13 +1116,14 @@ function App() {
       data-focus-key={itemKey(item)}
       data-favorite={isFavorite(item)}
     >
+      {classic && <span class="channel-number">{item.number || ""}</span>}
       <Logo item={item} />
       <span class="channel-copy">
         <strong>{item.name}</strong>
-        <span class="epg-pair">
+        {!classic && <span class="epg-pair">
           <small>Jetzt: {info(item)[0]?.title || "Keine Programmdaten"}</small>
           <small>Danach: {info(item)[1]?.title || "Keine Programmdaten"}</small>
-        </span>
+        </span>}
       </span>
       <FavoriteMark marked={isFavorite(item)} />
     </button>
@@ -1146,6 +1240,10 @@ function App() {
     const renderSection = (id: string) => {
       switch (id) {
         case "general": return <>
+          <label class="field">
+            <span>{t("Oberfläche", "Interface layout")}</span>
+            {choose(saved.settings.interfaceLayout, (value) => setting("interfaceLayout", value === "classic" ? "classic" : "modern"), [["modern", "Modern"], ["classic", t("Klassisch", "Classic")]], t("Oberfläche", "Interface layout"))}
+          </label>
 <Field label={t("App-Sprache", "App language")}>
             {choose(saved.settings.language, (value) => setting("language", value as Settings["language"]), [["de", "Deutsch"], ["en", "English"]], t("App-Sprache", "App language"))}
           </Field>
@@ -1695,9 +1793,21 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell" : ""} ${view === "live" ? "with-preview" : ""} ${view === "vod" || view === "series" ? "catalog-shell" : ""}`}
+            class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? "catalog-shell" : ""}`}
           >
-            <aside
+            {classic ? <header data-focus-zone="navigation" class="classic-header">
+              {view !== "home" && <button onClick={() => goShortcut("home")}>{t("‹ Übersicht", "‹ Dashboard")}</button>}
+              <img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
+              <strong>Dado Player</strong>
+              {license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
+              <time>{clock(Date.now() / 1000, saved.settings.clockFormat)}</time>
+              <button aria-label={t("Suche", "Search")} title={t("Suche", "Search")} onClick={() => goShortcut("search")}>⌕</button>
+              <button class="refresh-library" title={t("Liste aktualisieren", "Refresh library")}
+                aria-label={t("Liste aktualisieren", "Refresh library")} aria-busy={refreshing}
+                data-refresh-status={refreshStatus} onClick={() => void refreshCatalog()}>
+                <span class="refresh-icon"><RailIcon kind="refresh" /><RailIcon kind="success" /><RailIcon kind="error" /></span>
+              </button>
+            </header> : <aside
               class="navigation"
               data-focus-zone="navigation"
               onPointerEnter={enterNav}
@@ -1746,36 +1856,39 @@ function App() {
                 <span>{session?.name}</span>
                 <small>Tizen {APP_VERSION}</small>
               </footer>
-            </aside>
+            </aside>}
             {view === "live" ? (
               <>
                 <section class="categories" data-focus-zone="categories">
                   <h1>{t("Kategorien", "Categories")}</h1>
                   <div class="category-list">
                     <button
-                      class={category === "all" ? "selected" : ""}
+                      class={`${category === "all" ? "selected" : ""}${classic ? " with-category-count" : ""}`}
                       onClick={() => {
                         setCategory("all");
                       }}
                     >
-                      Alle Sender
+                      {t("Alle Sender", "All channels")}
+                      {classic && <small class="category-count">{catalog.live.length}</small>}
                     </button>
                     <button
-                      class={category === "favorites" ? "selected" : ""}
+                      class={`${category === "favorites" ? "selected" : ""}${classic ? " with-category-count" : ""}`}
                       onClick={() => {
                         setCategory("favorites");
                       }}
                     >
-                      Favoriten
+                      {t("Favoriten", "Favorites")}
+                      {classic && <small class="category-count">{favoriteRows.length}</small>}
                     </button>
                     {catalog.categories.live.map((c) => (
                       <button
-                        class={category === c.id ? "selected" : ""}
+                        class={`${category === c.id ? "selected" : ""}${classic ? " with-category-count" : ""}`}
                         onClick={() => {
                           setCategory(c.id);
                         }}
                       >
                         {c.name}
+                        {classic && <small class="category-count">{liveCategoryCounts.get(c.id) || 0}</small>}
                       </button>
                     ))}
                   </div>
@@ -1805,6 +1918,7 @@ function App() {
                     row={channelRow}
                     epg={getEpg}
                     density={saved.settings.density}
+                    classic={classic}
                     returnIndex={returnChannel}
                   />
                 </section>
@@ -1846,7 +1960,14 @@ function App() {
                     <PlayerFeedback status={status} />
                     <h2>{preview.name}</h2>
                     <div class="epg-detail" tabIndex={0}>
-                      {now ? (
+                      {classic ? (
+                        previewPrograms.some((entry) => entry.end > Date.now() / 1000) ? <ol class="classic-epg">
+                          {previewPrograms.filter((entry) => entry.end > Date.now() / 1000).slice(0, 8).map((entry) => <li key={entry.start}>
+                            <time>{clock(entry.start, saved.settings.clockFormat)} – {clock(entry.end, saved.settings.clockFormat)}</time>
+                            <strong>{entry.title}</strong><p>{entry.description}</p>
+                          </li>)}
+                        </ol> : <p>{t("Keine Programmdaten verfügbar.", "No programme data available.")}</p>
+                      ) : now ? (
                         <>
                           <small>
                             {t("Jetzt", "Now")} · {clock(now.start, saved.settings.clockFormat)} — {clock(now.end, saved.settings.clockFormat)}
@@ -1857,7 +1978,7 @@ function App() {
                       ) : (
                         <p>Keine aktuellen Programmdaten.</p>
                       )}
-                      {next && (
+                      {!classic && next && (
                         <>
                           <hr />
                           <small>
@@ -1893,7 +2014,26 @@ function App() {
                   view === "vod" || view === "series" ? "catalog-main" : ""
                 }
               >
-                {view === "home" ? (
+                {view === "home" && classic ? (
+                  <div class="classic-dashboard">
+                    <header><h1>{t("Bibliothek", "Library")}</h1><span>{session?.name}</span></header>
+                    <div class="classic-primary" data-focus-zone="library">
+                      {([
+                        ["live", t("Live-TV", "Live TV"), catalog.live.length],
+                        ["vod", t("Filme", "Movies"), catalog.vod.length],
+                        ["series", t("Serien", "Series"), catalog.series.length],
+                      ] as const).map(([id, label, count]) => <button key={id} data-focus-key={id} onClick={() => goShortcut(id)}>
+                        <LibraryIcon kind={id} /><span>{label}<small>{count}</small></span>
+                      </button>)}
+                    </div>
+                    <div class="classic-actions" data-focus-zone="actions">
+                      <button data-focus-key="history" onClick={() => goShortcut("history")}>{t("Fortsetzen", "Continue")}</button>
+                      <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>{t("Favoriten", "Favorites")}</button>
+                      <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>{t("Profile", "Profiles")}</button>
+                      <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>{t("Einstellungen", "Settings")}</button>
+                    </div>
+                  </div>
+                ) : view === "home" ? (
                   <Home
                     name={session?.name || ""}
                     catalog={catalog}
@@ -2040,6 +2180,7 @@ function App() {
                     key={view}
                     kind={view === "vod" ? "vod" : "series"}
                     t={t}
+                    classic={classic}
                     items={catalog[view === "vod" ? "vod" : "series"]}
                     categories={
                       catalog.categories[view === "vod" ? "vod" : "series"]
@@ -2080,20 +2221,16 @@ function App() {
           {editing && modal("Profil hinzufügen", profileForm())}
           {full && preview && (
             <div
-              class={`fullscreen ${status?.state === "error" ? "playback-failed" : ""} ${controlsVisible ? "" : "controls-hidden"}`}
+              class={`fullscreen ${preview.kind === "live" ? "live-player" : "vod-player"} ${status?.state === "error" ? "playback-failed" : ""} ${controlsVisible ? "" : "controls-hidden"}`}
               onMouseMove={showControls}
               onClick={showControls}
             >
               <div ref={surface} class="full-surface" />
-              <div class="player-top glass">
+              {preview.kind !== "live" && <div class="player-top glass">
                 <button onClick={() => leavePlayer()}>{t("← Zurück", "← Back")}</button>
                 <span>
                   <small>
-                    {preview.kind === "live"
-                      ? "LIVE"
-                      : preview.kind === "episode"
-                        ? "SERIE"
-                        : "FILM"}
+                    {preview.kind === "episode" ? t("SERIE", "SERIES") : t("FILM", "MOVIE")}
                   </small>
                   <strong>{preview.name}</strong>
                 </span>
@@ -2101,7 +2238,7 @@ function App() {
                   onClick={() => toggleFavorite(preview)}>
                   <FavoriteMark marked={isFavorite(preview)} />
                 </button>
-              </div>
+              </div>}
               <div class="player-feedback">
                 <PlayerFeedback status={status} />
                 {status?.state === "error" && (
@@ -2147,50 +2284,42 @@ function App() {
               )}
               {controlsVisible && <ShortcutLegend t={t} player />}
               <div class="player-controls glass">
+                {preview.kind === "live" ? <div class="on-air">
+                  <span class="on-air-label">LIVE{preview.number ? ` · ${preview.number}` : ""}</span>
+                  <Logo item={preview} />
+                  <span class="on-air-copy"><strong>{preview.name}</strong>{now && <small>{now.title}</small>}</span>
+                </div> : <div class="timeline seek-transport">
+                  {playToggle()}
+                  <span>{time(status?.time || 0)}</span>
+                  <div class="seek-bar" onClick={(event) => {
+                    const duration = status?.duration || 0;
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    if (duration > 0 && bounds.width > 0) {
+                      safe(() => p?.seekTo(((event.clientX - bounds.left) / bounds.width) * duration));
+                    }
+                  }}><progress value={status?.time || 0} max={status?.duration || 1} /></div>
+                  <span>{time(status?.duration || 0)}</span>
+                </div>}
                 <div class="transport">
+                  {preview.kind === "live" && <button onClick={() => leavePlayer()}>{t("← Zurück", "← Back")}</button>}
                   <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
                     {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
                   </button>
-                  <button class="primary player-play-toggle" onClick={() => p?.toggle()}
-                    aria-label={status?.state === "paused" ? t("Abspielen", "Play") : t("Pause", "Pause")}>
-                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor">
-                      {status?.state === "paused" ? <path d="M7 4l13 8-13 8z" /> :
-                        <path d="M6 4h4v16H6zm8 0h4v16h-4z" />}
-                    </svg>
-                  </button>
+                  {preview.kind === "live" && playToggle()}
                   <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
                     {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
                   </button>
+                  {preview.kind === "live" ? <button aria-label={t("Favorit", "Favorite")} aria-pressed={isFavorite(preview)}
+                    onClick={() => toggleFavorite(preview)}><FavoriteMark marked={isFavorite(preview)} /></button> :
+                    <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>}
+                  {following?.source === itemKey(preview) && <button onClick={() => {
+                    const position = history.find((entry) => itemKey(entry.item) === itemKey(following.item))?.position || 0;
+                    void start(following.item, true, position);
+                  }}>{t("Nächste Folge", "Next episode")}</button>}
                   <button class="player-options-toggle" aria-expanded={!!playerOptions}
                     onClick={() => setPlayerOptions(playerOptions ? null : "options")}>
                     {t("Optionen", "Options")}
                   </button>
-                </div>
-                <div class="timeline">
-                  <span>
-                    {preview.kind === "live"
-                      ? "● LIVE"
-                      : time(status?.time || 0)}
-                  </span>
-                  {preview.kind === "live" ? (
-                    <progress value={now ? Math.max(0, Date.now() / 1000 - now.start) : 0}
-                      max={now ? Math.max(1, now.end - now.start) : 1} />
-                  ) : (
-                    <div class="seek-bar" onClick={(event) => {
-                      const duration = status?.duration || 0;
-                      const bounds = event.currentTarget.getBoundingClientRect();
-                      if (duration > 0 && bounds.width > 0) {
-                        safe(() => p?.seekTo(((event.clientX - bounds.left) / bounds.width) * duration));
-                      }
-                    }}>
-                      <progress value={status?.time || 0} max={status?.duration || 1} />
-                    </div>
-                  )}
-                  <span>
-                    {preview.kind === "live"
-                      ? now?.title || ""
-                      : time(status?.duration || 0)}
-                  </span>
                 </div>
               </div>
             </div>
@@ -2359,19 +2488,21 @@ function VirtualChannels({
   row,
   epg,
   density,
+  classic,
   returnIndex,
 }: {
   items: Item[];
   row: (i: Item) => ComponentChildren;
   epg: (i: Item) => Promise<void>;
   density: Settings["density"];
+  classic: boolean;
   returnIndex: number;
 }) {
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const pendingFocus = useRef<number | null>(null);
   const [top, setTop] = useState(0),
     ref = useRef<HTMLDivElement>(null),
-    height = shellAppearance.channelRowHeight * (density === "compact" ? 1 : 1.25);
+    height = (classic ? 56 : shellAppearance.channelRowHeight) * (density === "compact" ? 1 : 1.25);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
     setTop(0);
@@ -2393,6 +2524,7 @@ function VirtualChannels({
     if (target) { pendingFocus.current=null; target.focus({preventScroll:true}); scrollFocused(target); }
   }, [focusIndex, start, returnIndex]);
   useEffect(() => {
+    if (classic) return;
     let cancelled = false;
     void (async () => {
       for (const item of items.slice(start, Math.min(end, start + 16))) {
@@ -2403,7 +2535,7 @@ function VirtualChannels({
     return () => {
       cancelled = true;
     };
-  }, [items, start]);
+  }, [items, start, classic]);
   return (
     <div
       class="channel-list"

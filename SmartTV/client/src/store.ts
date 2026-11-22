@@ -4,6 +4,7 @@ export const defaults: Settings = {
   language: "de",
   clockFormat: "H24",
   theme: "warm",
+  interfaceLayout: "classic",
   appearanceVersion: 1,
   autoplayLast: policy.autoplayLast,
   liveFormat: "m3u8",
@@ -40,6 +41,7 @@ export function load(storage: Pick<Storage, "getItem"> = localStorage): Saved {
     if (!s.settings?.appearanceVersion && settings.theme === "system") settings.theme = "warm";
     settings.appearanceVersion = 1;
     settings.language = settings.language === "en" ? "en" : "de";
+    settings.interfaceLayout = settings.interfaceLayout === "modern" ? "modern" : "classic";
     settings.clockFormat = settings.clockFormat === "H12" ? "H12" : "H24";
     return {
       ...fresh(),

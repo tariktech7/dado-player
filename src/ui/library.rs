@@ -66,9 +66,20 @@ fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
     }
 }
 pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
+    if !super::classic::enabled(app) {
+        let category = if series {
+            &mut app.series_cat
+        } else {
+            &mut app.vod_cat
+        };
+        if category == "continue" {
+            *category = "all".into();
+        }
+    }
     ui.push_id(("library", series, app.catalog_generation()), |ui| {
         let a = ui.available_rect_before_wrap();
         let desktop = super::desktop::active(ui.ctx());
+        let classic = super::classic::enabled(app);
         let scale = super::desktop::scale(ui.ctx());
         let landscape = super::mobile::handheld_landscape(ui.ctx());
         let narrow = a.width() < 620.0 && !landscape;
@@ -87,8 +98,18 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
                 0.24
             },
         );
-        let gap = if desktop { 24.0 * scale } else { 10.0 };
-        let cw = if desktop {
+        let gap = if classic {
+            (super::desktop::appearance().classic_gap * scale).max(6.0)
+        } else if desktop {
+            24.0 * scale
+        } else {
+            10.0
+        };
+        let cw = if classic {
+            (a.width() * super::desktop::appearance().classic_category_share)
+                .max(102.0)
+                .min(a.width() * 0.31)
+        } else if desktop {
             super::desktop::category_width(a.width(), scale)
         } else if landscape {
             (a.width() * 0.25).min(212.0)
@@ -137,6 +158,27 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             );
             focus::set_zone(1);
             super::desktop::column(ui, cr, "catalog-categories", offset, |ui| {
+                if classic {
+                    let language = app.settings.language;
+                    super::desktop::search_field(
+                        ui,
+                        &mut app.catalog_queries[usize::from(series)],
+                        language.text("Titel suchen", "Search titles"),
+                        app.tv,
+                    );
+                    let id = egui::Id::new(("classic-catalog-sort", series));
+                    let alphabetic = ui
+                        .ctx()
+                        .data(|data| data.get_temp::<bool>(id).unwrap_or(false));
+                    let caption = if alphabetic {
+                        language.text("Sortierung: A–Z", "Sort: A–Z")
+                    } else {
+                        language.text("Sortierung: Anbieter", "Sort: Provider")
+                    };
+                    if button(ui, caption, app.tv) {
+                        ui.ctx().data_mut(|data| data.insert_temp(id, !alphabetic));
+                    }
+                }
                 categories(app, ui, series)
             });
             focus::set_zone(2);
@@ -276,6 +318,28 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     let tv = app.tv;
     let desktop = super::desktop::active(ui.ctx());
     let scale = super::desktop::scale(ui.ctx());
+    let classic_counts = super::classic::enabled(app).then(|| {
+        let generation = app.catalog_generation();
+        if series {
+            super::classic::category_counts(
+                ui,
+                generation,
+                app.library
+                    .series
+                    .iter()
+                    .map(|item| item.category_id.as_str()),
+            )
+        } else {
+            super::classic::category_counts(
+                ui,
+                generation,
+                app.library
+                    .movies
+                    .iter()
+                    .map(|item| item.category_id.as_str()),
+            )
+        }
+    });
     if desktop {
         super::desktop::catalog_heading(ui, app.settings.language.text("Kategorien", "Categories"));
     } else {
@@ -287,7 +351,16 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
     } else {
         &app.library.vod_categories
     };
-    let count = cats.len() + 3;
+    let language = app.settings.language;
+    let mut special = vec![
+        ("favorites", language.text("Favoriten", "Favorites")),
+        ("all", language.text("Alle", "All titles")),
+        ("recent", language.text("Neu hinzugefügt", "Recently added")),
+    ];
+    if super::classic::enabled(app) {
+        special.push(("continue", language.text("Fortsetzen", "Continue watching")));
+    }
+    let count = cats.len() + special.len();
     let selected = if series {
         app.series_cat.clone()
     } else {
@@ -325,12 +398,10 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
             );
             ui.allocate_ui_at_rect(rect, |ui| {
                 for index in start..end {
-                    let (id, name) = match index {
-                        0 => ("favorites", "Favoriten"),
-                        1 => ("all", "Alle"),
-                        2 => ("recent", "Neu hinzugefügt"),
-                        _ => (cats[index - 3].id.as_str(), cats[index - 3].name.as_str()),
-                    };
+                    let (id, name) = special.get(index).copied().unwrap_or_else(|| {
+                        let category = &cats[index - special.len()];
+                        (category.id.as_str(), category.name.as_str())
+                    });
                     let (rect, _) = ui.allocate_exact_size(
                         vec2(ui.available_width(), row_height),
                         Sense::hover(),
@@ -343,17 +414,45 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                             crate::theme::selection_surface(ui),
                         );
                     }
+                    let total_count = if series {
+                        app.library.series.len()
+                    } else {
+                        app.library.movies.len()
+                    };
+                    let count = classic_counts.as_ref().and_then(|counts| match id {
+                        "all" => Some(total_count),
+                        "favorites" => Some(
+                            app.favorites
+                                .iter()
+                                .filter(|key| {
+                                    key.starts_with(if series { "series:" } else { "vod:" })
+                                })
+                                .count(),
+                        ),
+                        "recent" | "continue" => None,
+                        _ => Some(counts.get(id).copied().unwrap_or(0)),
+                    });
+                    let text_space = if count.is_some() {
+                        (52.0 * scale).max(34.0)
+                    } else {
+                        0.0
+                    };
                     let mut job = egui::text::LayoutJob::simple(
                         name.to_owned(),
                         tokens::reg(if desktop {
-                            super::desktop::handheld_type((21.0 * scale).max(11.0), 16.0)
+                            let font = if classic_counts.is_some() {
+                                super::desktop::appearance().classic_category_font
+                            } else {
+                                21.0
+                            };
+                            super::desktop::handheld_type((font * scale).max(11.0), 17.0)
                         } else if tv {
                             12.0
                         } else {
                             13.0
                         }),
                         ui.visuals().text_color(),
-                        (rect.width() - 16.0).max(1.0),
+                        (rect.width() - 16.0 - text_space).max(1.0),
                     );
                     job.wrap.max_rows = 2;
                     let galley = ui.fonts(|f| f.layout_job(job));
@@ -362,6 +461,15 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                         galley,
                         ui.visuals().text_color(),
                     );
+                    if let Some(count) = count {
+                        ui.painter().text(
+                            rect.right_center() - vec2(7.0, 0.0),
+                            egui::Align2::RIGHT_CENTER,
+                            count.to_string(),
+                            tokens::reg((18.0 * scale).max(12.0)),
+                            crate::theme::muted(ui),
+                        );
+                    }
                     if hit(ui, &r, tv) {
                         next = Some(id.to_owned());
                     }
@@ -382,7 +490,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
         }
     }
 }
-type FilterSignature = (u64, usize, String, String, u64);
+type FilterSignature = (u64, usize, String, String, u64, bool);
 type FilterCache = (FilterSignature, Arc<Vec<usize>>);
 fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
     let cat = if series {
@@ -391,11 +499,36 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
         &app.vod_cat
     };
     let query = app.catalog_queries[usize::from(series)].to_lowercase();
-    let fav_hash = app.favorites.iter().fold(0, |sum, k| {
+    let continued: std::collections::HashSet<u32> = if cat == "continue" {
+        crate::types::resume_history(&app.history)
+            .filter_map(|record| {
+                let prefix = if series { "ep:" } else { "vod:" };
+                record
+                    .key
+                    .strip_prefix(prefix)?
+                    .split(':')
+                    .next()?
+                    .parse()
+                    .ok()
+            })
+            .collect()
+    } else {
+        Default::default()
+    };
+    let source_hash = app.favorites.iter().fold(0, |sum, k| {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         k.hash(&mut h);
         sum ^ h.finish()
+    }) ^ continued.iter().fold(0, |sum, id| {
+        sum ^ u64::from(*id)
+            .wrapping_mul(0x9E3779B97F4A7C15)
+            .rotate_left(*id % 64)
     });
+    let alphabetic = super::classic::enabled(app)
+        && ui.ctx().data(|data| {
+            data.get_temp::<bool>(egui::Id::new(("classic-catalog-sort", series)))
+                .unwrap_or(false)
+        });
     let sig = (
         app.catalog_generation(),
         if series {
@@ -405,7 +538,8 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
         },
         cat.clone(),
         query.clone(),
-        fav_hash,
+        source_hash,
+        alphabetic,
     );
     let key = ui.id().with(("filtered", series));
     if let Some((old, rows)) = ui.data(|d| d.get_temp::<FilterCache>(key)) {
@@ -416,6 +550,7 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
     let keep = |id: u32, category: &str, name: &str| {
         (match cat.as_str() {
             "all" | "recent" => true,
+            "continue" => continued.contains(&id),
             "favorites" => {
                 app.is_favorite(&format!("{}:{id}", if series { "series" } else { "vod" }))
             }
@@ -439,7 +574,15 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
             .map(|(i, _)| i)
             .collect()
     };
-    if cat == "recent" {
+    if alphabetic {
+        rows.sort_by_cached_key(|index| {
+            if series {
+                app.library.series[*index].name.to_lowercase()
+            } else {
+                app.library.movies[*index].name.to_lowercase()
+            }
+        });
+    } else if cat == "recent" {
         rows.sort_by_key(|i| {
             std::cmp::Reverse(if series {
                 app.library.series[*i].added
@@ -477,14 +620,14 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                 .size(18.0),
             );
         }
-        if desktop {
+        if desktop && !super::classic::enabled(app) {
             super::desktop::search_field(
                 ui,
                 &mut app.catalog_queries[usize::from(series)],
                 app.settings.language.text("Titel suchen", "Search titles"),
                 tv,
             );
-        } else {
+        } else if !desktop {
             let mut reveal = false;
             components::field(
                 ui,
@@ -504,7 +647,11 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         app.vod_cat.clone()
     };
     let gap = 8.0;
-    let min_width = if desktop {
+    let classic = super::classic::enabled(app);
+    let a = super::desktop::appearance();
+    let min_width = if classic {
+        (a.classic_poster_width * scale).max(136.0)
+    } else if desktop {
         (super::desktop::appearance().catalog_poster_width * scale).max(128.0)
     } else {
         128.0
@@ -517,7 +664,13 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     let cols = (((ui.available_width() + gap) / (min_width + gap)).floor() as usize)
         .clamp(min_cols, if touch { 5 } else { usize::MAX });
     let width = ((ui.available_width() - gap * (cols - 1) as f32) / cols as f32).max(24.0);
-    let art_h = (width * 1.4).min(if tv { 154.0 } else { 190.0 });
+    let art_h = (width * 1.4).min(if classic {
+        (a.classic_poster_row_height * scale - 38.0).max(144.0)
+    } else if tv {
+        154.0
+    } else {
+        190.0
+    });
     let row_h = art_h + 38.0;
     let selected = if series {
         app.selected_series
@@ -612,7 +765,13 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                             let mut job = egui::text::LayoutJob::simple(
                                 entry.name.clone(),
                                 tokens::medium(super::desktop::handheld_type(
-                                    if tv { 11.0 } else { 13.0 },
+                                    if classic {
+                                        (22.0 * scale).max(14.0)
+                                    } else if tv {
+                                        11.0
+                                    } else {
+                                        13.0
+                                    },
                                     14.0,
                                 )),
                                 ui.visuals().text_color(),
