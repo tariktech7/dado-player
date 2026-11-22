@@ -1713,7 +1713,7 @@ hr {
 .classic-dashboard header > span { color: var(--muted); font-size: 24px; }
 .classic-deck {
   display: grid; grid-template-rows: minmax(0, 1fr) auto; align-self: center;
-  height: 100%; max-height: calc(var(--classic-dashboard-height) + var(--classic-dashboard-gap) + 68px);
+  height: 100%; max-height: calc(var(--classic-dashboard-height) + var(--classic-dashboard-gap) + var(--classic-action-height));
   gap: var(--classic-dashboard-gap);
 }
 .classic-primary {
@@ -1746,15 +1746,17 @@ hr {
   background: #ffffff08; pointer-events: none;
 }
 .classic-media-icon { display: block; position: relative; width: 72%; height: 72%; filter: drop-shadow(0 3px 3px #06102170); }
-.classic-tile-title, .classic-tile-count { position: absolute; left: 10px; right: 10px; transform: translateY(-50%); }
-.classic-tile-title { top: 74%; font-size: var(--classic-dashboard-title-size); line-height: 1; font-weight: 700; text-shadow: 0 2px 5px #050e28b3; }
-.classic-tile-count { top: 88%; color: var(--tile-accent); font-size: 29px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.classic-tile-title { position: absolute; left: 10px; right: 10px; transform: translateY(-50%); top: 75%; font-size: var(--classic-dashboard-title-size); line-height: 1; font-weight: 700; text-shadow: 0 2px 5px #050e28b3; }
 .classic-shell .classic-primary button:focus, .classic-shell .classic-primary button:hover {
   outline: none; transform: translateY(-5px);
   box-shadow: 0 0 0 4px var(--tile-accent), 0 12px 0 var(--tile-bottom), 0 20px 24px #06102178;
 }
 .classic-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
-.classic-actions button { min-height: 68px; font-size: 25px; font-weight: 600; }
+.classic-actions button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; min-height: var(--classic-action-height); font-size: 32px; font-weight: 600;
+}
+.classic-actions svg { flex: none; width: 45px; height: 45px; color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .classic-primary button { transition: none; }
   .classic-shell .classic-primary button:focus, .classic-shell .classic-primary button:hover { transform: none; }
@@ -1816,7 +1818,7 @@ hr {
 .vod-player progress::-webkit-progress-bar { background: #4c6580; border-radius: 9px; }
 .vod-player progress::-webkit-progress-value { background: #add8ff; border-radius: 9px; }
 .fullscreen.live-player:focus { position: absolute; outline: none; z-index: auto; }
-.live-player::before {
+.fullscreen::before {
   content: "";
   position: absolute;
   z-index: 29;
@@ -1828,14 +1830,24 @@ hr {
   pointer-events: none;
   transition: opacity 130ms ease-out;
 }
-.live-player.controls-hidden::before { opacity: 0; }
+.fullscreen.controls-hidden::before { opacity: 0; }
+#app .fullscreen.vod-player .player-controls {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  transition: opacity 130ms ease-out, visibility 130ms;
+}
+.vod-player .seek-transport > span { flex: none; min-width: 90px; font-variant-numeric: tabular-nums; text-align: center; }
 #app .fullscreen.live-player .player-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 24px;
+  gap: 42px;
   min-height: var(--live-controls-height);
-  max-width: 1540px;
+  max-width: none;
+  left: 4%;
+  right: 4%;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -1843,15 +1855,15 @@ hr {
   bottom: 20px;
   transition: opacity 130ms ease-out, visibility 130ms;
 }
-.live-player .on-air { display: flex; align-items: center; gap: 22px; min-width: 0; }
-.on-air .logo { width: 104px; height: 74px; }
-.on-air-label { color: #c7e4ff; font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.live-player .on-air { display: flex; align-items: center; gap: 26px; min-width: 0; }
+.on-air .logo { width: var(--live-logo-width); height: var(--live-logo-height); }
+.on-air-label { color: #c7e4ff; font-size: var(--live-number-font); font-weight: 700; font-variant-numeric: tabular-nums; }
 .on-air-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .on-air-copy > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.on-air-copy strong { font-size: 38px; }
-.on-air-copy small { color: var(--player-muted-color); font-size: 24px; }
+.on-air-copy strong { font-size: var(--live-title-font); }
+.on-air-copy small { color: var(--player-muted-color); font-size: var(--live-programme-font); }
 .fullscreen .player-options { bottom: calc(var(--player-controls-inset-y) + 122px + var(--player-popup-offset)); }
-.timeline > span:last-child { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline > span:last-child { white-space: nowrap; }
 .timeline .seek-bar { flex: 1 1 0; min-width: 0; cursor: pointer; padding: 8px 0; }
 .timeline .seek-bar progress { display: block; width: 100%; }
 
@@ -1883,22 +1895,24 @@ hr {
 .live-player .shortcut-legend {
   position: static;
   transform: none;
-  gap: 16px;
+  gap: 34px;
   background: transparent;
   padding: 0;
   pointer-events: auto;
 }
+.live-player .shortcut-dot { width: var(--live-shortcut-dot); height: var(--live-shortcut-dot); }
 #app .fullscreen.live-player .player-controls .shortcut-legend button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   padding: 5px 6px;
-  min-height: 36px;
+  min-height: 48px;
   background: transparent;
   border: 0;
   border-radius: 8px;
-  font-size: 18px;
+  font-size: var(--live-shortcut-font);
+  font-weight: 600;
 }
 #app .fullscreen.live-player .player-controls .shortcut-legend button:focus {
   background: var(--player-focus-color);
@@ -1911,7 +1925,8 @@ hr {
 .keyboard-open .shortcut-legend { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-player::before, #app .fullscreen.live-player .player-controls { transition: none; }
+  .fullscreen::before, #app .fullscreen.live-player .player-controls,
+  #app .fullscreen.vod-player .player-controls { transition: none; }
 }
 
 .settings-options .field > input[type="checkbox"] { justify-self: start; margin-left: 0; }

@@ -261,7 +261,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         theme::muted(ui),
     );
     let media_start = top + heading_size + 2.0 * gap;
-    let action_height = desktop::handheld_size(66.0 * scale, 43.0);
+    let action_height = desktop::handheld_size(appearance.classic_action_height * scale, 62.0);
     let media_gap = desktop::handheld_size(appearance.classic_dashboard_gap * scale, 10.0);
     let media_end = (body.bottom() - gap).max(media_start + gap);
     let options_height = action_height + media_gap;
@@ -282,7 +282,6 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             t("Live-TV", "Live TV"),
             Icon::Tv,
             Rect::from_min_max(pos2(left, tiles_top), pos2(left + live_width, tiles_bottom)),
-            app.library.channels.len(),
         ),
         (
             View::Movies,
@@ -292,18 +291,16 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
                 pos2(movies_x, tiles_top),
                 pos2(movies_x + other_width, tiles_bottom),
             ),
-            app.library.movies.len(),
         ),
         (
             View::Series,
             t("Serien", "Series"),
             Icon::Series,
             Rect::from_min_max(pos2(series_x, tiles_top), pos2(right, tiles_bottom)),
-            app.library.series.len(),
         ),
     ];
     let mut next = None;
-    for (view, label, icon, rect, count) in media {
+    for (view, label, icon, rect) in media {
         let response = ui.interact(rect, ui.id().with(view as u8), Sense::click());
         let [top_color, bottom_color, accent] = tile_color(view);
         let radius = (22.0 * scale).max(10.0);
@@ -388,40 +385,78 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             tokens::bold(label_size),
             Color32::WHITE,
         );
-        content.text(
-            pos2(center.x, rect.top() + rect.height() * 0.89),
-            Align2::CENTER_CENTER,
-            count.to_string(),
-            tokens::reg(label_size * 0.60),
-            accent,
-        );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
         if activate(ui, &response, app.tv) {
             next = Some(view);
         }
     }
     let actions = [
-        (View::Continue, t("Fortsetzen", "Continue"), false),
-        (View::Favorites, t("Favoriten", "Favorites"), false),
-        (View::Settings, t("Profile", "Profiles"), true),
-        (View::Settings, t("Einstellungen", "Settings"), false),
+        (
+            View::Continue,
+            t("Fortsetzen", "Continue"),
+            Icon::Play,
+            false,
+        ),
+        (
+            View::Favorites,
+            t("Favoriten", "Favorites"),
+            Icon::Star,
+            false,
+        ),
+        (View::Settings, t("Profile", "Profiles"), Icon::User, true),
+        (
+            View::Settings,
+            t("Einstellungen", "Settings"),
+            Icon::Settings,
+            false,
+        ),
     ];
     let width = ((right - left - gap * 3.0) / 4.0).max(1.0);
     focus::set_zone(2);
-    for (index, (view, label, profiles)) in actions.into_iter().enumerate() {
+    for (index, (view, label, icon, profiles)) in actions.into_iter().enumerate() {
         let rect = Rect::from_min_size(
             pos2(left + index as f32 * (width + gap), actions_y),
             vec2(width, action_height),
         );
-        let response = ui.put(
+        let response = ui.interact(rect, ui.id().with(("shortcut", index)), Sense::click());
+        let focused = response.has_focus() || focus::focused_id() == Some(response.id);
+        let style = ui.style().interact(&response);
+        ui.painter().rect(
             rect,
-            egui::Button::new(egui::RichText::new(label).size(if desktop::handheld() {
-                14.0
+            13.0 * scale,
+            style.bg_fill,
+            if focused {
+                Stroke::new((4.0 * scale).max(2.0), theme::accent(ui))
             } else {
-                label_size * 0.67
-            }))
-            .min_size(rect.size()),
+                style.bg_stroke
+            },
         );
+        let size = (action_height * 0.36).min(width * 0.33);
+        components::icon(
+            ui,
+            Rect::from_center_size(
+                pos2(rect.center().x, rect.top() + action_height * 0.36),
+                vec2(size, size),
+            ),
+            icon,
+            theme::accent(ui),
+        );
+        let font = tokens::bold(desktop::handheld_type(32.0 * scale, 14.0));
+        let galley =
+            ui.painter()
+                .layout_no_wrap(label.into(), font.clone(), ui.visuals().text_color());
+        let font = egui::FontId::new(
+            font.size * ((width - 8.0).max(1.0) / galley.size().x).min(1.0),
+            font.family,
+        );
+        ui.painter().text(
+            pos2(rect.center().x, rect.top() + action_height * 0.73),
+            Align2::CENTER_CENTER,
+            label,
+            font,
+            ui.visuals().text_color(),
+        );
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
         if activate(ui, &response, app.tv) {
             if profiles {
                 settings::open_profiles(ui.ctx());

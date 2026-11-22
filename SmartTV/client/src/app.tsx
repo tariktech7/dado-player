@@ -2043,20 +2043,30 @@ function App() {
                     <div class="classic-deck">
                       <div class="classic-primary" data-focus-zone="library">
                         {([
-                          ["live", t("Live-TV", "Live TV"), catalog.live.length],
-                          ["vod", t("Filme", "Movies"), catalog.vod.length],
-                          ["series", t("Serien", "Series"), catalog.series.length],
-                        ] as const).map(([id, label, count]) => <button key={id} data-focus-key={id} onClick={() => goShortcut(id)}>
+                          ["live", t("Live-TV", "Live TV")],
+                          ["vod", t("Filme", "Movies")],
+                          ["series", t("Serien", "Series")],
+                        ] as const).map(([id, label]) => <button key={id} data-focus-key={id} onClick={() => goShortcut(id)}>
                           <span class="classic-icon-plate"><LibraryIcon kind={id} /></span>
                           <span class="classic-tile-title">{label}</span>
-                          <small class="classic-tile-count">{count}</small>
                         </button>)}
                       </div>
                       <div class="classic-actions" data-focus-zone="actions">
-                        <button data-focus-key="history" onClick={() => goShortcut("history")}>{t("Fortsetzen", "Continue")}</button>
-                        <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>{t("Favoriten", "Favorites")}</button>
-                        <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>{t("Profile", "Profiles")}</button>
-                        <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>{t("Einstellungen", "Settings")}</button>
+                        <button data-focus-key="history" onClick={() => goShortcut("history")}>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z" /></svg>
+                          {t("Fortsetzen", "Continue")}
+                        </button>
+                        <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 2 3 6.6 7 .9-5.2 5 1.3 7.1-6.1-3.5-6.1 3.5 1.3-7.1L2 9.5l7-.9z" /></svg>
+                          {t("Favoriten", "Favorites")}
+                        </button>
+                        <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.6" /><path d="M4 21v-1.5a8 6 0 0 1 16 0V21z" /></svg>
+                          {t("Profile", "Profiles")}
+                        </button>
+                        <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>
+                          <RailIcon kind="settings" />{t("Einstellungen", "Settings")}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2244,7 +2254,7 @@ function App() {
               </main>
             )}
           </div>
-          {!full && !(classic && view === "live") && <ShortcutLegend t={t} />}
+          {!full && view !== "home" && !(classic && view === "live") && <ShortcutLegend t={t} />}
           {editing && modal("Profil hinzufügen", profileForm())}
           {full && preview && (
             <div
@@ -2325,8 +2335,7 @@ function App() {
                   }
                 }} />
               </div> : <>
-                {controlsVisible && <ShortcutLegend t={t} player />}
-                <div class="player-controls glass">
+                <div class="player-controls">
                 <div class="timeline seek-transport">
                   {playToggle()}
                   <span>{time(status?.time || 0)}</span>

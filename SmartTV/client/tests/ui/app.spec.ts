@@ -87,6 +87,9 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await fixture(page, true, true, 'permanent', true);
   await page.goto('/');
   await expect(page.locator('.classic-dashboard')).toBeVisible();
+  await expect(page.locator('.classic-primary button')).toHaveText(['Live-TV', 'Filme', 'Serien']);
+  await expect(page.locator('.classic-actions button svg')).toHaveCount(4);
+  await expect(page.getByRole('list', {name: 'Farbtasten'})).toHaveCount(0);
   await page.screenshot({path: 'test-results/classic-dashboard.png'});
   await page.locator('.classic-primary [data-focus-key="vod"]').click();
   await expect(page.getByRole('button', {name: 'Sortierung: Anbieter'})).toBeVisible();
@@ -100,6 +103,8 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await page.locator('.catalog-details button.primary').click();
   await expect(page.locator('.vod-player .seek-transport .player-play-toggle')).toBeVisible();
   await expect(page.locator('.vod-player .transport').getByRole('button', {name: 'Ton & Untertitel'})).toBeVisible();
+  expect(await page.locator('.vod-player').evaluate(node => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
+  await expect(page.locator('.vod-player .seek-bar')).toBeVisible();
   await page.screenshot({path: 'test-results/compact-vod-player.png'});
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
@@ -288,7 +293,11 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
   await expect(controls.locator(".transport,.player-play-toggle")).toHaveCount(0);
   await expect(controls.locator(".on-air-label")).toHaveText("1");
   await expect(controls.getByRole("button")).toHaveText(["Elternsperre", "Senderliste", "Favorit", "Bildformat"]);
-  expect((await controls.locator('.logo').boundingBox())!.width).toBeGreaterThanOrEqual(100);
+  expect((await controls.locator('.logo').boundingBox())!.width).toBeGreaterThanOrEqual(160);
+  const labelsFit = await controls.getByRole('button').evaluateAll(buttons =>
+    buttons.every(button => button.scrollWidth <= button.clientWidth
+      && button.getBoundingClientRect().right <= window.innerWidth));
+  expect(labelsFit).toBe(true);
   const measurements = await controls.evaluate(node => {
     const rgba = (value: string) => value.match(/[\d.]+/g)!.map(Number);
     const linear = (channel: number) => {
@@ -870,6 +879,8 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await page.goto("/");
   await expect(page.locator(".navigation")).toBeVisible();
   const legend = page.getByRole("list", { name: "Farbtasten" });
+  await expect(legend).toHaveCount(0);
+  await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
   await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Live TV", "Favorit", "Einstellungen"]);
   const bottomGap = await legend.evaluate(el =>
     document.querySelector("#app")!.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom,

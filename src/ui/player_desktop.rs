@@ -58,7 +58,7 @@ fn pane<R>(
             area.set_min_size(rect.size());
             area.set_clip_rect(rect);
             let p = Palette::get();
-            if name != "live-transport" {
+            if name != "transport" {
                 area.painter().rect(
                     rect.shrink(1.0),
                     super::desktop::appearance().player_corner_radius * scale,
@@ -180,8 +180,8 @@ fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) 
     }
 }
 
-fn live_scrim(ctx: &Context, full: Rect, height: f32, color: Color32) -> (LayerId, Rect) {
-    let layer = LayerId::new(Order::Middle, Id::new("live-scrim"));
+fn player_scrim(ctx: &Context, full: Rect, height: f32, color: Color32) -> (LayerId, Rect) {
+    let layer = LayerId::new(Order::Middle, Id::new("player-scrim"));
     let bounds = Rect::from_min_max(
         pos2(full.left(), (full.bottom() - height).max(full.top())),
         full.max,
@@ -206,54 +206,69 @@ fn live_scrim(ctx: &Context, full: Rect, height: f32, color: Color32) -> (LayerI
 fn live_hints(ui: &mut Ui, app: &App, bounds: Rect, scale: f32, marked: bool) -> Option<egui::Key> {
     let language = app.settings.language;
     let keys = [egui::Key::F1, egui::Key::F2, egui::Key::F3, egui::Key::F4];
-    let mut action = None;
-    for (slot, (shortcut, key)) in super::desktop::appearance()
-        .remote_shortcuts
-        .iter()
-        .zip(keys)
-        .enumerate()
-    {
-        let label = if key == egui::Key::F2 {
-            language.text("Senderliste", "Channel list")
-        } else if key == egui::Key::F4 {
-            language.text("Bildformat", "Aspect ratio")
-        } else {
-            language.text(
-                shortcut.player_de.as_deref().unwrap_or(&shortcut.de),
-                shortcut.player_en.as_deref().unwrap_or(&shortcut.en),
-            )
+    let appearance = super::desktop::appearance();
+    let labels = appearance.remote_shortcuts.each_ref().map(|shortcut| {
+        let label = match shortcut.key.as_str() {
+            "F2" => language.text("Senderliste", "Channel list"),
+            "F4" => language.text("Bildformat", "Aspect ratio"),
+            _ => language.text(&shortcut.de, &shortcut.en),
         };
-        let label = if cfg!(windows) {
+        if cfg!(windows) {
             format!("{} {label}", shortcut.key)
         } else {
             label.into()
-        };
-        let width = bounds.width() / keys.len() as f32;
-        let rect = Rect::from_min_size(
-            bounds.min + vec2(slot as f32 * width, 0.0),
-            vec2(width - 3.0 * scale, bounds.height()),
-        );
+        }
+    });
+    let painter = ui.painter();
+    let ink = Palette::get().text;
+    let measure = |factor| {
+        labels.each_ref().map(|label| {
+            painter.layout_no_wrap(
+                label.clone(),
+                super::mobile::tokens::bold(appearance.live_shortcut_font * factor),
+                ink,
+            )
+        })
+    };
+    let padding = 36.0;
+    let nominal = measure(scale);
+    let required = nominal.iter().map(|label| label.size().x).sum::<f32>()
+        + (padding * 4.0 + 24.0 * 3.0) * scale;
+    let scale = scale * (bounds.width() / required).min(1.0);
+    let measured = measure(scale);
+    let used = measured
+        .iter()
+        .map(|label| label.size().x + padding * scale)
+        .sum::<f32>();
+    let gap = ((bounds.width() - used) / 3.0).max(0.0);
+    let mut x = bounds.left();
+    let mut action = None;
+    for (slot, (shortcut, key)) in appearance.remote_shortcuts.iter().zip(keys).enumerate() {
+        let galley = &measured[slot];
+        let width = galley.size().x + padding * scale;
+        let rect = Rect::from_min_size(pos2(x, bounds.top()), vec2(width, bounds.height()));
+        x += width + gap;
         let response = ui.interact(rect, ui.id().with(key), Sense::click());
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, &label));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, &labels[slot]));
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             ui.painter()
                 .rect_filled(rect, 7.0 * scale, Color32::from_white_alpha(24));
         }
         let color = Color32::from_hex(&shortcut.color).expect("bundled shortcut color");
-        let dot = pos2(rect.left() + 9.0 * scale, rect.center().y);
-        ui.painter().circle_filled(dot, 4.0 * scale, color);
+        let radius = appearance.live_shortcut_dot * 0.5 * scale;
+        let dot = pos2(rect.left() + 12.0 * scale, rect.center().y);
+        painter.circle_filled(dot, radius, color);
         if key == egui::Key::F3 && marked {
-            ui.painter()
-                .circle_stroke(dot, 6.0 * scale, Stroke::new(scale, color));
+            painter.circle_stroke(dot, radius + 3.0 * scale, Stroke::new(scale, color));
         }
-        line(
-            ui,
-            rect.left_center() + vec2(18.0 * scale, 0.0),
-            rect.width() - 20.0 * scale,
-            &label,
-            18.0 * scale,
-            true,
+        painter.galley(
+            pos2(
+                rect.left() + 29.0 * scale,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley.clone(),
+            ink,
         );
         if response.clicked() {
             action = Some(key);
@@ -417,17 +432,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ),
         top_size,
     );
-    let stacked_live = live && safe.width() / s < if cfg!(windows) { 1180.0 } else { 1050.0 };
+    let stacked_live = live && safe.width() / s < 1640.0;
     let bottom_size = vec2(
-        (safe.width() - 2.0 * a.player_controls_inset_x * s).min(
-            if live {
-                1540.0
-            } else {
-                a.player_controls_max_width
-            } * s,
-        ),
         if live {
-            a.live_controls_height + if stacked_live { 27.0 } else { 0.0 }
+            safe.width() * 0.92
+        } else {
+            (safe.width() - 2.0 * a.player_controls_inset_x * s)
+                .min(a.player_controls_max_width * s)
+        },
+        if live {
+            a.live_controls_height + if stacked_live { 48.0 } else { 0.0 }
         } else {
             a.player_controls_height
         } * s,
@@ -515,11 +529,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let t = |de, en| language.text(de, en);
     let is_english = t("de", "en") == "en";
     let mut layers = Vec::with_capacity(4);
-    if live {
+    {
         let scrim = Color32::from_hex(&a.live_scrim_color).expect("bundled live scrim color");
-        let height = a.live_scrim_height + if stacked_live { 45.0 } else { 0.0 };
-        layers.push(live_scrim(&ctx, full, height * s, scrim));
-    } else {
+        let height = a.live_scrim_height + if stacked_live { 76.0 } else { 0.0 };
+        layers.push(player_scrim(&ctx, full, height * s, scrim));
+    }
+    if !live {
         let (back, layer) = pane(&ctx, "top", title, s, |ui| {
             let center = title.center().y;
             let control = |offset: f32, width: f32| {
@@ -606,8 +621,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .unwrap_or_default();
     let next = app.next_episode(&item.progress_key);
     let play_icon = if paused { "▶" } else { "⏸" };
-    let transport = if live { "live-transport" } else { "transport" };
-    let (action, layer) = pane(&ctx, transport, bottom, s, |ui| {
+    let (action, layer) = pane(&ctx, "transport", bottom, s, |ui| {
         if ctx.data_mut(|data| {
             let id = Id::new("player-focus-transport");
             let focus = data.get_temp::<bool>(id).unwrap_or(false);
@@ -660,11 +674,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 .and_then(|id| app.library.channels.iter().find(|entry| entry.id == id))
                 .map(|entry| (entry.id, entry.num, entry.logo.clone()));
             let y = if stacked_live {
-                bottom.bottom() - 41.0 * s
+                bottom.bottom() - a.live_controls_height * s * 0.5
             } else {
                 bottom.center().y
             };
-            let hints_left = bottom.right() - (if cfg!(windows) { 580.0 } else { 460.0 }) * s;
+            let hints_left = bottom.right() - (if cfg!(windows) { 855.0 } else { 740.0 }) * s;
             let hint_min = if stacked_live {
                 bottom.left()
             } else {
@@ -673,29 +687,34 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             let hint_top = if stacked_live {
                 bottom.top()
             } else {
-                y - 19.0 * s
+                y - 24.0 * s
             };
             let hint_bounds = Rect::from_min_max(
                 pos2(hint_min, hint_top),
-                pos2(bottom.right(), hint_top + 38.0 * s),
+                pos2(bottom.right(), hint_top + 48.0 * s),
             );
             let mut title_left = bottom.left() + 4.0 * s;
             if let Some((_, number, _)) = &channel {
                 if *number != 0 {
-                    line(
-                        ui,
-                        pos2(title_left, y),
-                        128.0 * s,
-                        &number.to_string(),
-                        48.0 * s,
-                        true,
+                    let galley = ui.painter().layout_no_wrap(
+                        number.to_string(),
+                        super::mobile::tokens::bold(a.live_number_font * s),
+                        Palette::get().text,
                     );
-                    title_left += 134.0 * s;
+                    let width = galley.size().x;
+                    ui.painter().galley(
+                        pos2(title_left, y - galley.size().y * 0.5),
+                        galley,
+                        Palette::get().text,
+                    );
+                    title_left += width + 26.0 * s;
                 }
             }
             if let Some((id, _, logo)) = channel.filter(|(_, _, logo)| !logo.is_empty()) {
-                let rect =
-                    Rect::from_center_size(pos2(title_left + 52.0 * s, y), vec2(104.0, 74.0) * s);
+                let rect = Rect::from_center_size(
+                    pos2(title_left + a.live_logo_width * s * 0.5, y),
+                    vec2(a.live_logo_width, a.live_logo_height) * s,
+                );
                 super::mobile::components::thumb(
                     app,
                     ui,
@@ -704,7 +723,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     rect,
                     &item.title,
                 );
-                title_left += 124.0 * s;
+                title_left += (a.live_logo_width + 26.0) * s;
             }
             let title_right = if stacked_live {
                 bottom.right()
@@ -722,18 +741,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             if let Some(now) = now {
                 line(
                     ui,
-                    pos2(title_left, y - 14.0 * s),
+                    pos2(title_left, y - 23.0 * s),
                     available,
                     &item.title,
-                    38.0 * s,
+                    a.live_title_font * s,
                     true,
                 );
                 line(
                     ui,
-                    pos2(title_left, y + 21.0 * s),
+                    pos2(title_left, y + 27.0 * s),
                     available,
                     &now.title,
-                    24.0 * s,
+                    a.live_programme_font * s,
                     false,
                 );
             } else {
@@ -742,7 +761,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     pos2(title_left, y),
                     available,
                     &item.title,
-                    38.0 * s,
+                    a.live_title_font * s,
                     true,
                 );
             }
@@ -765,22 +784,22 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         line(
             ui,
             pos2(bottom.left() + 78.0 * s, y),
-            70.0 * s,
+            102.0 * s,
             &start,
             23.0 * s,
             false,
         );
         line(
             ui,
-            pos2(bottom.right() - 82.0 * s, y),
-            66.0 * s,
+            pos2(bottom.right() - 115.0 * s, y),
+            100.0 * s,
             &end,
             23.0 * s,
             false,
         );
         let track = Rect::from_min_max(
-            pos2(bottom.left() + 156.0 * s, y - 3.0 * s),
-            pos2(bottom.right() - 96.0 * s, y + 3.0 * s),
+            pos2(bottom.left() + 188.0 * s, y - 4.0 * s),
+            pos2(bottom.right() - 130.0 * s, y + 4.0 * s),
         );
         let fraction = if duration > 0.0 {
             (position / duration) as f32
@@ -932,21 +951,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         layers.push(layer);
     }
-    if !live && visible && (cfg!(windows) || app.tv) {
-        let id = Id::new("desktop-player-shortcut-legend");
-        let layer = LayerId::new(Order::Foreground, id);
-        let bounds = super::desktop::shortcut_legend(
-            &ctx.layer_painter(layer),
-            full,
-            s,
-            language,
-            Palette::get().text,
-            Some(Palette::get().panel),
-            cfg!(windows),
-        );
-        ctx.move_to_top(layer);
-        layers.push((layer, bounds));
-    }
     #[cfg(windows)]
     let composited = !app.palette_open
         && video.is_some_and(|handle| app.desktop_overlay.paint(&ctx, handle, &layers));
@@ -958,7 +962,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         // control usable with the existing native video region mechanism.
         let holes: Vec<_> = layers
             .iter()
-            .filter(|(layer, _)| layer.id != Id::new("live-scrim"))
+            .filter(|(layer, _)| layer.id != Id::new("player-scrim"))
             .map(|(_, r)| {
                 let origin = (r.min - full.min) * ppp;
                 (

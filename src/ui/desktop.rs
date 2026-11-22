@@ -32,6 +32,7 @@ pub struct Appearance {
     pub classic_dashboard_icon_size: f32,
     pub classic_dashboard_title_size: f32,
     pub classic_dashboard_gap: f32,
+    pub classic_action_height: f32,
     pub classic_dashboard_live_share: f32,
     pub classic_category_font: f32,
     pub classic_channel_font: f32,
@@ -59,6 +60,13 @@ pub struct Appearance {
     pub live_scrim_color: String,
     pub live_scrim_height: f32,
     pub live_controls_height: f32,
+    pub live_logo_width: f32,
+    pub live_logo_height: f32,
+    pub live_number_font: f32,
+    pub live_title_font: f32,
+    pub live_programme_font: f32,
+    pub live_shortcut_font: f32,
+    pub live_shortcut_dot: f32,
     pub player_button_color: String,
     pub player_primary_color: String,
     pub player_focus_color: String,
@@ -737,7 +745,8 @@ pub fn show(app: &mut App, ctx: &Context) {
             if classic {
                 let edge = handheld_size(22.0 * s, 8.0);
                 let mut canvas = screen.shrink(edge);
-                let footer_legend = (cfg!(windows) || app.tv) && app.view != View::Live;
+                let footer_legend =
+                    (cfg!(windows) || app.tv) && !matches!(app.view, View::Live | View::Home);
                 if footer_legend {
                     canvas.max.y -= 20.0 * s;
                 }
@@ -821,7 +830,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                 backdrop,
                 theme::ambient_shape(ui, background, preview.filter(|_| cfg!(target_os = "ios"))),
             );
-            if cfg!(windows) || app.tv {
+            if (cfg!(windows) || app.tv) && app.view != View::Home {
                 shortcut_legend(
                     ui.painter(),
                     screen,
