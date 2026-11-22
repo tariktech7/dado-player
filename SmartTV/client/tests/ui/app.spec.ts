@@ -140,6 +140,7 @@ test('Classic tiles keep their spacing, scale and visible focus on HD and 4K dis
   for (const width of [1280, 1920, 3840]) {
     await page.setViewportSize({width, height: width * 9 / 16});
     if (width === 1280) await page.goto('/');
+    await expect.poll(() => page.locator('#app').evaluate(el => el.getBoundingClientRect().width)).toBeCloseTo(width, 0);
     const tiles = page.locator('.classic-primary button');
     await expect(tiles).toHaveCount(3);
     await expect(tiles.first()).toBeFocused();
