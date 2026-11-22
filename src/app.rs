@@ -2995,7 +2995,7 @@ impl App {
         self.stop_play();
     }
 
-    fn open_live_list(&mut self) {
+    pub(crate) fn open_live_list(&mut self) {
         if let Some(item) = &self.current_play {
             if let Some(channel) = item
                 .progress_key
@@ -4906,6 +4906,18 @@ mod tests {
         assert!(!app.nav_collapsed);
         keypress(&mut app, egui::Key::F4, false);
         assert!(app.view == View::Settings);
+        app.play(app.resolve_play(&format!("live:{channel}")).unwrap());
+        app.settings.desktop_aspect = crate::types::DesktopAspect::Fit;
+        for expected in [
+            crate::types::DesktopAspect::Stretch,
+            crate::types::DesktopAspect::Auto,
+            crate::types::DesktopAspect::Fit,
+        ] {
+            keypress(&mut app, egui::Key::F4, false);
+            assert_eq!(app.settings.desktop_aspect, expected);
+            assert!(!crate::ui::player_desktop::menus_open(&ctx));
+            assert!(app.view == View::Player);
+        }
     }
 
     #[test]

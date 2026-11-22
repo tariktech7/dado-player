@@ -45,6 +45,7 @@ import {
   focusables,
   moveFocus,
   focusNavigation,
+  isInfoKey,
   registerKeys,
   resizeCanvas,
   scrollFocused,
@@ -59,18 +60,26 @@ installShellAppearance();
 
 type RefreshStatus = "idle" | "loading" | "success" | "error";
 
-function ShortcutLegend({t, player = false}: {
+function ShortcutLegend({t, player = false, onAction, marked}: {
   t: (de: string, en: string) => string;
   player?: boolean;
+  onAction?: (key: string) => void;
+  marked?: boolean;
 }) {
   return (
     <ul class="shortcut-legend" aria-label={t("Farbtasten", "Color buttons")}>
-      {appearance.remoteShortcuts.map(({key, color, de, en, playerDe, playerEn}) => (
-        <li key={key}>
-          <span class="shortcut-dot" style={{backgroundColor: color}} aria-hidden="true" />
-          {player && playerDe && playerEn ? t(playerDe, playerEn) : t(de, en)}
-        </li>
-      ))}
+      {appearance.remoteShortcuts.map(({key, color, de, en, playerDe, playerEn}) => {
+        const label = onAction && key === "F2" ? t("Senderliste", "Channel list")
+          : onAction && key === "F4" ? t("Bildformat", "Aspect ratio")
+          : player && playerDe && playerEn ? t(playerDe, playerEn) : t(de, en);
+        const dot = <span class="shortcut-dot" style={{backgroundColor: color}} aria-hidden="true" />;
+        return <li key={key}>{onAction ? (
+          <button type="button"
+            aria-pressed={key === "F3" ? marked : undefined} onClick={() => onAction(key)}>
+            {dot}{label}
+          </button>
+        ) : <>{dot}{label}</>}</li>;
+      })}
     </ul>
   );
 }
@@ -759,6 +768,13 @@ function App() {
     const next = index < 0 ? (delta < 0 ? list.length - 1 : 0) : (index + delta + list.length) % list.length;
     void start(list[next], fullRef.current);
   };
+  const cycleLiveAspect = () => {
+    const aspect = savedRef.current.settings.aspect;
+    const next = aspect === "fill" ? "fit" : aspect === "fit" ? "stretch" : "fill";
+    setting("aspect", next);
+    playerRef.current?.setAspect(next);
+    showControls();
+  };
   keyHandler.current = (e: KeyboardEvent) => {
     const code = e.keyCode;
     if (!licenseClient.state.allowed) {
@@ -797,7 +813,8 @@ function App() {
       if (code === 403) {
         manageParental();
       } else if (code === 404) {
-        if (view === "live" && fullRef.current) leavePlayer();
+        if (livePlayer) leavePlayer(true, true);
+        else if (view === "live" && fullRef.current) leavePlayer();
         else goShortcut("live");
       } else if (code === 405) {
         const key = document.activeElement?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
@@ -811,11 +828,21 @@ function App() {
           toggleFavorite(item);
           if (fullRef.current) showControls();
         }
+      } else if (livePlayer) {
+        cycleLiveAspect();
       } else if (fullRef.current) {
         showControls();
         setPlayerOptions(playerOptionsRef.current ? null : "options");
       } else {
         goShortcut("settings");
+      }
+      return;
+    }
+    if (livePlayer && isInfoKey(e) && !tracksRef.current && !parental.open && !document.querySelector(".modal")) {
+      e.preventDefault();
+      if (!e.repeat) {
+        showControls();
+        setPlayerOptions(playerOptionsRef.current ? null : "options");
       }
       return;
     }
@@ -994,7 +1021,10 @@ function App() {
         [...document.querySelectorAll(".modal")].pop() ||
         document.querySelector(".fullscreen") ||
         document.getElementById("app")!;
-      if (!root.contains(document.activeElement)) focusables(root)[0]?.focus();
+      if (!root.contains(document.activeElement)) {
+        if (root instanceof HTMLElement && root.classList.contains("live-player")) root.focus({preventScroll: true});
+        else focusables(root)[0]?.focus();
+      }
     }, 50);
     return () => clearTimeout(id);
   }, [view, !!session, editing, !!detail, !!resume, tracks, exit, full, license.ready, license.allowed]);
@@ -1922,25 +1952,11 @@ function App() {
                     returnIndex={returnChannel}
                   />
                 </section>
-                {!preview && (
-                  <aside class="preview-panel" data-focus-zone="details">
-                    <header>
-                      <h2>{t("Vorschau", "Preview")}</h2>
-                    </header>
-                    <div class="preview-surface empty-preview">
-                      <span>▷</span>
-                    </div>
-                    <h2>{t("Sender auswählen", "Choose a channel")}</h2>
-                    <p>
-                      Hier erscheinen Vorschau, Programm und
-                      Senderinformationen.
-                    </p>
-                  </aside>
-                )}
-                {preview && (
-                  <aside class="preview-panel" data-focus-zone="details">
-                    <header>
-                      <h2>{t("Vorschau", "Preview")}</h2>
+                <aside class="preview-panel" data-focus-zone="details">
+                  <header>
+                    <h2>{t("Vorschau", "Preview")}</h2>
+                    {classic && !full && <ShortcutLegend t={t} />}
+                    {preview && (
                       <button
                         class="icon-button"
                         aria-label={t("Sender als Favorit", "Favorite channel")}
@@ -1949,11 +1965,15 @@ function App() {
                       >
                         <FavoriteMark marked={isFavorite(preview)} />
                       </button>
-                    </header>
-                    <div
-                      ref={!full ? surface : undefined}
-                      class="preview-surface"
-                    />
+                    )}
+                  </header>
+                  <div
+                    ref={preview && !full ? surface : undefined}
+                    class={`preview-surface${preview ? "" : " empty-preview"}`}
+                  >
+                    {!preview && <span aria-hidden="true">▷</span>}
+                  </div>
+                  {preview ? <>
                     <button class="preview-open" onClick={openFullscreen}>
                       Vollbild öffnen <span>↗</span>
                     </button>
@@ -2000,8 +2020,11 @@ function App() {
                           : "HTML-Video"}
                       </small>
                     </div>
-                  </aside>
-                )}
+                  </> : <>
+                    <h2>{t("Sender auswählen", "Choose a channel")}</h2>
+                    <p>{t("Hier erscheinen Vorschau, Programm und Senderinformationen.", "The preview, schedule and channel information will appear here.")}</p>
+                  </>}
+                </aside>
               </>
             ) : (
               <main
@@ -2017,20 +2040,24 @@ function App() {
                 {view === "home" && classic ? (
                   <div class="classic-dashboard">
                     <header><h1>{t("Bibliothek", "Library")}</h1><span>{session?.name}</span></header>
-                    <div class="classic-primary" data-focus-zone="library">
-                      {([
-                        ["live", t("Live-TV", "Live TV"), catalog.live.length],
-                        ["vod", t("Filme", "Movies"), catalog.vod.length],
-                        ["series", t("Serien", "Series"), catalog.series.length],
-                      ] as const).map(([id, label, count]) => <button key={id} data-focus-key={id} onClick={() => goShortcut(id)}>
-                        <LibraryIcon kind={id} /><span>{label}<small>{count}</small></span>
-                      </button>)}
-                    </div>
-                    <div class="classic-actions" data-focus-zone="actions">
-                      <button data-focus-key="history" onClick={() => goShortcut("history")}>{t("Fortsetzen", "Continue")}</button>
-                      <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>{t("Favoriten", "Favorites")}</button>
-                      <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>{t("Profile", "Profiles")}</button>
-                      <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>{t("Einstellungen", "Settings")}</button>
+                    <div class="classic-deck">
+                      <div class="classic-primary" data-focus-zone="library">
+                        {([
+                          ["live", t("Live-TV", "Live TV"), catalog.live.length],
+                          ["vod", t("Filme", "Movies"), catalog.vod.length],
+                          ["series", t("Serien", "Series"), catalog.series.length],
+                        ] as const).map(([id, label, count]) => <button key={id} data-focus-key={id} onClick={() => goShortcut(id)}>
+                          <span class="classic-icon-plate"><LibraryIcon kind={id} /></span>
+                          <span class="classic-tile-title">{label}</span>
+                          <small class="classic-tile-count">{count}</small>
+                        </button>)}
+                      </div>
+                      <div class="classic-actions" data-focus-zone="actions">
+                        <button data-focus-key="history" onClick={() => goShortcut("history")}>{t("Fortsetzen", "Continue")}</button>
+                        <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>{t("Favoriten", "Favorites")}</button>
+                        <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>{t("Profile", "Profiles")}</button>
+                        <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>{t("Einstellungen", "Settings")}</button>
+                      </div>
                     </div>
                   </div>
                 ) : view === "home" ? (
@@ -2217,11 +2244,12 @@ function App() {
               </main>
             )}
           </div>
-          {!full && <ShortcutLegend t={t} />}
+          {!full && !(classic && view === "live") && <ShortcutLegend t={t} />}
           {editing && modal("Profil hinzufügen", profileForm())}
           {full && preview && (
             <div
               class={`fullscreen ${preview.kind === "live" ? "live-player" : "vod-player"} ${status?.state === "error" ? "playback-failed" : ""} ${controlsVisible ? "" : "controls-hidden"}`}
+              tabIndex={preview.kind === "live" ? -1 : undefined}
               onMouseMove={showControls}
               onClick={showControls}
             >
@@ -2282,13 +2310,24 @@ function App() {
                   ))}
                 </div>
               )}
-              {controlsVisible && <ShortcutLegend t={t} player />}
-              <div class="player-controls glass">
-                {preview.kind === "live" ? <div class="on-air">
-                  <span class="on-air-label">LIVE{preview.number ? ` · ${preview.number}` : ""}</span>
+              {preview.kind === "live" ? <div class="player-controls">
+                <div class="on-air">
+                  {preview.number ? <span class="on-air-label">{preview.number}</span> : null}
                   <Logo item={preview} />
                   <span class="on-air-copy"><strong>{preview.name}</strong>{now && <small>{now.title}</small>}</span>
-                </div> : <div class="timeline seek-transport">
+                </div>
+                <ShortcutLegend t={t} player marked={isFavorite(preview)} onAction={(key) => {
+                  switch (key) {
+                    case "F1": manageParental(); break;
+                    case "F2": leavePlayer(true, true); break;
+                    case "F3": toggleFavorite(preview); break;
+                    case "F4": cycleLiveAspect(); break;
+                  }
+                }} />
+              </div> : <>
+                {controlsVisible && <ShortcutLegend t={t} player />}
+                <div class="player-controls glass">
+                <div class="timeline seek-transport">
                   {playToggle()}
                   <span>{time(status?.time || 0)}</span>
                   <div class="seek-bar" onClick={(event) => {
@@ -2299,19 +2338,15 @@ function App() {
                     }
                   }}><progress value={status?.time || 0} max={status?.duration || 1} /></div>
                   <span>{time(status?.duration || 0)}</span>
-                </div>}
+                </div>
                 <div class="transport">
-                  {preview.kind === "live" && <button onClick={() => leavePlayer()}>{t("← Zurück", "← Back")}</button>}
-                  <button onClick={() => preview.kind === "live" ? stepLive(-1) : safe(() => p?.seek(-policy.seekStepSeconds))}>
-                    {preview.kind === "live" ? t("‹ Sender", "‹ Channel") : "↶ " + policy.seekStepSeconds + " s"}
+                  <button onClick={() => safe(() => p?.seek(-policy.seekStepSeconds))}>
+                    {"↶ " + policy.seekStepSeconds + " s"}
                   </button>
-                  {preview.kind === "live" && playToggle()}
-                  <button onClick={() => preview.kind === "live" ? stepLive(1) : safe(() => p?.seek(policy.seekStepSeconds))}>
-                    {preview.kind === "live" ? t("Sender ›", "Channel ›") : policy.seekStepSeconds + " s ↷"}
+                  <button onClick={() => safe(() => p?.seek(policy.seekStepSeconds))}>
+                    {policy.seekStepSeconds + " s ↷"}
                   </button>
-                  {preview.kind === "live" ? <button aria-label={t("Favorit", "Favorite")} aria-pressed={isFavorite(preview)}
-                    onClick={() => toggleFavorite(preview)}><FavoriteMark marked={isFavorite(preview)} /></button> :
-                    <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>}
+                  <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>
                   {following?.source === itemKey(preview) && <button onClick={() => {
                     const position = history.find((entry) => itemKey(entry.item) === itemKey(following.item))?.position || 0;
                     void start(following.item, true, position);
@@ -2321,7 +2356,8 @@ function App() {
                     {t("Optionen", "Options")}
                   </button>
                 </div>
-              </div>
+                </div>
+              </>}
             </div>
           )}
           {detail &&

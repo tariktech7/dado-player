@@ -160,8 +160,9 @@ Beispiel für die lokale Datei (keine Passwörter/Zertifikate eintragen):
 ./SmartTV/client/deploy.ps1 -SigningProfile DadoTV
 ```
 
-`deploy.ps1` verbindet den konfigurierten TV, baut erneut, signiert, installiert und startet
-`DadoPlayTV.Player`. App-ID und Package-ID (`DadoPlayTV`) bleiben für Updates stabil.
+`deploy.ps1` verbindet den konfigurierten TV, baut erneut, signiert und installiert das Paket.
+Der optionale Schalter `-Run` startet anschließend `DadoPlayTV.Player`.
+App-ID und Package-ID (`DadoPlayTV`) bleiben für Updates stabil.
 Den Autorenschlüssel sichern; Updates müssen denselben Autor behalten. Schlüssel, Passwörter,
 Samsung-Tokens, DUIDs und lokale SDK-Konfigurationen niemals committen.
 

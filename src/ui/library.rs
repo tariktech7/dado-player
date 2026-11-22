@@ -407,7 +407,14 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                         Sense::hover(),
                     );
                     let r = ui.interact(rect, ui.id().with((&id, "category")), Sense::click());
-                    if selected == id {
+                    if classic_counts.is_some() {
+                        super::classic::list_surface(
+                            ui,
+                            rect,
+                            selected == id,
+                            r.has_focus() || r.hovered(),
+                        );
+                    } else if selected == id {
                         ui.painter().rect_filled(
                             rect.shrink(1.0),
                             9.0,
@@ -724,21 +731,30 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                         let key = format!("{kind}:{}", entry.id);
                         super::desktop::remember_favorite_target(&response, &key);
                         if ui.is_rect_visible(rect) {
-                            ui.painter().rect_filled(
-                                rect.shrink(1.0),
-                                10.0,
-                                if selected == Some(entry.id) {
-                                    crate::theme::selection_surface(ui)
-                                } else {
-                                    ui.visuals().faint_bg_color
-                                },
-                            );
-                            if response.has_focus() {
-                                ui.painter().rect_stroke(
+                            if classic {
+                                super::classic::list_surface(
+                                    ui,
+                                    rect,
+                                    selected == Some(entry.id),
+                                    response.has_focus() || response.hovered(),
+                                );
+                            } else {
+                                ui.painter().rect_filled(
                                     rect.shrink(1.0),
                                     10.0,
-                                    egui::Stroke::new(2.0_f32, crate::theme::accent(ui)),
+                                    if selected == Some(entry.id) {
+                                        crate::theme::selection_surface(ui)
+                                    } else {
+                                        ui.visuals().faint_bg_color
+                                    },
                                 );
+                                if response.has_focus() {
+                                    ui.painter().rect_stroke(
+                                        rect.shrink(1.0),
+                                        10.0,
+                                        egui::Stroke::new(2.0_f32, crate::theme::accent(ui)),
+                                    );
+                                }
                             }
                             let art = Rect::from_min_size(
                                 rect.min + vec2(4.0, 4.0),

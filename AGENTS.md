@@ -53,4 +53,5 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
 
 - Nach einem Samsung-Build für Tarik das signierte Paket auf dem Haupt-TV aus
   SmartTV/client/tizen.local.json installieren und die Installation prüfen.
+  Die App auf dem Fernseher nur auf ausdrücklichen Wunsch von Tarik starten.
   Eine neuere Anweisung, den Fernseher in Ruhe zu lassen, hat Vorrang.

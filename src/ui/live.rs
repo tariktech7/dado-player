@@ -135,14 +135,31 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
             .and_then(|id| app.library.channels.iter().find(|c| c.id == id))
             .map(play_item)
     });
-    let header = super::desktop::heading(
-        ui,
-        app.settings
-            .language
-            .text(app.settings.language.text("Vorschau", "Preview"), "Preview"),
-    );
+    let language = app.settings.language;
+    let header = super::desktop::heading(ui, language.text("Vorschau", "Preview"));
+    let size = super::desktop::handheld_size((42.0 * s).max(20.0), 40.0);
+    if classic && (cfg!(windows) || app.tv) {
+        let bounds = Rect::from_min_max(
+            header.min + vec2(154.0 * s, 0.0),
+            pos2(
+                header.right() - size - 8.0 * s,
+                header.center().y + 17.0 * s,
+            ),
+        );
+        if bounds.is_positive() {
+            super::desktop::shortcut_legend(
+                &ui.painter()
+                    .with_clip_rect(bounds.intersect(ui.clip_rect())),
+                bounds,
+                s,
+                language,
+                theme::muted(ui),
+                None,
+                cfg!(windows),
+            );
+        }
+    }
     if let Some(item) = &item {
-        let size = super::desktop::handheld_size((42.0 * s).max(20.0), 40.0);
         let bounds =
             Rect::from_min_size(pos2(header.right() - size, header.top()), Vec2::splat(size));
         let mut favorite = ui.child_ui(bounds, Layout::top_down(Align::Min));
@@ -430,12 +447,25 @@ thread_local! {static ROW_COUNT:std::cell::Cell<usize>=const{std::cell::Cell::ne
 pub(crate) fn take_row_count() -> usize {
     ROW_COUNT.with(|count| count.replace(0))
 }
-fn row(ui: &mut Ui, id: impl std::hash::Hash, height: f32, selected: bool) -> Response {
+fn row(
+    ui: &mut Ui,
+    id: impl std::hash::Hash,
+    height: f32,
+    selected: bool,
+    classic: bool,
+) -> Response {
     #[cfg(test)]
     ROW_COUNT.with(|count| count.set(count.get() + 1));
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let response = ui.interact(rect, ui.id().with(id), Sense::click());
-    if ui.is_rect_visible(rect) {
+    if classic && ui.is_rect_visible(rect) {
+        super::classic::list_surface(
+            ui,
+            rect,
+            selected,
+            response.has_focus() || response.hovered(),
+        );
+    } else if ui.is_rect_visible(rect) {
         let color = if selected {
             theme::selection_surface(ui)
         } else if response.hovered() {
@@ -516,7 +546,13 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                         (category.id.as_str(), category.name.as_str())
                     }
                 };
-                let r = row(ui, ("category", id), row_height, app.live_cat == id);
+                let r = row(
+                    ui,
+                    ("category", id),
+                    row_height,
+                    app.live_cat == id,
+                    counts.is_some(),
+                );
                 if ui.is_rect_visible(r.rect) {
                     let count = counts.as_ref().map(|counts| match id {
                         "all" => app.library.channels.len(),
@@ -764,7 +800,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             for &index in &indices[start..end] {
                 let id = app.library.channels[index].id;
                 let key = format!("live:{id}");
-                let r = row(ui, ("channel", id), row_h, app.is_previewing(&key));
+                let r = row(ui, ("channel", id), row_h, app.is_previewing(&key), classic);
                 if desktop && app.desktop_return_item.as_deref() == Some(key.as_str()) {
                     r.request_focus();
                     if tv {

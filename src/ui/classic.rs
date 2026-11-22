@@ -11,8 +11,83 @@ use crate::{
     theme,
     types::InterfaceLayout,
 };
-use egui::{pos2, vec2, Align2, Id, Rect, Sense, Stroke, Ui};
-use std::{collections::HashMap, sync::Arc};
+use egui::{pos2, vec2, Align2, Color32, Id, Mesh, Rect, Rgba, Sense, Stroke, Ui};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
+
+#[derive(serde::Deserialize)]
+struct TileColor {
+    top: String,
+    bottom: String,
+    accent: String,
+}
+
+fn tile_color(view: View) -> [Color32; 3] {
+    static COLORS: OnceLock<HashMap<String, TileColor>> = OnceLock::new();
+    let colors = COLORS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../shared/classic-tile-palette.json"))
+            .expect("bundled tile colors")
+    });
+    let key = match view {
+        View::Live => "live",
+        View::Movies => "vod",
+        _ => "series",
+    };
+    let color = &colors[key];
+    [&color.top, &color.bottom, &color.accent]
+        .map(|value| Color32::from_hex(value).expect("bundled tile color"))
+}
+
+fn tile_surface(ui: &Ui, rect: Rect, radius: f32, top: Color32, bottom: Color32) {
+    let radius = radius.min(rect.height() * 0.5).min(rect.width() * 0.5);
+    let mut mesh = Mesh::default();
+    let strips = 20;
+    for step in 0..=strips {
+        let fraction = step as f32 / strips as f32;
+        let y = egui::lerp(rect.top()..=rect.bottom(), fraction);
+        let corner = (radius - (y - rect.top()).min(rect.bottom() - y)).max(0.0);
+        let inset = radius - (radius * radius - corner * corner).max(0.0).sqrt();
+        let fill =
+            Color32::from(Rgba::from(top) * (1.0 - fraction) + Rgba::from(bottom) * fraction);
+        mesh.colored_vertex(pos2(rect.left() + inset, y), fill);
+        mesh.colored_vertex(pos2(rect.right() - inset, y), fill);
+        if step > 0 {
+            let index = (step - 1) * 2;
+            mesh.add_triangle(index, index + 1, index + 2);
+            mesh.add_triangle(index + 1, index + 2, index + 3);
+        }
+    }
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+pub(super) fn list_surface(ui: &Ui, rect: Rect, selected: bool, highlighted: bool) {
+    let radius = 9.0;
+    let rect = rect.shrink(1.0);
+    let fill = if selected || highlighted {
+        theme::selection_surface(ui)
+    } else {
+        ui.visuals().window_fill
+    };
+    ui.painter().rect_filled(
+        rect.translate(vec2(0.0, 2.0)),
+        radius,
+        Color32::from_black_alpha(37),
+    );
+    ui.painter()
+        .rect(rect, radius, fill, ui.visuals().window_stroke);
+    if selected || highlighted {
+        ui.painter().rect_stroke(
+            rect,
+            radius,
+            Stroke::new(
+                if highlighted { 2.5_f32 } else { 1.3_f32 },
+                theme::accent(ui),
+            ),
+        );
+    }
+}
 
 pub(super) fn category_counts<'a>(
     ui: &Ui,
@@ -161,7 +236,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
     let t = |de, en| language.text(de, en);
     let body = ui.available_rect_before_wrap();
     let appearance = desktop::appearance();
-    let label_size = desktop::handheld_type(appearance.classic_dashboard_title_size * scale, 22.0);
+    let label_size = desktop::handheld_type(appearance.classic_dashboard_title_size * scale, 23.0);
     let heading_size = desktop::handheld_type(44.0 * scale, 25.0);
     let profile = app
         .active_profile
@@ -182,25 +257,31 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         pos2(right, top + gap),
         Align2::RIGHT_TOP,
         profile,
-        tokens::reg(label_size),
+        tokens::reg(heading_size * 0.6),
         theme::muted(ui),
     );
     let media_start = top + heading_size + 2.0 * gap;
     let action_height = desktop::handheld_size(66.0 * scale, 43.0);
-    let actions_y = (body.bottom() - action_height - gap).max(media_start + gap * 3.0);
-    let media_end = actions_y - gap;
-    let tile_height =
-        (media_end - media_start).min(desktop::appearance().classic_dashboard_height * scale);
-    let tiles_top = (media_start + media_end - tile_height) / 2.0;
+    let media_gap = desktop::handheld_size(appearance.classic_dashboard_gap * scale, 10.0);
+    let media_end = (body.bottom() - gap).max(media_start + gap);
+    let options_height = action_height + media_gap;
+    let tile_height = (media_end - media_start - options_height)
+        .clamp(1.0, appearance.classic_dashboard_height * scale);
+    let tiles_top =
+        media_start + ((media_end - media_start - tile_height - options_height) * 0.5).max(0.0);
     let tiles_bottom = tiles_top + tile_height;
-    let split = left + (right - left) * 0.46;
-    let middle = tiles_top + (tiles_bottom - tiles_top) / 2.0;
+    let actions_y = tiles_bottom + media_gap;
+    let media_width = (right - left - media_gap * 2.0).max(3.0);
+    let live_width = media_width * appearance.classic_dashboard_live_share;
+    let other_width = (media_width - live_width) * 0.5;
+    let movies_x = left + live_width + media_gap;
+    let series_x = movies_x + other_width + media_gap;
     let media = [
         (
             View::Live,
             t("Live-TV", "Live TV"),
             Icon::Tv,
-            Rect::from_min_max(pos2(left, tiles_top), pos2(split, tiles_bottom)),
+            Rect::from_min_max(pos2(left, tiles_top), pos2(left + live_width, tiles_bottom)),
             app.library.channels.len(),
         ),
         (
@@ -208,8 +289,8 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             t("Filme", "Movies"),
             Icon::Film,
             Rect::from_min_max(
-                pos2(split + gap, tiles_top),
-                pos2(right, middle - gap * 0.5),
+                pos2(movies_x, tiles_top),
+                pos2(movies_x + other_width, tiles_bottom),
             ),
             app.library.movies.len(),
         ),
@@ -217,60 +298,104 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             View::Series,
             t("Serien", "Series"),
             Icon::Series,
-            Rect::from_min_max(
-                pos2(split + gap, middle + gap * 0.5),
-                pos2(right, tiles_bottom),
-            ),
+            Rect::from_min_max(pos2(series_x, tiles_top), pos2(right, tiles_bottom)),
             app.library.series.len(),
         ),
     ];
     let mut next = None;
     for (view, label, icon, rect, count) in media {
         let response = ui.interact(rect, ui.id().with(view as u8), Sense::click());
-        let fill = if view == View::Live || response.hovered() {
-            theme::selection_surface(ui)
-        } else {
-            ui.visuals().window_fill
-        };
-        ui.painter()
-            .rect(rect, 16.0 * scale, fill, ui.visuals().window_stroke);
-        let inset = (rect.width() * 0.08).min(34.0 * scale);
-        let icon_size = (rect.height() * 0.6)
-            .min(appearance.classic_dashboard_icon_size * scale)
-            .max(30.0);
-        let center = rect.left_center() + vec2(inset + icon_size / 2.0, 0.0);
-        components::icon(
-            ui,
-            Rect::from_center_size(center, vec2(icon_size, icon_size)),
-            icon,
-            theme::accent(ui),
+        let [top_color, bottom_color, accent] = tile_color(view);
+        let radius = (22.0 * scale).max(10.0);
+        let painter = ui.painter();
+        let focused = response.has_focus() || focus::focused_id() == Some(response.id);
+        let depth = (9.0 * scale).max(3.0);
+        painter.rect_filled(
+            rect.translate(vec2(0.0, depth * 1.7)),
+            radius,
+            Color32::from_black_alpha(45),
         );
-        let label_x = center.x + icon_size / 2.0 + gap;
-        let label_width = (rect.right() - label_x - inset).max(1.0);
-        components::draw_line(
-            ui,
-            pos2(label_x, rect.center().y - label_size * 0.25),
-            label,
-            tokens::bold(label_size),
-            ui.visuals().text_color(),
-            label_width,
+        painter.rect_filled(
+            rect.translate(vec2(0.0, depth)),
+            radius,
+            bottom_color.gamma_multiply(0.58),
         );
-        components::draw_line(
-            ui,
-            pos2(label_x, rect.center().y + label_size * 0.6),
-            &count.to_string(),
-            tokens::reg(label_size * 0.52),
-            theme::muted(ui),
-            label_width,
+        tile_surface(ui, rect, radius, top_color, bottom_color);
+        painter.rect_stroke(
+            rect.shrink(0.7),
+            radius,
+            Stroke::new((1.6 * scale).max(0.8), Color32::from_white_alpha(95)),
         );
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
-        if response.has_focus() {
-            ui.painter().rect_stroke(
-                rect.shrink(1.0),
-                16.0 * scale,
-                Stroke::new((4.0 * scale).max(2.0), theme::accent(ui)),
+        if focused || response.hovered() {
+            painter.rect_stroke(
+                rect.shrink(1.3),
+                radius - 1.0,
+                Stroke::new(
+                    if focused {
+                        (4.0 * scale).max(2.0)
+                    } else {
+                        (2.0 * scale).max(1.5)
+                    },
+                    accent,
+                ),
             );
         }
+        let label_size = label_size.min(rect.height() * 0.24);
+        let icon_size = (rect.height() * 0.54)
+            .min(appearance.classic_dashboard_icon_size * scale)
+            .min(rect.width() * 0.60);
+        let center = pos2(rect.center().x, rect.top() + rect.height() * 0.37);
+        let plate = Rect::from_center_size(center, vec2(icon_size, icon_size));
+        let plate_rounding = icon_size * 0.28;
+        let halo = (icon_size * 0.79).min(rect.height() * 0.34);
+        painter.circle_filled(center, halo, Color32::from_white_alpha(10));
+        painter.circle_stroke(
+            center,
+            halo,
+            Stroke::new((1.1 * scale).max(0.65), Color32::from_white_alpha(36)),
+        );
+        painter.rect_filled(
+            plate.translate(vec2(0.0, depth * 0.65)),
+            plate_rounding,
+            Color32::from_black_alpha(47),
+        );
+        tile_surface(
+            ui,
+            plate,
+            plate_rounding,
+            Color32::from_white_alpha(69),
+            Color32::from_white_alpha(18),
+        );
+        painter.rect_stroke(
+            plate,
+            plate_rounding,
+            Stroke::new((1.8 * scale).max(0.8), Color32::from_white_alpha(92)),
+        );
+        components::icon(ui, plate, icon, accent);
+        let content = painter.with_clip_rect(rect.shrink(4.0));
+        let title_pos = pos2(center.x, rect.top() + rect.height() * 0.74);
+        content.text(
+            title_pos + vec2(0.0, 2.0 * scale),
+            Align2::CENTER_CENTER,
+            label,
+            tokens::bold(label_size),
+            Color32::from_black_alpha(135),
+        );
+        content.text(
+            title_pos,
+            Align2::CENTER_CENTER,
+            label,
+            tokens::bold(label_size),
+            Color32::WHITE,
+        );
+        content.text(
+            pos2(center.x, rect.top() + rect.height() * 0.89),
+            Align2::CENTER_CENTER,
+            count.to_string(),
+            tokens::reg(label_size * 0.60),
+            accent,
+        );
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
         if activate(ui, &response, app.tv) {
             next = Some(view);
         }

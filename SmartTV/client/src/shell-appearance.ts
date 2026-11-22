@@ -1,8 +1,12 @@
 import appearance from '../../../shared/shell-appearance.json' with {type:'json'};
 import palette from '../../../shared/normal-palette.json' with {type:'json'};
+import classicTilePalette from '../../../shared/classic-tile-palette.json' with {type:'json'};
 export function installShellAppearance() {
   const style=document.documentElement.style;
   for(const [key,value] of Object.entries(palette))style.setProperty('--normal-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value);
+  for (const [tile, colors] of Object.entries(classicTilePalette)) {
+    for (const [position, color] of Object.entries(colors)) style.setProperty(`--classic-${tile}-${position}`, color);
+  }
   for(const [key,value] of Object.entries({
     '--navigation-expanded':appearance.navigationExpanded+'px',
     '--navigation-edge':appearance.navigationEdge+'px',
@@ -21,6 +25,9 @@ export function installShellAppearance() {
     '--classic-dashboard-height':appearance.classicDashboardHeight+'px',
     '--classic-dashboard-icon-size':appearance.classicDashboardIconSize+'px',
     '--classic-dashboard-title-size':appearance.classicDashboardTitleSize+'px',
+    '--classic-dashboard-gap':appearance.classicDashboardGap+'px',
+    '--classic-dashboard-live-share':appearance.classicDashboardLiveShare*100+'fr',
+    '--classic-dashboard-other-share':(1-appearance.classicDashboardLiveShare)*50+'fr',
     '--classic-category-font':appearance.classicCategoryFont+'px',
     '--classic-channel-font':appearance.classicChannelFont+'px',
     '--classic-gap':appearance.classicGap+'px',
@@ -32,6 +39,9 @@ export function installShellAppearance() {
     '--player-controls-inset-x':appearance.playerControlsInsetX+'px',
     '--player-controls-inset-y':appearance.playerControlsInsetY+'px',
     '--player-panel-color':appearance.playerPanelColor,
+    '--live-scrim-color':appearance.liveScrimColor,
+    '--live-scrim-height':appearance.liveScrimHeight+'px',
+    '--live-controls-height':appearance.liveControlsHeight+'px',
     '--player-button-color':appearance.playerButtonColor,
     '--player-primary-color':appearance.playerPrimaryColor,
     '--player-focus-color':appearance.playerFocusColor,

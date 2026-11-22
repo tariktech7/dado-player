@@ -3,7 +3,8 @@ param(
   [string]$SigningProfile = '',
   [string]$SdkRoot = '',
   [switch]$FromGitHub,
-  [switch]$Tizen5
+  [switch]$Tizen5,
+  [switch]$Run
 )
 $ErrorActionPreference='Stop'
 
@@ -81,8 +82,10 @@ try {
   }
   & $tizen install -s "${TvIp}:26101" -n (Split-Path $package -Leaf) -- (Split-Path $package -Parent)
   if($LASTEXITCODE){throw 'Installation failed. Check certificate DUID, Developer Mode and permit-to-install.'}
-  & $tizen run -s "${TvIp}:26101" -p 'DadoPlayTV.Player'
-  if($LASTEXITCODE){throw 'TV launch failed'}
+  if ($Run) {
+    & $tizen run -s "${TvIp}:26101" -p 'DadoPlayTV.Player'
+    if($LASTEXITCODE){throw 'TV launch failed'}
+  }
 } finally {
   if ($downloadDir -and (Test-Path -LiteralPath $downloadDir)) {
     Get-ChildItem -LiteralPath $downloadDir -File | Remove-Item -Force

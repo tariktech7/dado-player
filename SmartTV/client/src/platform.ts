@@ -1,6 +1,8 @@
 import { moveScroll, scrollDestination } from './scroll-motion';
 export const samsung = () =>
   typeof window !== "undefined" && !!(window as any).webapis?.avplay;
+let infoKeyCode: number | undefined;
+export const isInfoKey = (event: KeyboardEvent) => event.key === "Info" || event.keyCode === infoKeyCode;
 export function registerKeys(): void {
   const input = (window as any).tizen?.tvinputdevice;
   for (const key of [
@@ -21,6 +23,7 @@ export function registerKeys(): void {
   ]) {
     try {
       input?.registerKey(key);
+      if (key === "Info") infoKeyCode = input?.getKey?.(key)?.code;
     } catch {
       /* Optional keys vary by remote. */
     }

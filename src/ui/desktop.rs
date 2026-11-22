@@ -31,6 +31,8 @@ pub struct Appearance {
     pub classic_dashboard_height: f32,
     pub classic_dashboard_icon_size: f32,
     pub classic_dashboard_title_size: f32,
+    pub classic_dashboard_gap: f32,
+    pub classic_dashboard_live_share: f32,
     pub classic_category_font: f32,
     pub classic_channel_font: f32,
     pub classic_gap: f32,
@@ -54,6 +56,9 @@ pub struct Appearance {
     pub player_controls_inset_x: f32,
     pub player_controls_inset_y: f32,
     pub player_panel_color: String,
+    pub live_scrim_color: String,
+    pub live_scrim_height: f32,
+    pub live_controls_height: f32,
     pub player_button_color: String,
     pub player_primary_color: String,
     pub player_focus_color: String,
@@ -72,12 +77,12 @@ pub struct Appearance {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteShortcut {
-    key: String,
-    color: String,
-    de: String,
-    en: String,
-    player_de: Option<String>,
-    player_en: Option<String>,
+    pub(super) key: String,
+    pub(super) color: String,
+    pub(super) de: String,
+    pub(super) en: String,
+    pub(super) player_de: Option<String>,
+    pub(super) player_en: Option<String>,
 }
 pub fn appearance() -> &'static Appearance {
     static A: OnceLock<Appearance> = OnceLock::new();
@@ -545,6 +550,11 @@ pub(crate) fn handle_color_shortcut(app: &mut App, ctx: &Context) -> bool {
 
 pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bool {
     let player = app.view == View::Player;
+    let live_player = player
+        && app
+            .current_play
+            .as_ref()
+            .is_some_and(|item| item.kind == crate::types::PlayKind::Live);
     if !player && (app.active_profile.is_none() || !active(ctx)) {
         return false;
     }
@@ -595,6 +605,10 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
             }
         }
         egui::Key::F2 => {
+            if live_player {
+                app.open_live_list();
+                return true;
+            }
             if player {
                 app.back_from_player();
                 if app.view == View::Live {
@@ -632,7 +646,9 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
             }
         }
         egui::Key::F4 => {
-            if player {
+            if live_player {
+                super::player_desktop::cycle_live_aspect(app, ctx);
+            } else if player {
                 super::player_desktop::toggle_options_shortcut(app, ctx);
             } else {
                 app.navigate(View::Settings);
@@ -721,7 +737,8 @@ pub fn show(app: &mut App, ctx: &Context) {
             if classic {
                 let edge = handheld_size(22.0 * s, 8.0);
                 let mut canvas = screen.shrink(edge);
-                if cfg!(windows) || app.tv {
+                let footer_legend = (cfg!(windows) || app.tv) && app.view != View::Live;
+                if footer_legend {
                     canvas.max.y -= 20.0 * s;
                 }
                 let preview = super::classic::show(app, ui, canvas, s);
@@ -733,7 +750,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                         preview.filter(|_| cfg!(target_os = "ios")),
                     ),
                 );
-                if cfg!(windows) || app.tv {
+                if footer_legend {
                     shortcut_legend(
                         ui.painter(),
                         screen,

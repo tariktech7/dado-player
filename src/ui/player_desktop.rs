@@ -58,12 +58,14 @@ fn pane<R>(
             area.set_min_size(rect.size());
             area.set_clip_rect(rect);
             let p = Palette::get();
-            area.painter().rect(
-                rect.shrink(1.0),
-                super::desktop::appearance().player_corner_radius * scale,
-                p.panel,
-                Stroke::new(1.0_f32, p.border),
-            );
+            if name != "live-transport" {
+                area.painter().rect(
+                    rect.shrink(1.0),
+                    super::desktop::appearance().player_corner_radius * scale,
+                    p.panel,
+                    Stroke::new(1.0_f32, p.border),
+                );
+            }
             render(area)
         })
         .inner;
@@ -178,6 +180,88 @@ fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) 
     }
 }
 
+fn live_scrim(ctx: &Context, full: Rect, height: f32, color: Color32) -> (LayerId, Rect) {
+    let layer = LayerId::new(Order::Middle, Id::new("live-scrim"));
+    let bounds = Rect::from_min_max(
+        pos2(full.left(), (full.bottom() - height).max(full.top())),
+        full.max,
+    );
+    let mut mesh = egui::Mesh::default();
+    for (position, color) in [(0.0, Color32::TRANSPARENT), (0.64, color), (1.0, color)] {
+        let y = bounds.top() + bounds.height() * position;
+        mesh.colored_vertex(pos2(bounds.left(), y), color);
+        mesh.colored_vertex(pos2(bounds.right(), y), color);
+    }
+    for first in [0, 2] {
+        mesh.add_triangle(first, first + 1, first + 2);
+        mesh.add_triangle(first + 2, first + 1, first + 3);
+    }
+    ctx.layer_painter(layer)
+        .with_clip_rect(bounds)
+        .add(egui::Shape::mesh(mesh));
+    ctx.move_to_top(layer);
+    (layer, bounds)
+}
+
+fn live_hints(ui: &mut Ui, app: &App, bounds: Rect, scale: f32, marked: bool) -> Option<egui::Key> {
+    let language = app.settings.language;
+    let keys = [egui::Key::F1, egui::Key::F2, egui::Key::F3, egui::Key::F4];
+    let mut action = None;
+    for (slot, (shortcut, key)) in super::desktop::appearance()
+        .remote_shortcuts
+        .iter()
+        .zip(keys)
+        .enumerate()
+    {
+        let label = if key == egui::Key::F2 {
+            language.text("Senderliste", "Channel list")
+        } else if key == egui::Key::F4 {
+            language.text("Bildformat", "Aspect ratio")
+        } else {
+            language.text(
+                shortcut.player_de.as_deref().unwrap_or(&shortcut.de),
+                shortcut.player_en.as_deref().unwrap_or(&shortcut.en),
+            )
+        };
+        let label = if cfg!(windows) {
+            format!("{} {label}", shortcut.key)
+        } else {
+            label.into()
+        };
+        let width = bounds.width() / keys.len() as f32;
+        let rect = Rect::from_min_size(
+            bounds.min + vec2(slot as f32 * width, 0.0),
+            vec2(width - 3.0 * scale, bounds.height()),
+        );
+        let response = ui.interact(rect, ui.id().with(key), Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, &label));
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            ui.painter()
+                .rect_filled(rect, 7.0 * scale, Color32::from_white_alpha(24));
+        }
+        let color = Color32::from_hex(&shortcut.color).expect("bundled shortcut color");
+        let dot = pos2(rect.left() + 9.0 * scale, rect.center().y);
+        ui.painter().circle_filled(dot, 4.0 * scale, color);
+        if key == egui::Key::F3 && marked {
+            ui.painter()
+                .circle_stroke(dot, 6.0 * scale, Stroke::new(scale, color));
+        }
+        line(
+            ui,
+            rect.left_center() + vec2(18.0 * scale, 0.0),
+            rect.width() - 20.0 * scale,
+            &label,
+            18.0 * scale,
+            true,
+        );
+        if response.clicked() {
+            action = Some(key);
+        }
+    }
+    action
+}
+
 fn aspect_label(value: DesktopAspect, english: bool) -> &'static str {
     match (value, english) {
         (DesktopAspect::Auto, false) => "Automatisch",
@@ -277,6 +361,21 @@ pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
     active
 }
 
+pub(crate) fn cycle_live_aspect(app: &mut App, ctx: &Context) {
+    let aspect = match app.settings.desktop_aspect {
+        DesktopAspect::Auto => DesktopAspect::Fit,
+        DesktopAspect::Fit | DesktopAspect::Fill => DesktopAspect::Stretch,
+        DesktopAspect::Stretch => DesktopAspect::Auto,
+    };
+    app.settings.desktop_aspect = aspect;
+    if let Some(player) = &app.player {
+        player.mpv.set_desktop_aspect(aspect);
+    }
+    app.save_settings_now();
+    app.ui_activity = ctx.input(|input| input.time);
+    app.player_reveal = false;
+}
+
 pub fn show(app: &mut App, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
     let full = ui.available_rect_before_wrap();
@@ -318,9 +417,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ),
         top_size,
     );
+    let stacked_live = live && safe.width() / s < if cfg!(windows) { 1180.0 } else { 1050.0 };
     let bottom_size = vec2(
-        (safe.width() - 2.0 * a.player_controls_inset_x * s).min(a.player_controls_max_width * s),
-        a.player_controls_height * s,
+        (safe.width() - 2.0 * a.player_controls_inset_x * s).min(
+            if live {
+                1540.0
+            } else {
+                a.player_controls_max_width
+            } * s,
+        ),
+        if live {
+            a.live_controls_height + if stacked_live { 27.0 } else { 0.0 }
+        } else {
+            a.player_controls_height
+        } * s,
     );
     let bottom = Rect::from_center_size(
         pos2(
@@ -328,6 +438,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             safe.bottom()
                 - if handheld {
                     8.0
+                } else if live {
+                    20.0 * s
                 } else {
                     a.player_controls_inset_y * s
                 }
@@ -363,7 +475,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     #[cfg(windows)]
     let hovering_controls = app.player_chrome
         && video.is_some_and(|handle| {
-            cursor_inside(handle, title, ppp) || cursor_inside(handle, bottom, ppp)
+            (!live && cursor_inside(handle, title, ppp)) || cursor_inside(handle, bottom, ppp)
         });
     #[cfg(not(windows))]
     let hovering_controls = false;
@@ -403,7 +515,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let t = |de, en| language.text(de, en);
     let is_english = t("de", "en") == "en";
     let mut layers = Vec::with_capacity(4);
-    if !live {
+    if live {
+        let scrim = Color32::from_hex(&a.live_scrim_color).expect("bundled live scrim color");
+        let height = a.live_scrim_height + if stacked_live { 45.0 } else { 0.0 };
+        layers.push(live_scrim(&ctx, full, height * s, scrim));
+    } else {
         let (back, layer) = pane(&ctx, "top", title, s, |ui| {
             let center = title.center().y;
             let control = |offset: f32, width: f32| {
@@ -490,7 +606,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .unwrap_or_default();
     let next = app.next_episode(&item.progress_key);
     let play_icon = if paused { "▶" } else { "⏸" };
-    let (action, layer) = pane(&ctx, "transport", bottom, s, |ui| {
+    let transport = if live { "live-transport" } else { "transport" };
+    let (action, layer) = pane(&ctx, transport, bottom, s, |ui| {
         if ctx.data_mut(|data| {
             let id = Id::new("player-focus-transport");
             let focus = data.get_temp::<bool>(id).unwrap_or(false);
@@ -500,54 +617,38 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             crate::ui::mobile::focus::request_id(ui.id().with(1_usize));
         }
         let mut action = None;
-        let mut controls: Vec<(usize, &str, f32)> = if live {
-            vec![
-                (6, t("← Zurück", "← Back"), 96.0),
-                (0, t("‹ Sender", "‹ Channel"), 82.0),
-                (1, play_icon, 50.0),
-                (2, t("Sender ›", "Channel ›"), 82.0),
-                (
-                    7,
-                    if app.is_favorite(&item.progress_key) {
-                        "★"
-                    } else {
-                        "☆"
-                    },
-                    42.0,
-                ),
-            ]
-        } else {
-            vec![
+        if !live {
+            let mut controls = vec![
                 (0, "−10 s", 58.0),
                 (2, "+10 s", 58.0),
                 (4, t("Ton & Untertitel", "Audio & subtitles"), 156.0),
-            ]
-        };
-        if next.is_some() {
-            controls.push((5, t("Nächste Folge", "Next episode"), 132.0));
-        }
-        controls.push((3, t("Optionen", "Options"), 103.0));
-        let gap = 7.0;
-        let total = controls
-            .iter()
-            .map(|&(_, _, width)| width + gap)
-            .sum::<f32>()
-            - gap;
-        let mut x = bottom.right() - (total + 12.0) * s;
-        let row_y = bottom.bottom() - 43.0 * s;
-        for (i, name, width) in controls {
-            let r = Rect::from_min_size(pos2(x, row_y), vec2(width, 34.0) * s);
-            if button(
-                ui,
-                i,
-                r,
-                name,
-                a.player_button_font * 0.88 * s,
-                i == 1 || (i == 3 && options_open),
-            ) {
-                action = Some(i);
+            ];
+            if next.is_some() {
+                controls.push((5, t("Nächste Folge", "Next episode"), 132.0));
             }
-            x += (width + gap) * s;
+            controls.push((3, t("Optionen", "Options"), 103.0));
+            let gap = 7.0;
+            let total = controls
+                .iter()
+                .map(|&(_, _, width)| width + gap)
+                .sum::<f32>()
+                - gap;
+            let mut x = bottom.right() - (total + 12.0) * s;
+            let row_y = bottom.bottom() - 43.0 * s;
+            for (i, name, width) in controls {
+                let r = Rect::from_min_size(pos2(x, row_y), vec2(width, 34.0) * s);
+                if button(
+                    ui,
+                    i,
+                    r,
+                    name,
+                    a.player_button_font * 0.88 * s,
+                    i == 1 || (i == 3 && options_open),
+                ) {
+                    action = Some(i);
+                }
+                x += (width + gap) * s;
+            }
         }
         if live {
             let utc = chrono::Utc::now().timestamp();
@@ -558,23 +659,43 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             let channel = channel_id
                 .and_then(|id| app.library.channels.iter().find(|entry| entry.id == id))
                 .map(|entry| (entry.id, entry.num, entry.logo.clone()));
-            let badge = match &channel {
-                Some((_, number, _)) if *number != 0 => format!("LIVE · {number}"),
-                _ => "LIVE".into(),
+            let y = if stacked_live {
+                bottom.bottom() - 41.0 * s
+            } else {
+                bottom.center().y
             };
-            let y = bottom.top() + 28.0 * s;
-            line(
-                ui,
-                pos2(bottom.left() + 16.0 * s, y),
-                110.0 * s,
-                &badge,
-                20.0 * s,
-                true,
+            let hints_left = bottom.right() - (if cfg!(windows) { 580.0 } else { 460.0 }) * s;
+            let hint_min = if stacked_live {
+                bottom.left()
+            } else {
+                hints_left
+            };
+            let hint_top = if stacked_live {
+                bottom.top()
+            } else {
+                y - 19.0 * s
+            };
+            let hint_bounds = Rect::from_min_max(
+                pos2(hint_min, hint_top),
+                pos2(bottom.right(), hint_top + 38.0 * s),
             );
-            let mut title_left = bottom.left() + 126.0 * s;
+            let mut title_left = bottom.left() + 4.0 * s;
+            if let Some((_, number, _)) = &channel {
+                if *number != 0 {
+                    line(
+                        ui,
+                        pos2(title_left, y),
+                        128.0 * s,
+                        &number.to_string(),
+                        48.0 * s,
+                        true,
+                    );
+                    title_left += 134.0 * s;
+                }
+            }
             if let Some((id, _, logo)) = channel.filter(|(_, _, logo)| !logo.is_empty()) {
                 let rect =
-                    Rect::from_center_size(pos2(title_left + 19.0 * s, y), vec2(38.0, 31.0) * s);
+                    Rect::from_center_size(pos2(title_left + 52.0 * s, y), vec2(104.0, 74.0) * s);
                 super::mobile::components::thumb(
                     app,
                     ui,
@@ -583,9 +704,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     rect,
                     &item.title,
                 );
-                title_left += 48.0 * s;
+                title_left += 124.0 * s;
             }
-            let available = (bottom.right() - title_left - 18.0 * s).max(1.0);
+            let title_right = if stacked_live {
+                bottom.right()
+            } else {
+                hints_left
+            };
+            let available = (title_right - title_left - 14.0 * s).max(1.0);
             let now = channel_id
                 .and_then(|id| app.epg_for(id))
                 .and_then(|entries| {
@@ -596,18 +722,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             if let Some(now) = now {
                 line(
                     ui,
-                    pos2(title_left, y - 8.0 * s),
+                    pos2(title_left, y - 14.0 * s),
                     available,
                     &item.title,
-                    22.0 * s,
+                    38.0 * s,
                     true,
                 );
                 line(
                     ui,
-                    pos2(title_left, y + 12.0 * s),
+                    pos2(title_left, y + 21.0 * s),
                     available,
                     &now.title,
-                    16.0 * s,
+                    24.0 * s,
                     false,
                 );
             } else {
@@ -616,11 +742,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     pos2(title_left, y),
                     available,
                     &item.title,
-                    24.0 * s,
+                    38.0 * s,
                     true,
                 );
             }
-            return action;
+            return live_hints(ui, app, hint_bounds, s, app.is_favorite(&item.progress_key)).map(
+                |key| match key {
+                    egui::Key::F1 => 8,
+                    egui::Key::F2 => 6,
+                    egui::Key::F3 => 7,
+                    _ => 9,
+                },
+            );
         }
         let y = bottom.top() + 29.0 * s;
         let play = Rect::from_center_size(pos2(bottom.left() + 39.0 * s, y), vec2(51.0, 36.0) * s);
@@ -690,9 +823,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     match action {
         Some(0 | 2) => {
             let direction = if action == Some(0) { -1 } else { 1 };
-            if live {
-                app.step_channel(direction);
-            } else if let Some(player) = &app.player {
+            if let Some(player) = &app.player {
                 player.mpv.seek_relative(step * f64::from(direction));
             }
         }
@@ -719,10 +850,16 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
         Some(6) => {
             dismiss_menus(app, &ctx);
-            app.back_from_player();
+            app.open_live_list();
             return;
         }
         Some(7) => app.toggle_favorite(&item.progress_key),
+        Some(8) => {
+            dismiss_menus(app, &ctx);
+            super::parental::open_management(app);
+            return;
+        }
+        Some(9) => cycle_live_aspect(app, &ctx),
         _ => {}
     }
     if options_open {
@@ -795,7 +932,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
         layers.push(layer);
     }
-    if visible && (cfg!(windows) || app.tv) {
+    if !live && visible && (cfg!(windows) || app.tv) {
         let id = Id::new("desktop-player-shortcut-legend");
         let layer = LayerId::new(Order::Foreground, id);
         let bounds = super::desktop::shortcut_legend(
@@ -821,6 +958,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         // control usable with the existing native video region mechanism.
         let holes: Vec<_> = layers
             .iter()
+            .filter(|(layer, _)| layer.id != Id::new("live-scrim"))
             .map(|(_, r)| {
                 let origin = (r.min - full.min) * ppp;
                 (

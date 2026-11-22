@@ -1,0 +1,5 @@
+{
+  "live": { "top": "#2169BA", "bottom": "#10376F", "accent": "#B7E6FF" },
+  "vod": { "top": "#1D706A", "bottom": "#123F54", "accent": "#9FF2DD" },
+  "series": { "top": "#525CAF", "bottom": "#292D64", "accent": "#DCDEFF" }
+}

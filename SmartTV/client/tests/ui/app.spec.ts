@@ -107,8 +107,17 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await page.keyboard.press('Escape');
   await page.locator('.classic-primary [data-focus-key="live"]').click();
   await expect(page.locator('.channel .epg-pair')).toHaveCount(0);
+  const legend = page.locator('.preview-panel .shortcut-legend');
+  const surface = page.locator('.preview-panel .preview-surface');
+  await expect(legend).toBeVisible();
+  const beforePreview = await legend.boundingBox();
   await page.locator('.channel').first().click();
   await expect(page.locator('.classic-epg')).toBeVisible();
+  const guide = (await legend.boundingBox())!;
+  const picture = (await surface.boundingBox())!;
+  expect(guide).toEqual(beforePreview);
+  expect(guide.y + guide.height).toBeLessThan(picture.y);
+  expect(guide.x + guide.width).toBeLessThan(picture.x + picture.width);
   await page.screenshot({path: 'test-results/classic-live-tv.png'});
   await page.getByRole('button', {name: /Vollbild öffnen/}).click();
   await expect(page.locator('.live-player .on-air')).toContainText('Dado Kanal 0001');
@@ -124,6 +133,34 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await expect(page.locator('.navigation')).toBeVisible();
   await page.reload();
   await expect(page.locator('.navigation')).toBeVisible();
+});
+
+test('Classic tiles keep their spacing, scale and visible focus on HD and 4K displays', async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  for (const width of [1280, 1920, 3840]) {
+    await page.setViewportSize({width, height: width * 9 / 16});
+    if (width === 1280) await page.goto('/');
+    const tiles = page.locator('.classic-primary button');
+    await expect(tiles).toHaveCount(3);
+    await expect(tiles.first()).toBeFocused();
+    const sizes = await tiles.evaluateAll(nodes => nodes.map(node => {
+      const card = node.getBoundingClientRect();
+      const icon = node.querySelector('.classic-media-icon')!.getBoundingClientRect();
+      const text = node.querySelector('.classic-tile-title')!.getBoundingClientRect();
+      return {left: card.left, right: card.right, height: card.height, top: card.top,
+        icon: icon.height, title: text.height, shadow: getComputedStyle(node).boxShadow};
+    }));
+    const unit = width / 1920;
+    expect(Math.max(...sizes.map(card => card.top)) - Math.min(...sizes.map(card => card.top))).toBeLessThan(8 * unit);
+    expect(sizes[1].left - sizes[0].right).toBeGreaterThan(18 * unit);
+    expect(sizes[2].left - sizes[1].right).toBeGreaterThan(18 * unit);
+    for (const card of sizes) {
+      expect(card.icon).toBeGreaterThanOrEqual(100 * unit);
+      expect(card.title).toBeGreaterThanOrEqual(47 * unit);
+      expect(card.shadow).not.toBe('none');
+    }
+    if (width === 1920) await page.screenshot({path: 'test-results/classic-depth-1920.png'});
+  }
 });
 
 test('long live-preview metadata stays inside its own panel and retains a usable video area',async({page})=>{
@@ -206,7 +243,7 @@ test("live preview fits the stream from prepare and follows fullscreen transitio
   await page.getByRole("button", {name: /Vollbild öffnen/}).click();
   await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]).toEqual(["rect", 0, 0, 1920, 1080]);
   await expect.poll(async () => (await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_FULL_SCREEN"]);
-  await page.getByRole("button", {name: "← Zurück"}).click();
+  await page.getByRole("button", {name: "Senderliste"}).click();
   await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]?.slice(3)).toEqual(previewSize);
   expect((await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
   expect((await log()).filter(([event]) => event === "open")).toHaveLength(1);
@@ -244,6 +281,13 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
   await page.getByRole("button", {name: /Vollbild öffnen/}).click();
   const controls = page.locator(".fullscreen .player-controls");
   await expect(controls).toBeVisible();
+  await expect(page.locator(".fullscreen.live-player")).toBeFocused();
+  const frame = (await page.locator(".fullscreen .full-surface").boundingBox())!;
+  expect(frame).toMatchObject({x: 0, y: 0, width: 1920, height: 1080});
+  await expect(controls.locator(".transport,.player-play-toggle")).toHaveCount(0);
+  await expect(controls.locator(".on-air-label")).toHaveText("1");
+  await expect(controls.getByRole("button")).toHaveText(["Elternsperre", "Senderliste", "Favorit", "Bildformat"]);
+  expect((await controls.locator('.logo').boundingBox())!.width).toBeGreaterThanOrEqual(100);
   const measurements = await controls.evaluate(node => {
     const rgba = (value: string) => value.match(/[\d.]+/g)!.map(Number);
     const linear = (channel: number) => {
@@ -256,52 +300,50 @@ test("player chrome preserves contrast over dark, bright and colored video", asy
       const [a, b] = [luminance(fg) + 0.05, luminance(bg) + 0.05];
       return Math.max(a, b) / Math.min(a, b);
     };
-    const panel = rgba(getComputedStyle(node).backgroundColor);
+    const scrim = getComputedStyle(node.parentElement!, "::before");
+    const gradient = scrim.backgroundImage;
+    const shade = (gradient.match(/rgba\([^)]*\)/g) || []).map(rgba).find(color => color[3] > 0.8)!;
     const label = rgba(getComputedStyle(node.querySelector(".on-air-copy small") || node).color);
-    const buttons = [...node.querySelectorAll("button")].map(button => {
+    const samples = [{ink: label, fill: [0, 0, 0, 0]}];
+    for (const button of node.querySelectorAll("button")) {
       const style = getComputedStyle(button);
-      return contrast(rgba(style.color), rgba(style.backgroundColor));
-    });
+      samples.push({ink: rgba(style.color), fill: rgba(style.backgroundColor)});
+    }
     return {
-      alpha: panel[3],
-      radius: parseFloat(getComputedStyle(node).borderRadius),
-      guide: Math.min(...[[0,0,0], [255,255,255], [255,160,25], [45,230,110]].map(frame =>
-        contrast(label, frame.map((value, i) => panel[i] * panel[3] + value * (1 - panel[3]))))),
-      buttons: Math.min(...buttons),
+      gradient,
+      panelAlpha: rgba(getComputedStyle(node).backgroundColor)[3],
+      guide: Math.min(...[[0,0,0], [255,255,255], [255,160,25], [45,230,110]].flatMap(frame => {
+        const backdrop = frame.map((value, i) => shade[i] * shade[3] + value * (1 - shade[3]));
+        return samples.map(({ink, fill}) => {
+          const alpha = fill[3] ?? 1;
+          return contrast(ink, backdrop.map((value, i) => fill[i] * alpha + value * (1 - alpha)));
+        });
+      })),
     };
   });
-  expect(measurements.alpha).toBeGreaterThan(0.7);
-  expect(measurements.alpha).toBeLessThan(0.95);
-  expect(measurements.radius).toBeGreaterThan(12);
-  expect(await controls.evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(1081);
+  expect(measurements.gradient).toContain("linear-gradient");
+  expect(measurements.gradient).toContain("rgba(0, 0, 0, 0)");
+  expect(measurements.panelAlpha).toBe(0);
   expect(measurements.guide).toBeGreaterThan(4.5);
-  expect(measurements.buttons).toBeGreaterThan(4.5);
+  await page.addStyleTag({content: ".full-surface { background: linear-gradient(104deg,#182b43 0% 27%,#5f92d2 27% 50%,#ffdc99 50% 73%,#f9f8f4 73%); } #video-host { visibility: hidden !important; }"});
+  await page.screenshot({path: 'test-results/live-player-scrim.png'});
 });
-test("picture format opens at player scale and applies Automatic to the running decoder", async ({page}) => {
+test("blue and the aspect hint cycle the running live decoder without opening a menu", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
   await page.locator(".channel").first().click();
   await page.getByRole("button", {name: /Vollbild öffnen/}).click();
-  const options = page.locator(".player-options-toggle");
-  const buttonSize = (node: Element) => ({
-    height: node.getBoundingClientRect().height,
-    font: getComputedStyle(node).fontSize,
-  });
-  const mainSize = await options.evaluate(buttonSize);
-  await options.click();
-  await page.getByRole("button", {name: "Bildformat", exact: true}).click();
-  const automatic = page.getByRole("button", {name: "Automatisch", exact: true});
-  expect(await automatic.evaluate(buttonSize)).toEqual(mainSize);
-  await expect(page.locator(".selection-dialog")).toHaveCount(0);
-  await automatic.click();
-  await expect(page.locator(".player-options")).toHaveCount(0);
-  await expect(options).toBeFocused();
-  await expect.poll(() => page.evaluate(() => (window as any).__avLog
-    .filter((entry: string[]) => entry[0] === "aspect").slice(-1)[0]?.[1]))
-    .toBe("PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO");
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("dado.tv.v1")!).settings.aspect))
-    .toBe("fill");
+  const dispatchBlue = () => page.evaluate(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", {keyCode: 406, bubbles: true})));
+  for (const [aspect, mode] of [["stretch", "FULL_SCREEN"], ["fill", "AUTO_ASPECT_RATIO"], ["fit", "LETTER_BOX"]]) {
+    if (aspect === "fill") await page.getByRole("button", {name: "Bildformat", exact: true}).click();
+    else await dispatchBlue();
+    await expect(page.locator(".player-options,.selection-dialog")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => (window as any).__avLog
+      .filter((entry: string[]) => entry[0] === "aspect").slice(-1)[0]?.[1]))
+      .toBe(`PLAYER_DISPLAY_MODE_${mode}`);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("dado.tv.v1")!).settings.aspect)).toBe(aspect);
+  }
 });
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);
@@ -395,6 +437,7 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
     else if (action === "get_live_streams")
       data = Array.from({ length: 4800 }, (_, i) => ({
         stream_id: i + 1,
+        num: i + 1,
         name: `Dado Kanal ${String(i + 1).padStart(4, "0")}`,
         category_id: String((i % 12) + 1),
         stream_icon: `https://logos.invalid/${i % 2 ? "tall" : "wide"}.svg`,
@@ -780,9 +823,9 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
     .toBe(1);
   await page.locator(".channel").first().click();
   await expect(page.locator(".fullscreen")).toBeVisible();
-  await expect(page.locator(".transport > button")).toHaveCount(6);
+  await expect(page.locator(".live-player .shortcut-legend > li")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Ton & Untertitel" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Optionen", exact: true }).click();
+  await page.evaluate(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", {key: "Info", bubbles: true})));
   await page.getByRole("button", { name: "Ton & Untertitel" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "deu · AAC" }).click();
@@ -853,9 +896,7 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await expect(page.locator(".fullscreen")).toBeVisible();
   await expect(page.locator(".fullscreen").getByRole("button", { name: "Favorit" })).toHaveAttribute("aria-pressed", "true");
   await color(406);
-  await expect(page.locator(".player-options")).toBeVisible();
-  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Live TV", "Favorit", "Optionen"]);
-  await page.keyboard.press("Escape");
+  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Senderliste", "Favorit", "Bildformat"]);
   await expect(page.locator(".player-options")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(second).toBeFocused();
