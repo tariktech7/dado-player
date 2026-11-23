@@ -7,7 +7,7 @@ export const defaults: Settings = {
   interfaceLayout: "classic",
   appearanceVersion: 1,
   autoplayLast: policy.autoplayLast,
-  liveFormat: "m3u8",
+  liveFormat: "default",
   player: "auto",
   expertMode: false,
   aspect: "fit",
@@ -43,6 +43,8 @@ export function load(storage: Pick<Storage, "getItem"> = localStorage): Saved {
     settings.language = settings.language === "en" ? "en" : "de";
     settings.interfaceLayout = settings.interfaceLayout === "modern" ? "modern" : "classic";
     settings.clockFormat = settings.clockFormat === "H12" ? "H12" : "H24";
+    if (settings.liveFormat !== "ts" &&
+      (settings.liveFormat !== "m3u8" || s.settings?.liveFormatAutomatic)) settings.liveFormat = "default";
     return {
       ...fresh(),
       ...s,
@@ -59,7 +61,15 @@ export function save(
   storage: Pick<Storage, "setItem"> = localStorage,
 ): void {
   try {
-    storage.setItem(KEY, JSON.stringify(state));
+    const liveFormatAutomatic = state.settings.liveFormat === "default";
+    storage.setItem(KEY, JSON.stringify({
+      ...state,
+      settings: {
+        ...state.settings,
+        liveFormat: liveFormatAutomatic ? "m3u8" : state.settings.liveFormat,
+        liveFormatAutomatic,
+      },
+    }));
   } catch {
     throw new Error(
       "Speicher voll oder nicht verfügbar. Änderungen konnten nicht gespeichert werden.",

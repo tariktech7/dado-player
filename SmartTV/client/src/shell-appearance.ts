@@ -16,7 +16,6 @@ export function installShellAppearance() {
     '--navigation-collapsed':appearance.navigationCollapsed+'px',
     '--category-width':appearance.categoryWidth+'px',
     '--live-preview-width':appearance.livePreviewWidth+'px',
-    '--catalog-preview-width':appearance.catalogPreviewWidth+'px',
     '--classic-category-width':appearance.classicCategoryShare*100+'%',
     '--classic-poster-row-height':appearance.classicPosterRowHeight+'px',
     '--classic-live-category-width':appearance.classicLiveCategoryShare*100+'%',

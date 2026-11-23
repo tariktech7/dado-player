@@ -64,7 +64,7 @@ export interface Settings {
   interfaceLayout: "modern" | "classic";
   appearanceVersion?: number;
   autoplayLast: boolean;
-  liveFormat: "m3u8" | "ts";
+  liveFormat: "default" | "m3u8" | "ts";
   player: "auto" | "avplay" | "html";
   expertMode: boolean;
   aspect: "fit" | "fill" | "stretch";

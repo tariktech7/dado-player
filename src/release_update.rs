@@ -140,6 +140,23 @@ fn version(value: &str) -> Option<[u32; 3]> {
     parts.next().is_none().then_some(parsed)
 }
 
+fn release_version(tag: &str) -> Option<(&str, [u32; 3])> {
+    let tag = tag.strip_prefix('v')?;
+    let number = if let Some((number, suffix)) = tag.split_once('-') {
+        if suffix != "beta" {
+            let beta = suffix.strip_prefix("beta.")?;
+            if beta.starts_with('0') || !beta.bytes().all(|b| b.is_ascii_digit()) || beta.is_empty()
+            {
+                return None;
+            }
+        }
+        number
+    } else {
+        tag
+    };
+    Some((number, version(number)?))
+}
+
 fn select(
     releases: Vec<Release>,
     file: &str,
@@ -153,9 +170,7 @@ fn select(
             if release.draft {
                 return None;
             }
-            let tag = release.tag_name.strip_prefix('v')?;
-            let tag = tag.strip_suffix("-beta").unwrap_or(tag);
-            let version = version(tag)?;
+            let (tag, version) = release_version(&release.tag_name)?;
             let asset = release
                 .assets
                 .into_iter()
@@ -189,11 +204,13 @@ mod tests {
             {"tag_name":"v0.6.0","draft":false,"assets":[{"name":"file","id":2,"size":42,"label":"build-60"}]},
             {"tag_name":"v0.7.9-beta","draft":false,"assets":[{"name":"file","id":3,"size":42,"label":"build-31"}]},
             {"tag_name":"v0.7.10-beta","draft":false,"assets":[{"name":"incoming-file","id":4,"size":42,"label":"build-32"}]},
+            {"tag_name":"v0.7.9-beta.2","draft":false,"assets":[{"name":"file","id":6,"size":42,"label":"build-32"}]},
+            {"tag_name":"v0.7.9-beta.0","draft":false,"assets":[{"name":"file","id":7,"size":42,"label":"build-99"}]},
             {"tag_name":"v0.7.9","draft":false,"assets":[{"name":"file","id":5,"size":42,"label":"build-30"}]}
         ])).unwrap();
         let update = select(releases, "file", "build-", [0, 7, 9], 30).unwrap();
         assert_eq!(update.version, "0.7.9");
-        assert_eq!(update.build, 31);
-        assert_eq!(update.asset.id, 3);
+        assert_eq!(update.build, 32);
+        assert_eq!(update.asset.id, 6);
     }
 }

@@ -132,7 +132,7 @@ export function EpisodePicker({
   );
 }
 
-function Description({ text }: { text: string }) {
+function Description({ text, action }: { text: string; action?: string }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null),
     close = useRef<HTMLButtonElement>(null);
@@ -154,12 +154,12 @@ function Description({ text }: { text: string }) {
   }, [open]);
   return (
     <>
-      <p class="description-excerpt">
+      {!action && <p class="description-excerpt">
         {text || "Informationen werden vom Anbieter bereitgestellt."}
-      </p>
+      </p>}
       {text && (
         <button ref={trigger} class="read-more" onClick={() => setOpen(true)}>
-          Mehr lesen
+          {action || "Mehr lesen"}
         </button>
       )}
       {open &&
@@ -198,6 +198,7 @@ function PosterGrid({
   favoriteKeys,
   emptyMessage,
   classic,
+  resetKey,
 }: {
   items: Item[];
   selected: Item | null;
@@ -205,6 +206,7 @@ function PosterGrid({
   favoriteKeys: ReadonlySet<string>;
   emptyMessage: string;
   classic: boolean;
+  resetKey: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0),
@@ -226,7 +228,7 @@ function PosterGrid({
   useLayoutEffect(() => {
     if (root.current) root.current.scrollTop = 0;
     setTop(0);
-  }, [items]);
+  }, [resetKey]);
   const previousColumns = useRef(columns);
   useLayoutEffect(() => {
     if (previousColumns.current !== columns && root.current) {
@@ -309,6 +311,7 @@ export function CatalogBrowser({
   setQuery,
   selected,
   select,
+  close,
   favorites,
   detail,
   episodes,
@@ -327,6 +330,7 @@ export function CatalogBrowser({
   setQuery: (q: string) => void;
   selected: Item | null;
   select: (i: Item) => void;
+  close: () => void;
   favorites: Item[];
   detail: Item | null;
   episodes: Item[];
@@ -370,6 +374,11 @@ export function CatalogBrowser({
     return result;
   }, [items, category, query, categoryFavorites, continueIds, classic, alphabetic]);
   const item = detail?.id === selected?.id ? detail : selected;
+  const position = item?.kind === "vod" ? history.find((h) => itemKey(h.item) === itemKey(item))?.position || 0 : 0;
+  const favorite = (entry: Item) => <button class="favorite-toggle" aria-pressed={favoriteKeys.has(itemKey(entry))} onClick={() => toggle(entry)}>
+    <FavoriteMark marked={favoriteKeys.has(itemKey(entry))} />
+    {favoriteKeys.has(itemKey(entry)) ? t("Favorit", "Favorite") : t("Merken", "Save")}
+  </button>;
   const preview = useRef<HTMLElement>(null);
   const [activation, setActivation] = useState(0);
   const activated = useRef<{key: string; origin: Element | null; waiting: HTMLElement | null} | null>(null);
@@ -381,7 +390,7 @@ export function CatalogBrowser({
   useLayoutEffect(() => {
     const request = activated.current;
     if (!item || request?.key !== itemKey(item)) return;
-    if (document.activeElement !== request.origin && document.activeElement !== request.waiting) {
+    if (document.activeElement !== document.body && document.activeElement !== request.origin && document.activeElement !== request.waiting) {
       activated.current = null;
       return;
     }
@@ -395,7 +404,7 @@ export function CatalogBrowser({
     }
   }, [activation, item, episodes]);
   return (
-    <div class={`catalog-browser${item ? ' has-preview' : ''}`}>
+    <div class="catalog-browser">
       <section class="categories" data-focus-zone="categories">
         <h1>{t("Kategorien", "Categories")}</h1>
         {classic && <div class="classic-catalog-tools">
@@ -429,43 +438,41 @@ export function CatalogBrowser({
           onInput={(e) => setQuery(e.currentTarget.value)}
         />}
         <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} classic={classic}
+          resetKey={JSON.stringify([category, query, alphabetic])}
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
-      {item && <aside ref={preview} class="catalog-details" data-focus-zone="details">
-        <h2>{item.kind === "series" ? t("Serie & Folgen", "Series & episodes") : t("Details", "Details")}</h2>
+      {item && <aside ref={preview} class={`catalog-details${item.kind === "vod" ? " movie-detail" : ""}`} data-focus-zone="details">
+        {item.kind === "vod" && item.logo && <img key={itemKey(item)} alt="" class="movie-art" src={item.logo}
+          onError={(event) => { event.currentTarget.hidden = true; }} />}
+        <header class="catalog-detail-header">
+          <button class="menu-back" onClick={close}>{t("‹ Zurück", "‹ Back")}</button>
+        </header>
+        {item.kind === "vod" ? (
+          <div class="movie-controls" key={itemKey(item)}>
+            <div class="movie-main">
+              <h2>{item.name}</h2>
+              <div class="movie-actions">
+                <button class="primary" onClick={() => play(item, position)}>
+                  {position > 1 ? t("▶ Fortsetzen", "▶ Resume") : t("▶ Abspielen", "▶ Play")}
+                </button>
+                {favorite(item)}
+              </div>
+            </div>
+            {item.description && <Description text={item.description} action={t("Beschreibung lesen", "Read description")} />}
+          </div>
+        ) : (
           <div class="catalog-detail-scroll" key={itemKey(item)}>
             <div class="catalog-heading">
               {item.logo && <img src={item.logo} alt="" />}
               <div>
                 <h2>{item.name}</h2>
-                <button class="favorite-toggle" aria-pressed={favoriteKeys.has(itemKey(item))} onClick={() => toggle(item)}>
-                  <FavoriteMark marked={favoriteKeys.has(itemKey(item))} />
-                  {favoriteKeys.has(itemKey(item)) ? t("Favorit", "Favorite") : t("Merken", "Save")}
-                </button>
+                {favorite(item)}
               </div>
             </div>
             <Description text={item.description || ""} />
-            {item.kind === "series" ? (
-              <EpisodePicker
-                episodes={episodes}
-                history={history}
-                play={play}
-              />
-            ) : (
-              <button
-                class="primary"
-                onClick={() =>
-                  play(
-                    item,
-                    history.find((h) => itemKey(h.item) === itemKey(item))
-                      ?.position || 0,
-                  )
-                }
-              >
-                ▶ Abspielen / Fortsetzen
-              </button>
-            )}
+            <EpisodePicker episodes={episodes} history={history} play={play} />
           </div>
+        )}
       </aside>}
     </div>
   );

@@ -4,7 +4,7 @@ use crate::{
     types::{Episode, PlayItem, PlayKind},
     ui::mobile::{components, focus, tokens},
 };
-use egui::{pos2, vec2, Align, Layout, Rect, RichText, Sense, Ui};
+use egui::{pos2, vec2, Align, Color32, Layout, Rect, RichText, Sense, Ui};
 use std::{
     hash::{Hash, Hasher},
     sync::Arc,
@@ -28,6 +28,168 @@ fn hit(ui: &Ui, r: &egui::Response, tv: bool) -> bool {
 fn button(ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
     let r = ui.button(label);
     hit(ui, &r, tv)
+}
+pub(super) fn show_detail_page(app: &mut App, ui: &mut Ui, series: bool, id: u32) {
+    if !series {
+        if let Some(entry) = app
+            .library
+            .movies
+            .iter()
+            .position(|movie| movie.id == id)
+            .and_then(|index| entry_at(app, false, index))
+        {
+            show_movie_page(app, ui, entry);
+            return;
+        }
+    }
+    let text = app.settings.language.text("‹ Zurück", "‹ Back");
+    focus::set_zone(1);
+    let back = super::desktop::back_button(ui, text);
+    if hit(ui, &back, app.tv) {
+        app.close_catalog_detail();
+        ui.ctx().request_repaint();
+        return;
+    }
+    ui.add_space(8.0);
+    focus::set_zone(2);
+    egui::ScrollArea::vertical()
+        .id_source(("catalog-title", series, id))
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            details(app, ui, series, super::desktop::handheld())
+        });
+}
+
+fn show_movie_page(app: &mut App, ui: &mut Ui, entry: Entry) {
+    let bounds = ui.available_rect_before_wrap();
+    if !bounds.is_positive() {
+        return;
+    }
+    let language = app.settings.language;
+    let t = |de, en| language.text(de, en);
+    let key = format!("vod:{}", entry.id);
+    let image_key = format!("detail:{key}");
+    let base = Color32::from_rgb(12, 27, 44);
+    ui.painter().rect_filled(bounds, 12.0, base);
+    if !entry.cover.is_empty() {
+        app.request_image(image_key.clone(), entry.cover.clone());
+        if let Some(texture) = app.image(&image_key) {
+            let art = Rect::from_min_max(
+                pos2(bounds.left() + bounds.width() * 0.30, bounds.top()),
+                bounds.max,
+            );
+            let size = texture.size_vec2();
+            let ratio = (art.width() / art.height()) / (size.x / size.y);
+            let visible = vec2(ratio.min(1.0), ratio.recip().min(1.0));
+            let uv = Rect::from_center_size(
+                pos2(0.5, 0.38_f32.clamp(visible.y * 0.5, 1.0 - visible.y * 0.5)),
+                visible,
+            );
+            ui.painter().image(texture.id(), art, uv, Color32::WHITE);
+        }
+    }
+    let shade = |rect: Rect, colours: [Color32; 4]| {
+        let mut mesh = egui::Mesh::default();
+        for (point, colour) in [
+            rect.left_top(),
+            rect.right_top(),
+            rect.right_bottom(),
+            rect.left_bottom(),
+        ]
+        .into_iter()
+        .zip(colours)
+        {
+            mesh.colored_vertex(point, colour);
+        }
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(0, 2, 3);
+        ui.painter().add(egui::Shape::mesh(mesh));
+    };
+    let fade_end = bounds.left() + bounds.width() * 0.76;
+    shade(
+        Rect::from_min_max(
+            pos2(bounds.left() + bounds.width() * 0.30, bounds.top()),
+            pos2(fade_end, bounds.bottom()),
+        ),
+        [base, Color32::TRANSPARENT, Color32::TRANSPARENT, base],
+    );
+    shade(
+        Rect::from_min_max(
+            pos2(bounds.left(), bounds.top() + bounds.height() * 0.35),
+            bounds.max,
+        ),
+        [
+            Color32::TRANSPARENT,
+            Color32::TRANSPARENT,
+            Color32::BLACK,
+            Color32::BLACK,
+        ],
+    );
+    let inset = super::desktop::handheld_size(24.0 * super::desktop::scale(ui.ctx()), 14.0);
+    let content = bounds.shrink(inset);
+    let mut top = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), "movie-back");
+    focus::set_zone(1);
+    let back = super::desktop::back_button(&mut top, t("‹ Zurück", "‹ Back"));
+    if hit(&top, &back, app.tv) {
+        app.close_catalog_detail();
+        ui.ctx().request_repaint();
+        return;
+    }
+    let font_size = (bounds.height() * 0.062).clamp(24.0, 46.0);
+    let plot_width = if entry.plot.is_empty() {
+        0.0
+    } else {
+        (content.width() * 0.4).min(210.0)
+    };
+    let controls = Rect::from_min_max(
+        pos2(content.left(), content.bottom() - (font_size * 2.45 + 48.0)),
+        pos2(content.right() - plot_width, content.bottom()),
+    );
+    let mut bottom =
+        ui.child_ui_with_id_source(controls, Layout::bottom_up(Align::Min), "movie-actions");
+    focus::set_zone(2);
+    let resume = app.get_progress(&key) > 1;
+    let caption = if resume {
+        t("▶ Fortsetzen", "▶ Resume")
+    } else {
+        t("▶ Abspielen", "▶ Play")
+    };
+    let tv = app.tv;
+    let play = bottom
+        .horizontal(|ui| {
+            let play = play_button(app, ui, RichText::new(caption).strong(), tv);
+            crate::ui::fav_button(app, ui, &key);
+            play
+        })
+        .inner;
+    let title = components::wrap(
+        &bottom,
+        &entry.name,
+        tokens::bold(font_size),
+        Color32::WHITE,
+        controls.width(),
+        2,
+    );
+    bottom.label(title);
+    if plot_width > 0.0 {
+        let area = Rect::from_min_max(
+            pos2(content.right() - plot_width, controls.top()),
+            content.max,
+        );
+        let mut plot =
+            ui.child_ui_with_id_source(area, Layout::bottom_up(Align::Max), "movie-description");
+        if button(&mut plot, t("Beschreibung lesen", "Read description"), tv) {
+            app.description_open = Some((entry.name.clone(), entry.plot));
+        }
+    }
+    if play {
+        app.play(PlayItem {
+            title: entry.name,
+            url: entry.url,
+            kind: PlayKind::Vod,
+            progress_key: key,
+        });
+    }
 }
 fn play_button(app: &mut App, ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
     let response = ui.button(label);
@@ -83,21 +245,14 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         let scale = super::desktop::scale(ui.ctx());
         let landscape = super::mobile::handheld_landscape(ui.ctx());
         let narrow = a.width() < 620.0 && !landscape;
-        let selected = if series {
+        if let Some(id) = if series {
             app.selected_series
         } else {
             app.selected_movie
+        } {
+            show_detail_page(app, ui, series, id);
+            return;
         }
-        .is_some();
-        let animation = ui.ctx().animate_bool_with_time(
-            ui.id().with("catalog-preview-slide"),
-            selected,
-            if super::desktop::reduced_motion(ui.ctx()) {
-                0.0
-            } else {
-                0.24
-            },
-        );
         let gap = if classic {
             (super::desktop::appearance().classic_gap * scale).max(6.0)
         } else if desktop {
@@ -118,37 +273,8 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         } else {
             (a.width() * 0.25).clamp(174.0, 244.0)
         };
-        let dw = if !selected {
-            0.0
-        } else if desktop && super::desktop::handheld() {
-            (a.width() * 0.42).min(360.0)
-        } else if desktop {
-            (super::desktop::appearance().catalog_preview_width * scale).min(a.width() * 0.45)
-        } else if landscape {
-            (a.width() * 0.39).min(340.0)
-        } else if narrow {
-            0.0
-        } else {
-            (a.width() * 0.32).clamp(220.0, 340.0)
-        };
-        let h = if narrow && selected {
-            (a.height() * 0.48).max(120.0)
-        } else {
-            a.height()
-        };
-        let cr = Rect::from_min_size(a.min, vec2(cw, h));
-        let lr = Rect::from_min_max(
-            pos2(cr.right() + gap, a.top()),
-            pos2(
-                a.right() - dw - if narrow || !selected { 0.0 } else { gap },
-                a.top() + h,
-            ),
-        );
-        let dr = if narrow {
-            Rect::from_min_max(pos2(a.left(), lr.bottom() + gap), a.max)
-        } else {
-            Rect::from_min_max(pos2(lr.right() + gap, a.top()), a.max)
-        };
+        let cr = Rect::from_min_size(a.min, vec2(cw, a.height()));
+        let lr = Rect::from_min_max(pos2(cr.right() + gap, a.top()), a.max);
         if desktop {
             let offset = super::desktop::offset(ui.ctx());
             ui.painter().rect_filled(
@@ -185,26 +311,6 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             super::desktop::column(ui, lr, "catalog-posters", offset, |ui| {
                 posters(app, ui, series, false)
             });
-            if selected {
-                let clip = ui.clip_rect();
-                ui.set_clip_rect(clip.intersect(dr));
-                let animated = dr.translate(vec2((1.0 - animation) * dr.width(), 0.0));
-                focus::set_zone(3);
-                super::desktop::column(ui, animated, "catalog-details", 0.0, |ui| {
-                    super::desktop::catalog_heading(
-                        ui,
-                        if series {
-                            app.settings
-                                .language
-                                .text("Serie & Folgen", "Series & episodes")
-                        } else {
-                            app.settings.language.text("Details", "Details")
-                        },
-                    );
-                    details(app, ui, series, false)
-                });
-                ui.set_clip_rect(clip);
-            }
             return;
         }
         let mut c = ui.child_ui(cr, Layout::top_down(Align::Min));
@@ -215,13 +321,6 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
         l.set_clip_rect(lr.intersect(ui.clip_rect()));
         focus::set_zone(2);
         posters(app, &mut l, series, false);
-        if selected {
-            let animated = dr.translate(vec2((1.0 - animation) * dr.width(), 0.0));
-            let mut d = ui.child_ui(animated, Layout::top_down(Align::Min));
-            d.set_clip_rect(dr.intersect(ui.clip_rect()));
-            focus::set_zone(3);
-            details(app, &mut d, series, false);
-        }
     });
 }
 /// A phone catalogue is a full-page grid followed by a separate detail page.
@@ -682,6 +781,10 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
         app.selected_movie
     };
     let poster_scope = ui.id().with("poster-control");
+    let returning_to_poster = app
+        .catalog_return_poster
+        .filter(|&(is_series, _)| is_series == series)
+        .map(|(_, id)| id);
     let returning_movie = if series {
         None
     } else {
@@ -717,12 +820,15 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                         let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
                         let response =
                             ui.interact(rect, poster_scope.with(entry.id), Sense::click());
-                        if returning_movie == Some(entry.id) {
+                        if returning_movie == Some(entry.id)
+                            || returning_to_poster == Some(entry.id)
+                        {
                             response.request_focus();
                             if tv {
                                 focus::request_id(response.id);
                             }
                             app.desktop_return_item = None;
+                            app.catalog_return_poster = None;
                         }
                         let kind = if series { "series" } else { "vod" };
                         let key = format!("{kind}:{}", entry.id);
@@ -814,7 +920,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     }
     if let Some(id) = choose {
         app.catalog_focus_play = !touch;
-        app.nav_collapsed = true;
+        app.catalog_return_poster = Some((series, id));
         if series {
             app.open_series(id);
         } else {
@@ -850,9 +956,9 @@ fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     ui.horizontal_top(|ui| {
         let (art, _) = ui.allocate_exact_size(
             if touch {
-                vec2(96.0, 144.0)
+                vec2(84.0, 124.0)
             } else {
-                vec2(36.0, 50.0)
+                vec2(76.0, 110.0)
             },
             Sense::hover(),
         );

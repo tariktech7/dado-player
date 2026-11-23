@@ -2,6 +2,20 @@
 import appearance from './shell-appearance';
 // Animating grid-template-columns relayouts every channel/poster on every frame.
 const running = new WeakMap<HTMLElement, Animation[]>();
+
+export function animatePage(shell: Element | null, view: string, backwards: boolean): Animation[] {
+  if (!shell || view === "series" || view === "vod" || matchMedia("(prefers-reduced-motion: reduce)").matches) return [];
+  const target = view === "live"
+    ? ".category-list, .channel-list"
+    : view === "home" ? ".classic-dashboard, .home-hero" : "main > :first-child";
+  const distance = appearance.pageTransitionDistance * (backwards ? -1 : 1);
+  return [...shell.querySelectorAll<HTMLElement>(target)].flatMap((element) => element.animate
+    ? [element.animate([
+        {transform: `translate3d(${distance}px, 0, 0)`},
+        {transform: "translate3d(0, 0, 0)"},
+      ], {duration: appearance.pageTransitionMs, easing: "cubic-bezier(.33,1,.68,1)"})]
+    : []);
+}
 export async function animateNavigation(shell: HTMLElement | null, collapsed: boolean): Promise<void> {
   if (!shell || shell.classList.contains("nav-collapsed") === collapsed) return;
   const nodes = [...shell.children].flatMap((child) => {

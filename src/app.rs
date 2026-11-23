@@ -316,6 +316,7 @@ pub struct App {
     pub player_chrome: bool,
     pub player_menu_navigation: bool,
     pub catalog_focus_play: bool,
+    pub(crate) catalog_return_poster: Option<(bool, u32)>,
     /// Set for exactly one frame by `update()` when the input that just arrived
     /// only serves to bring the hidden chrome back. Consumed by the player.
     pub player_reveal: bool,
@@ -519,6 +520,7 @@ impl App {
             player_chrome: true,
             player_menu_navigation: false,
             catalog_focus_play: false,
+            catalog_return_poster: None,
             player_reveal: false,
             last_cursor: (0, 0),
             #[cfg(target_os = "windows")]
@@ -1173,7 +1175,8 @@ impl App {
                 | (self.active_profile.is_none() as u64) << 4
                 | (self.mobile_more as u64) << 3
                 | (self.pending_delete.is_some() as u64) << 2
-                | (self.parental.open as u64) << 1;
+                | (self.parental.open as u64) << 1
+                | self.catalog_detail().is_some() as u64;
             let pointer_used = ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down());
             let in_shell = self.active_profile.is_some() && self.view != View::Player;
             let modal = (!in_shell && self.pending_delete.is_some())
@@ -1574,6 +1577,7 @@ impl App {
         self.nav_collapsed = false;
         self.description_open = None;
         self.selected_movie = None;
+        self.catalog_return_poster = None;
         self.live_selected = None;
         self.previous_live = None;
         self.selected_series = None;
@@ -1730,6 +1734,27 @@ impl App {
         self.settings_return_tile.is_some()
     }
 
+    pub(crate) fn catalog_detail(&self) -> Option<(bool, u32)> {
+        match self.view {
+            View::Series => self.selected_series.map(|id| (true, id)),
+            View::Movies => self.selected_movie.map(|id| (false, id)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn close_catalog_detail(&mut self) -> bool {
+        let Some((series, _)) = self.catalog_detail() else {
+            return false;
+        };
+        if series {
+            self.selected_series = None;
+        } else {
+            self.selected_movie = None;
+        }
+        self.catalog_focus_play = false;
+        true
+    }
+
     pub(crate) fn clear_app_cache(&mut self) -> bool {
         if self.busy || self.catalog_refreshing {
             return false;
@@ -1776,12 +1801,7 @@ impl App {
             self.close_preview();
             return true;
         }
-        if self.view == View::Series && self.selected_series.is_some() {
-            self.selected_series = None;
-            return true;
-        }
-        if self.view == View::Movies && self.selected_movie.is_some() {
-            self.selected_movie = None;
+        if self.close_catalog_detail() {
             return true;
         }
         if self.tv && self.active_profile.is_some() {
@@ -5129,8 +5149,10 @@ mod tests {
         crate::fonts::install(&ctx);
         crate::theme::apply(&ctx, true);
         let frame = |app: &mut App, series| {
+            let frame_time = ctx.input(|input| input.time) + 0.35;
             ctx.run(
                 egui::RawInput {
+                    time: Some(frame_time),
                     screen_rect: Some(egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
                         egui::vec2(1200.0, 700.0),
@@ -5158,6 +5180,8 @@ mod tests {
         let _ = frame(&mut app, false);
         assert!(!app.catalog_focus_play);
         let play_focus = ctx.memory(|m| m.focused()).expect("Dado play button");
+        app.view = View::Movies;
+        assert!(app.close_catalog_detail());
         app.desktop_return_item = Some("vod:17999".into());
         let _ = frame(&mut app, false);
         assert!(app.desktop_return_item.is_none());
@@ -5193,6 +5217,7 @@ mod tests {
         }];
         app.progress.insert("ep:77:506".into(), 300);
         app.durations.insert("ep:77:506".into(), 1800);
+        let _ = frame(&mut app, true);
         let out = frame(&mut app, true);
         let mut all = Vec::new();
         for s in out.shapes {

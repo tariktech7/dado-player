@@ -6,6 +6,10 @@ shared/product-policy.json; Sprachkürzel in shared/language-aliases.json. Platt
 Abnahmeumfang stehen in docs/PLATFORM-PARITY.md. Android/iOS behalten bis zur IAP-Einführung
 die ausdrücklich vereinbarte Ausnahme von der Windows-/TV-Kaufsperre.
 
+Größere Beta-Änderungen erhöhen `betaNumber` in release.json. Neue nummerierte Betas
+mit `python scripts/publish_beta.py <Release-Notizen>` als eigenes GitHub-Prerelease
+veröffentlichen. Vorhandene Beta-Releases und deren Assets erhalten.
+
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 
 Samsung Tizen ist ein separater Web-TV-Client unter SmartTV/client. Gemeinsame Produktabläufe

@@ -13,6 +13,9 @@ export function streamExtension(value: unknown): string {
   const clean = String(value ?? "").trim().replace(/^\.+/, "").toLowerCase();
   return /^[a-z0-9]{1,8}$/.test(clean) ? clean : "mp4";
 }
+export function liveExtension(format: Settings["liveFormat"]): string {
+  return format === "ts" ? "ts" : "m3u8";
+}
 export function httpUrl(value: string): string {
   const u = new URL(value);
   if (!["http:", "https:"].includes(u.protocol))
@@ -147,7 +150,7 @@ export class Provider {
                         kind === "live" ? "live" : "movie",
                         row.stream_id,
                         kind === "live"
-                          ? this.settings.liveFormat
+                          ? liveExtension(this.settings.liveFormat)
                           : row.container_extension || "mp4",
                       ),
                 epgId: String(row.epg_channel_id || ""),

@@ -70,15 +70,25 @@ test('Samsung ignores a tampered bundle and rolls back a failed signed boot', as
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).blocked, updateStorage)).toBe(JSON.parse(signed.payload).build);
 });
 
-test('catalogue gives the posters the full width until a title opens a sliding preview', async ({page}) => {
+test('catalogue opens a title page and restores the unchanged poster grid', async ({page}) => {
   await fixture(page, true, true);
   await page.goto('/');
   await page.locator('.navigation [data-focus-key="vod"]').click();
   const preview = page.locator('.catalog-details');
   await expect(preview).toHaveCount(0);
-  await page.locator('.catalog-poster').first().click();
+  const card = page.locator('.catalog-poster').first();
+  const grid = page.locator('.catalog-grid');
+  const columns = await grid.getAttribute('data-focus-grid');
+  await card.click();
   await expect(preview.getByRole('heading', {name:'Demo Film'})).toBeVisible();
-  await expect(preview).toHaveCSS('animation-name', 'reveal-catalog-preview');
+  await expect(preview.locator('.movie-art')).toBeVisible();
+  await expect(preview.getByRole('button', {name: 'Beschreibung lesen'})).toBeVisible();
+  await expect(card).toBeHidden();
+  await expect(grid).toHaveAttribute('data-focus-grid', columns!);
+  await page.screenshot({path: 'test-results/beta2-title-page.png', animations: 'disabled'});
+  await preview.getByRole('button', {name:'‹ Zurück'}).click();
+  await expect(card).toBeFocused();
+  await expect(grid).toHaveAttribute('data-focus-grid', columns!);
   await page.locator('.navigation [data-focus-key="live"]').click();
   await expect(page.locator('.preview-panel')).toBeVisible();
 });
@@ -369,6 +379,7 @@ test('parental controls protect movies, every series episode and home continue',
   await page.getByRole('button',{name:/Demo Film/}).click();
   await page.locator('.catalog-details button.primary').click();
   const modal=page.locator('[data-parental]');await expect(modal).toBeVisible();await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'▤ Serien',exact:true}).click();
   await page.getByRole('button',{name:/Demo Serie/}).click();
   await page.locator('.series-play').click();await expect(modal).toBeVisible();
@@ -462,6 +473,7 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
           stream_id: 1,
           name: "Demo Film",
           category_id: "1",
+          stream_icon: "https://logos.invalid/tall.svg",
           container_extension: "mp4",
         },
       ];
@@ -948,8 +960,11 @@ test("Back restores focus to the watched channel, movie and episode", async ({ p
   await page.locator(".navigation").getByRole("button", { name: /Filme/ }).click();
   const movie = page.locator(".catalog-poster").filter({ hasText: "Demo Film" });
   await movie.click();
-  await page.locator(".catalog-details button.primary").click();
+  const playMovie = page.locator(".catalog-details button.primary");
+  await playMovie.click();
   await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(playMovie).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(movie).toBeFocused();
 
@@ -1170,6 +1185,8 @@ test("catalogues keep seasons, favorites and independent section positions; live
   await page.getByRole("button", { name: "Staffel 2", exact: true }).click();
   await expect(page.locator(".episode-list button")).toHaveCount(1);
   await expect(page.locator(".episode-list button")).toHaveText("Folge 1▷");
+  await page.screenshot({path: "test-results/beta2-series-page.png", animations: "disabled"});
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
   await expect(
     page.locator(".catalog-browser .category-list button").first(),
@@ -1602,9 +1619,10 @@ test("series details restore season five and episode six, keep episodes visible,
   await expect(page.locator(".episode-list [aria-current=true]")).toContainText(
     "Folge 6",
   );
-  expect(
-    await page.locator(".season-buttons").evaluate((e) => e.scrollLeft),
-  ).toBeGreaterThan(0);
+  const seasons = await page.locator(".season-buttons").boundingBox();
+  const selectedSeason = await page.locator(".season-buttons .selected").boundingBox();
+  expect(selectedSeason!.x).toBeGreaterThanOrEqual(seasons!.x - 1);
+  expect(selectedSeason!.x + selectedSeason!.width).toBeLessThanOrEqual(seasons!.x + seasons!.width + 1);
   const box = await page.locator(".episode-list").boundingBox(),
     episode = await page
       .locator(".episode-list [aria-current=true]")
@@ -1624,6 +1642,7 @@ test("series details restore season five and episode six, keep episodes visible,
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.screenshot({ path: "test-results/tizen-series-season5.png" });
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
   await page.getByRole("button", { name: "▤ Serien", exact: true }).click();
   await page
@@ -1638,6 +1657,7 @@ test("series details restore season five and episode six, keep episodes visible,
   await expect(page.locator(".season-buttons .selected")).toHaveText(
     "Staffel 1",
   );
+  await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Modern Family", exact: true })
     .click();
@@ -1681,7 +1701,7 @@ test("automatic playback tries HTML once after AVPlay failure and retains the or
   await page.goto("/");
   await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
   await page.getByRole("button", { name: /Demo Film/ }).click();
-  await page.getByRole("button", { name: "▶ Abspielen / Fortsetzen", exact: true }).click();
+  await page.getByRole("button", { name: "▶ Abspielen", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__htmlAttempts.length)).toBe(1);
   const log = await page.evaluate(() => ({ native: (window as any).__avLog.filter((x: any[]) => x[0] === "open"), html: (window as any).__htmlAttempts }));
   expect(log.native).toHaveLength(1);
@@ -1768,6 +1788,40 @@ test("language and time format persist and the live guide uses the selected time
   await expect(page.locator(".epg-detail")).toContainText(/\d{2}:\d{2} (AM|PM)/);
 });
 
+test("stream format and page transitions preserve the selected option and skip reduced motion", async ({page}) => {
+  await fixture(page, true, true);
+  await page.addInitScript(() => {
+    const original = Element.prototype.animate;
+    (window as any).__pageMoves = [];
+    Element.prototype.animate = function (frames, options) {
+      if (typeof options === "object" && options?.duration === 180) {
+        (window as any).__pageMoves.push(this.className);
+      }
+      return original.call(this, frames, options);
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await expect(page.locator(".channel-list")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__pageMoves)).toContain("channel-list");
+  await page.screenshot({path: "test-results/beta2-live.png", animations: "disabled"});
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
+  await openSettingsSection(page, "stream");
+  await page.getByRole("button", {name: "MPEG-TS (.ts)", exact: true}).click();
+  await page.getByRole("button", {name: "Änderungen speichern"}).click();
+  await openSettingsSection(page, "stream");
+  await expect(page.getByRole("button", {name: "MPEG-TS (.ts)", exact: true})).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", {name: "Standard", exact: true}).click();
+  await page.getByRole("button", {name: "Änderungen speichern"}).click();
+  await page.emulateMedia({reducedMotion: "reduce"});
+  await page.reload();
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
+  await openSettingsSection(page, "stream");
+  await expect(page.getByRole("button", {name: "Standard", exact: true})).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => (window as any).__pageMoves)).toEqual([]);
+  await page.screenshot({path: "test-results/beta2-stream-format.png", animations: "disabled"});
+});
+
 test("clearing the app cache reloads EPG without discarding saved preferences", async ({page}) => {
   await fixture(page, true, true);
   let requests = 0;
@@ -1825,9 +1879,10 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   await page.getByRole('button',{name:'▷ Filme',exact:true}).click();
   const movie=page.getByRole('button',{name:/Demo Film/});await movie.focus();await page.keyboard.press('Enter');
   await expect(page.locator('.catalog-details button.primary')).toBeFocused();
-  await page.keyboard.press('ArrowLeft');await expect(movie).toBeFocused();
+  await page.keyboard.press('Escape');await expect(movie).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('.catalog-details button.primary')).toBeFocused();
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'▤ Serien',exact:true}).click();
   await page.getByRole('button',{name:'Demo Serie',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(page.locator('.series-play')).toBeFocused();
@@ -1980,6 +2035,15 @@ test('first mounted poster at a deep offset is not the beginning of the catalogu
   await page.waitForTimeout(450);
   expect(await pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(11000);
   await expect(page.locator('.catalog-poster:focus')).toHaveCount(1);
+  const index = await page.locator('.catalog-poster:focus').getAttribute('data-grid-index');
+  const scrollTop = await pane.evaluate(e => e.scrollTop);
+  const columns = await pane.locator('.catalog-grid').getAttribute('data-focus-grid');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.catalog-details')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator(`.catalog-poster[data-grid-index="${index}"]`)).toBeFocused();
+  expect(await pane.evaluate(e => e.scrollTop)).toBe(scrollTop);
+  await expect(pane.locator('.catalog-grid')).toHaveAttribute('data-focus-grid', columns!);
 });
 
 test('poster navigation does not measure hundreds of unrelated category buttons per repeat',async({page})=>{

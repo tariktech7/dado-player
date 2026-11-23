@@ -38,6 +38,18 @@ struct Gesture {
 }
 
 impl Gesture {
+    fn take_single_tap(&mut self, time: f64, wait_for_double_tap: bool) -> bool {
+        if self.touch.is_some()
+            || !self
+                .tap
+                .is_some_and(|tap| !wait_for_double_tap || time - tap.time >= TAP_WINDOW)
+        {
+            return false;
+        }
+        self.tap = None;
+        true
+    }
+
     fn begin(&mut self, pos: Pos2, time: f64, bounds: Rect) {
         self.touch = Some(Touch {
             start: pos,
@@ -174,6 +186,7 @@ mod mobile {
             )
         });
         let action = if cancelled || modal {
+            state.gesture.tap = None;
             state.gesture.finish(time, None)
         } else {
             if press {
@@ -193,6 +206,18 @@ mod mobile {
                 state.gesture.finish(time, None)
             }
         };
+        if state.gesture.take_single_tap(time, may_seek) {
+            app.ui_activity = if app.player_chrome {
+                f64::NEG_INFINITY
+            } else {
+                time
+            };
+            app.player_reveal = false;
+        } else if let Some(tap) = state.gesture.tap.filter(|_| !down) {
+            ctx.request_repaint_after(Duration::from_secs_f64(
+                (tap.time + TAP_WINDOW - time).max(0.0),
+            ));
+        }
         if let Some(action) = action {
             let feedback = match action {
                 Action::Seek(right) if may_seek => {
@@ -332,6 +357,26 @@ pub(super) use mobile::frame;
 mod tests {
     use super::*;
     use egui::pos2;
+
+    #[test]
+    fn single_taps_toggle_without_interrupting_double_tap_seeks() {
+        let bounds = Rect::from_min_max(Pos2::ZERO, pos2(640.0, 360.0));
+        let right = pos2(480.0, 150.0);
+        let mut gesture = Gesture::default();
+        gesture.begin(right, 0.0, bounds);
+        assert_eq!(gesture.finish(0.05, Some(right)), None);
+        assert!(!gesture.take_single_tap(0.1, true));
+        gesture.begin(right, 0.15, bounds);
+        assert_eq!(gesture.finish(0.2, Some(right)), Some(Action::Seek(true)));
+        assert!(!gesture.take_single_tap(1.0, true));
+        gesture.begin(right, 2.0, bounds);
+        assert_eq!(gesture.finish(2.05, Some(right)), None);
+        assert!(gesture.take_single_tap(2.5, true));
+        assert!(!gesture.take_single_tap(2.6, true));
+        gesture.begin(right, 3.0, bounds);
+        assert_eq!(gesture.finish(3.05, Some(right)), None);
+        assert!(gesture.take_single_tap(3.05, false));
+    }
 
     #[test]
     fn taps_require_the_same_side_and_holding_restores_normal_speed() {

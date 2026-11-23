@@ -160,7 +160,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             if let Some(index) = app.settings_section {
                 let section = &sections()[index];
                 focus::set_zone(1);
-                let back = ui.button(t("‹ Alle Einstellungen", "‹ All settings"));
+                let back =
+                    super::desktop::back_button(ui, t("‹ Alle Einstellungen", "‹ All settings"));
                 if app.settings_return_tile.take().is_some() {
                     back.request_focus();
                     focus::request_id(back.id);
@@ -300,6 +301,7 @@ pub(super) fn open_profiles(app: &mut App) {
     app.settings_section = sections()
         .iter()
         .position(|section| section.id == "profiles");
+    app.settings_return_tile = app.settings_section;
 }
 
 fn quick_choice<T: Copy + PartialEq>(
@@ -367,20 +369,19 @@ fn panel(
                 }
                 "stream" => {
                     use crate::types::LiveFormat;
-                    let default = crate::types::Settings::default().live_format;
                     let options = [
-                        (None, t("Standard", "Default")),
-                        (Some(LiveFormat::Ts), "MPEG-TS (.ts)"),
-                        (Some(LiveFormat::Hls), "HLS (.m3u8)"),
+                        (LiveFormat::Automatic, t("Standard", "Default")),
+                        (LiveFormat::Ts, "MPEG-TS (.ts)"),
+                        (LiveFormat::Hls, "HLS (.m3u8)"),
                     ];
                     ui.label(t(
                         "Gilt für Xtream-Live-TV. M3U verwendet das Format der Wiedergabeliste.",
                         "Applies to Xtream live TV. M3U uses the playlist's stream format.",
                     ));
                     if let Some(value) =
-                        quick_choice(ui, draft, Some(app.settings.live_format), &options, save)
+                        quick_choice(ui, draft, app.settings.live_format, &options, save)
                     {
-                        app.settings.live_format = value.unwrap_or(default);
+                        app.settings.live_format = value;
                         app.apply_live_format();
                         *changed = true;
                         app.close_settings_section();
@@ -562,7 +563,7 @@ fn panel(
                         }
                     }
                     app.cloud_profiles_ui(ui);
-                    if action(ui, t("Abmelden", "Sign out")) {
+                    if action(ui, t("Profil wechseln", "Switch profile")) {
                         app.logout();
                     }
                 }

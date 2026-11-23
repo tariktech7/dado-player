@@ -20,7 +20,6 @@ pub struct Appearance {
     pub navigation_collapsed: f32,
     pub category_width: f32,
     pub live_preview_width: f32,
-    pub catalog_preview_width: f32,
     pub catalog_poster_width: f32,
     pub classic_category_share: f32,
     pub classic_poster_width: f32,
@@ -45,6 +44,8 @@ pub struct Appearance {
     pub channel_name_font: f32,
     pub epg_font: f32,
     pub navigation_duration_ms: f32,
+    pub page_transition_ms: f32,
+    pub page_transition_distance: f32,
     pub navigation_hover_close_ms: f64,
     pub refresh_feedback_ms: f32,
     pub refresh_spin_ms: f32,
@@ -334,6 +335,37 @@ pub fn offset(ctx: &Context) -> f32 {
     ctx.data(|d| d.get_temp::<f32>(Id::new("desktop-column-offset")))
         .unwrap_or(0.0)
 }
+pub(super) fn page_offset(app: &App, ctx: &Context, scale: f32) -> f32 {
+    let page = (app.view as u8, app.settings_section);
+    let now = ctx.input(|input| input.time);
+    let backwards = app.view == View::Home || (app.view == View::Settings && page.1.is_none());
+    let reduce = reduced_motion(ctx);
+    let (start, distance) = ctx.data_mut(|data| {
+        let id = Id::new("desktop-page-transition");
+        let (previous, start, distance) = data
+            .get_temp::<((u8, Option<usize>), f64, f32)>(id)
+            .unwrap_or((page, now, 0.0));
+        let (start, distance) = if reduce {
+            (now, 0.0)
+        } else if previous != page {
+            (now, if backwards { -1.0 } else { 1.0 })
+        } else {
+            (start, distance)
+        };
+        data.insert_temp(id, (page, start, distance));
+        (start, distance)
+    });
+    let a = appearance();
+    let remaining = (1.0 - ((now - start) * 1000.0) as f32 / a.page_transition_ms).clamp(0.0, 1.0);
+    let dx = distance * a.page_transition_distance * scale.max(0.48) * remaining.powi(3);
+    if dx.abs() > 0.05 {
+        ctx.request_repaint();
+        dx
+    } else {
+        0.0
+    }
+}
+
 pub fn heading(ui: &mut Ui, text: &str) -> Rect {
     let s = scale(ui.ctx());
     let h = handheld_size(60.0 * s, 32.0);
@@ -347,6 +379,23 @@ pub fn heading(ui: &mut Ui, text: &str) -> Rect {
         r.width(),
     );
     r
+}
+
+pub(super) fn back_button(ui: &mut Ui, label: &str) -> egui::Response {
+    let accent = theme::accent_fill(ui);
+    let response = ui.add(
+        egui::Button::new(egui::RichText::new(label).strong().color(Color32::WHITE))
+            .fill(accent)
+            .stroke(egui::Stroke::new(1.5, Color32::from_white_alpha(180))),
+    );
+    if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
+        ui.painter().rect_stroke(
+            response.rect.expand(2.0),
+            8.0,
+            egui::Stroke::new(2.5, theme::accent(ui)),
+        );
+    }
+    response
 }
 pub fn catalog_heading(ui: &mut Ui, text: &str) -> Rect {
     let s = scale(ui.ctx());
@@ -381,7 +430,11 @@ pub fn column<R>(
     if handheld() {
         // Touch columns stay in one hit-test layer. An Area can retain a
         // previous frame's bounds after the navigation width changes.
-        let mut child = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), name);
+        let mut child = ui.child_ui_with_id_source(
+            content.translate(vec2(dx, 0.0)),
+            Layout::top_down(Align::Min),
+            name,
+        );
         child.set_clip_rect(clip);
         return render(&mut child);
     }
@@ -410,6 +463,25 @@ fn style(ctx: &Context, s: f32) {
         style.spacing.interact_size.y = (48.0 * s).max(minimum_control_height);
         style.spacing.button_padding = vec2(16.0 * s, 9.0 * s);
         style.animation_time = appearance().navigation_duration_ms / 1000.0;
+        let visuals = &mut style.visuals;
+        let (fill, edge) = if visuals.panel_fill == theme::normal_color("background") {
+            (
+                Color32::from_rgb(46, 83, 116),
+                Color32::from_rgb(107, 151, 190),
+            )
+        } else if visuals.dark_mode {
+            (
+                Color32::from_rgb(39, 58, 81),
+                Color32::from_rgb(86, 112, 143),
+            )
+        } else {
+            (
+                Color32::from_rgb(230, 239, 248),
+                Color32::from_rgb(115, 142, 169),
+            )
+        };
+        visuals.widgets.inactive.weak_bg_fill = fill;
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, edge);
         for (kind, size) in [
             (egui::TextStyle::Body, 22.0),
             (egui::TextStyle::Button, 22.0),
@@ -600,7 +672,7 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
     match key {
         egui::Key::F1 => super::parental::open_management(app),
         egui::Key::Escape => {
-            if app.close_settings_section() {
+            if app.close_settings_section() || app.close_catalog_detail() {
                 ctx.request_repaint();
                 return true;
             }
@@ -724,6 +796,20 @@ pub fn show(app: &mut App, ctx: &Context) {
     style(ctx, s);
     let screen = safe_rect(ctx, true);
     let background = ctx.screen_rect();
+    if let Some((series, id)) = app.catalog_detail() {
+        let edge = handheld_size(36.0 * s, 12.0);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(ctx, |ui| {
+                let fill = theme::ambient_shape(ui, background, None);
+                ui.painter().add(fill);
+                let rect = screen.shrink(edge);
+                column(ui, rect, "catalog-title-page", 0.0, |ui| {
+                    super::library::show_detail_page(app, ui, series, id);
+                });
+            });
+        return;
+    }
     let classic = super::classic::enabled(app);
     let expanded = handheld_size(a.navigation_expanded * s, 178.0);
     let collapsed = handheld_size(a.navigation_collapsed * s, 52.0);
@@ -817,18 +903,19 @@ pub fn show(app: &mut App, ctx: &Context) {
                 ctx.request_repaint();
             }
             let view = app.view;
+            let page_dx = page_offset(app, ctx, s);
             ui::mobile::focus::set_zone(1);
             let preview = if view == View::Live {
-                ui::live::show_desktop(app, ui, body, s, dx)
+                ui::live::show_desktop(app, ui, body, s, dx + page_dx)
             } else {
                 column(
                     ui,
                     body,
                     "content",
                     if matches!(view, View::Movies | View::Series) {
-                        0.0
+                        page_dx
                     } else {
-                        dx
+                        dx + page_dx
                     },
                     |ui| {
                         ui.push_id(("section", view as u64), |ui| section(app, ui, view));

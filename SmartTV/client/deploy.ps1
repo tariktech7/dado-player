@@ -28,7 +28,7 @@ function Get-ReleasePackage([string]$Directory) {
   $releases = Invoke-RestMethod -Uri "${repoApi}?per_page=30" -Headers $headers -UserAgent 'DadoPlayer-Tizen-Update' -TimeoutSec 30
   $prefix = if ($Tizen5) { 'Dado-Player-Tizen5-' } else { 'Dado-Player-Tizen-' }
   $selected = foreach ($release in $releases) {
-    if ($release.draft -or $release.tag_name -notmatch '^v(\d+\.\d+\.\d+)(?:-beta)?$') { continue }
+    if ($release.draft -or $release.tag_name -notmatch '^v(\d+\.\d+\.\d+)(?:-beta(?:\.[1-9][0-9]*)?)?$') { continue }
     $version = [version]$Matches[1]
     $name = "$prefix$version.wgt"
     foreach ($asset in $release.assets) {

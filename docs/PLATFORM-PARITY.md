@@ -1,7 +1,8 @@
-# Gemeinsamer Produktstand 0.8.0 Beta 1
+# Gemeinsamer Produktstand 0.8.0 Beta 2
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Die vier
-Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
+Buildnummern bleiben eigenständig monoton steigend. Größere Beta-Stände erhalten
+eine eigene GitHub-Veröffentlichung wie `v0.8.0-beta.2`. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
 ## Verbindliche Abläufe
@@ -13,7 +14,7 @@ Buildnummern bleiben eigenständig monoton steigend. Nach Änderungen
 | Daten je Anbieter | Favoriten, Verlauf, Positionen und Laufzeiten je Profil isolieren. Gleiche Sender-/Film-IDs anderer Anbieter dürfen nicht kollidieren. Alte native Dateien werden einmal dem bisherigen Standardprofil zugeordnet und als Sicherung erhalten. |
 | Startseite | Fortsetzen mit Artwork, kompakte Senderlogos, unabhängiges aktuelles Favoritenprogramm. |
 | Favoriten / Fortsetzen | Live-TV, Filme und Serien getrennt anzeigen. |
-| Kataloge | Filme und Serien beginnen mit Favoriten. Die animierte Detailspalte erscheint nach der Titelauswahl. Bei Live-TV stehen zuerst alle Sender, dann die Favoriten. Die Live-Vorschau bleibt sichtbar. |
+| Kataloge | Filme und Serien beginnen mit Favoriten. Die Titelauswahl öffnet eine eigene Detailseite. Zurück stellt Raster, Scrollposition und Fokus wieder her. Bei Live-TV stehen zuerst alle Sender, dann die Favoriten. Die Live-Vorschau bleibt sichtbar. |
 | Seitenleiste (Windows und Samsung) | Öffnet sich beim Überfahren mit der Maus. Ohne Auswahl klappt sie 700 ms nach dem Verlassen ein. Ein Klick auf einen Menüpunkt lässt sie geöffnet. |
 | Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und vier Elementen in der Hauptleiste. Ton, Untertitel, Bildformat und Beenden stehen unter Optionen. Windows behält die native Vollbild- und Lautstärkesteuerung. |
 | Live-Vorschau | 712 Einheiten bei 1920 × 1080, auf schmaleren oder kürzeren Flächen entsprechend begrenzt. 16:9-Fläche mit vollständigem Streambild. Programmdetails bleiben separat scrollbar. |

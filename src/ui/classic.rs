@@ -120,9 +120,7 @@ pub(super) fn enabled(app: &App) -> bool {
 }
 
 pub(super) fn back(app: &mut App, ctx: &egui::Context) {
-    if app.view == View::Movies && app.selected_movie.take().is_some()
-        || app.view == View::Series && app.selected_series.take().is_some()
-    {
+    if app.close_catalog_detail() {
         return;
     }
     if app.view == View::Home {
@@ -144,7 +142,8 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
         let language = app.settings.language;
         ui.horizontal_centered(|ui| {
             if app.view != View::Home {
-                let response = ui.button(language.text("‹ Übersicht", "‹ Dashboard"));
+                let response =
+                    desktop::back_button(ui, language.text("‹ Übersicht", "‹ Dashboard"));
                 if activate(ui, &response, app.tv) {
                     app.navigate(View::Home);
                     focus::request_index(0);
@@ -206,12 +205,13 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_secs(30));
     let body = Rect::from_min_max(pos2(canvas.left(), header.bottom() + gap), canvas.max);
+    let page_dx = desktop::page_offset(app, ui.ctx(), scale);
     if app.view == View::Live {
-        return super::live::show_desktop(app, ui, body, scale, 0.0);
+        return super::live::show_desktop(app, ui, body, scale, page_dx);
     }
     let view = app.view;
     focus::set_zone(1);
-    desktop::column(ui, body, "classic-content", 0.0, |ui| {
+    desktop::column(ui, body, "classic-content", page_dx, |ui| {
         ui.push_id(("classic", view as u64), |ui| {
             if view == View::Home {
                 dashboard(app, ui, gap, scale);

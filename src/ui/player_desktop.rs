@@ -110,7 +110,7 @@ fn button(
         } else if response.hovered() {
             Stroke::new(2.0_f32, p.focus)
         } else {
-            Stroke::NONE
+            Stroke::new(1.0_f32, p.border)
         },
     );
     let center = rect.center();
@@ -552,9 +552,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
     #[cfg(not(windows))]
     let hovering_controls = false;
-    if app.ui_activity < 0.0
-        || app.note_pointer_activity()
-        || ctx.input(|i| i.pointer.any_down())
+    let top = if live { back_bounds } else { title };
+    let touch_controls = if handheld_live {
+        Rect::from_min_size(bottom.min, vec2(bottom.width(), hint_height))
+    } else {
+        bottom
+    };
+    let pointer_activity = if handheld {
+        app.player_chrome
+            && ctx.input(|input| {
+                input.pointer.any_down()
+                    && input
+                        .pointer
+                        .interact_pos()
+                        .is_some_and(|pos| top.contains(pos) || touch_controls.contains(pos))
+            })
+    } else {
+        app.note_pointer_activity() || ctx.input(|i| i.pointer.any_down())
+    };
+    if app.ui_activity == -1.0
+        || pointer_activity
         || hovering_controls
         || app.audio_menu_open
         || app.sub_menu_open
@@ -566,17 +583,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let boosting = if handheld {
         let blocked = [
-            if live || app.player_chrome {
-                if live {
-                    back_bounds
-                } else {
-                    title
-                }
+            if app.player_chrome {
+                top
             } else {
                 Rect::NOTHING
             },
             if app.player_chrome {
-                bottom
+                touch_controls
             } else {
                 Rect::NOTHING
             },
@@ -589,7 +602,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let boosting = false;
     if boosting {
-        app.ui_activity = time - crate::release_info::CONTROLS_HIDE_SECONDS;
+        app.ui_activity = f64::NEG_INFINITY;
     }
     let remaining = crate::release_info::CONTROLS_HIDE_SECONDS - (time - app.ui_activity);
     let reveal_only = std::mem::take(&mut app.player_reveal);
@@ -605,11 +618,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         app.player_menu_navigation = false;
         dismiss_menus(app, &ctx);
         crate::ui::mobile::focus::clear_activation();
-        if live && handheld && !boosting && live_back(&ctx, back_bounds, s, app.settings.language).0
-        {
-            app.open_live_list();
-            return;
-        }
         ctx.set_cursor_icon(egui::CursorIcon::None);
         return;
     }

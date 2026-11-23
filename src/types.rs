@@ -282,6 +282,7 @@ impl PlayerBackend {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LiveFormat {
     #[default]
+    Automatic,
     Ts,
     Hls,
 }
@@ -289,16 +290,19 @@ pub enum LiveFormat {
 impl LiveFormat {
     pub fn label(self) -> &'static str {
         match self {
+            LiveFormat::Automatic => "Standard",
             LiveFormat::Ts => "MPEG-TS (.ts)",
             LiveFormat::Hls => "HLS (.m3u8)",
         }
     }
-    pub fn all() -> [LiveFormat; 2] {
-        [LiveFormat::Ts, LiveFormat::Hls]
+    pub fn all() -> [LiveFormat; 3] {
+        [LiveFormat::Automatic, LiveFormat::Ts, LiveFormat::Hls]
     }
     /// File suffix used in `/live/<user>/<pass>/<id>.<ext>`.
     pub fn extension(self) -> &'static str {
         match self {
+            LiveFormat::Automatic if cfg!(target_os = "ios") => "m3u8",
+            LiveFormat::Automatic => "ts",
             LiveFormat::Ts => "ts",
             LiveFormat::Hls => "m3u8",
         }
@@ -561,11 +565,7 @@ impl Default for Settings {
             user_agent: String::new(),
             tls_verify: false,
             player_backend: PlayerBackend::Mpv,
-            live_format: if cfg!(target_os = "ios") {
-                LiveFormat::Hls
-            } else {
-                LiveFormat::Ts
-            },
+            live_format: LiveFormat::Automatic,
             tv_mode: TvMode::Auto,
             settings_version: 6,
         }
@@ -583,7 +583,7 @@ impl Settings {
         self.user_agent.clear();
         #[cfg(target_os = "ios")]
         {
-            self.live_format = LiveFormat::Hls;
+            self.live_format = LiveFormat::Automatic;
         }
     }
 

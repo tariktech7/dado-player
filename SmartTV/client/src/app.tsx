@@ -1,4 +1,4 @@
-import { animateNavigation } from "./navigation-motion";
+import { animateNavigation, animatePage } from "./navigation-motion";
 import appearance from "./shell-appearance";
 import { render, ComponentChildren } from "preact";
 import {
@@ -20,7 +20,7 @@ import {
   resumeHistory,
 } from "./types";
 import { load, save, favorite, remember } from "./store";
-import { Provider, hostUrl, httpUrl } from "./api";
+import { Provider, hostUrl, httpUrl, liveExtension } from "./api";
 import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
@@ -229,6 +229,16 @@ function App() {
   const [favoriteKind, setFavoriteKind] = useState("live");
   const [historyKind, setHistoryKind] = useState("live");
   const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const displayedPage = useRef<string>();
+  useLayoutEffect(() => {
+    const previous = displayedPage.current;
+    const current = session ? `${view}:${view === "settings" ? settingsSection ?? "" : ""}` : undefined;
+    displayedPage.current = current;
+    if (!previous || !current || previous === current) return;
+    const animations = animatePage(document.querySelector(".shell"), view,
+      view === "home" || (view === "settings" && !settingsSection && previous.startsWith("settings:")));
+    return () => animations.forEach((animation) => animation.cancel());
+  }, [view, settingsSection, session?.id]);
   const [settingsDraft, setSettingsDraft] = useState<string | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
   const epgCacheEpoch = useRef(0);
@@ -302,6 +312,8 @@ function App() {
   const previousLive = useRef<Item | null>(null);
   const latestLive = useRef<Item | null>(null);
   const [selectedTitle, setSelectedTitle] = useState<Item | null>(null);
+  const restoringPosterFocus = useRef(false);
+  const catalogOrigin = useRef<{titleTop: number; categoryTop: number} | null>(null);
   const [epg, setEpg] = useState<Record<string, Epg[]>>({}),
     [resume, setResume] = useState<{ item: Item; position: number } | null>(
       null,
@@ -726,6 +738,40 @@ function App() {
     savedRef.current=next;setSaved(next);
     return merged.added;
   };
+  const closeCatalogDetail = () => {
+    if (!selectedTitle || (view !== "vod" && view !== "series")) return false;
+    const key = itemKey(selectedTitle);
+    const origin = catalogOrigin.current;
+    catalogOrigin.current = null;
+    detailRequest.current++;
+    setSelectedTitle(null);
+    setDetail(null);
+    setEpisodes([]);
+    requestAnimationFrame(() => {
+      const shell = document.querySelector(`.shell[data-focus-scope="${view}"]`);
+      if (!shell) return;
+      if (origin) {
+        for (const [selector, top] of [
+          [".catalog-title-list", origin.titleTop], [".category-list", origin.categoryTop],
+        ] as const) {
+          const pane = shell.querySelector<HTMLElement>(selector);
+          if (!pane) continue;
+          pane.scrollTop = top;
+          pane.dispatchEvent(new Event("scroll"));
+        }
+      }
+      requestAnimationFrame(() => {
+        restoringPosterFocus.current = true;
+        try {
+          Array.from(shell.querySelectorAll<HTMLElement>(".catalog-poster"))
+            .find((element) => element.dataset.focusKey === key)?.focus({preventScroll: true});
+        } finally {
+          restoringPosterFocus.current = false;
+        }
+      });
+    });
+    return true;
+  };
   const back = () => {
     if(parental.open){parental.close();return;}
     if (tracksRef.current) {
@@ -762,17 +808,9 @@ function App() {
       return;
     }
     if (view === "settings" && closeSettingsSection()) return;
+    if (closeCatalogDetail()) return;
     if (classic) {
-      if ((view === "vod" || view === "series") && selectedTitle) {
-        const key = itemKey(selectedTitle);
-        detailRequest.current++;
-        setSelectedTitle(null);
-        setDetail(null);
-        setEpisodes([]);
-        requestAnimationFrame(() => {
-          Array.from(document.querySelectorAll<HTMLElement>(".catalog-poster")).find((element) => element.dataset.focusKey === key)?.focus();
-        });
-      } else if (view === "home") setExit(true);
+      if (view === "home") setExit(true);
       else {
         const from = view;
         go("home");
@@ -995,12 +1033,21 @@ function App() {
     document.addEventListener("keydown", key);
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
+    let pointerPoster: Element | null = null;
+    const pointerDown = (e: PointerEvent) => {
+      pointerPoster = (e.target as Element).closest(".catalog-poster");
+    };
+    const pointerUp = () => { pointerPoster = null; };
+    document.addEventListener("pointerdown", pointerDown, true);
+    document.addEventListener("pointerup", pointerUp, true);
+    document.addEventListener("pointercancel", pointerUp, true);
     const focus = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest(".shell"))
+      if (target !== pointerPoster && !restoringPosterFocus.current &&
+          target.closest(".shell") && !target.closest(".catalog-details"))
         setNavCollapsed(!target.closest(".navigation"));
       rememberFocus(target);
-      scrollFocused(target);
+      if (!restoringPosterFocus.current) scrollFocused(target);
     };
     document.addEventListener("focusin", focus);
     document.addEventListener("visibilitychange", visibility);
@@ -1020,6 +1067,9 @@ function App() {
       window.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("resize", resize);
       document.removeEventListener("focusin", focus);
+      document.removeEventListener("pointerdown", pointerDown, true);
+      document.removeEventListener("pointerup", pointerUp, true);
+      document.removeEventListener("pointercancel", pointerUp, true);
       document.removeEventListener("visibilitychange", visibility);
       stopNavCloseTimer();
       p.dispose();
@@ -1094,7 +1144,8 @@ function App() {
     if (returnChannel >= 0) return;
     const key = itemKey(item);
     const series = item.seriesId ? `series:${item.seriesId}` : null;
-    const targets = [...document.querySelectorAll<HTMLElement>(".shell [data-focus-key]")];
+    const targets = [...document.querySelectorAll<HTMLElement>(".shell [data-focus-key]")]
+      .filter((element) => getComputedStyle(element).visibility === "visible");
     const target = targets.find(el => el.dataset.focusKey === key) ||
       targets.find(el => el.dataset.focusKey === series) ||
       (origin?.isConnected ? origin : null);
@@ -1323,12 +1374,12 @@ function App() {
           {quickChoice(saved.settings.liveFormat, [
             ["default", t("Standard", "Default")], ["ts", "MPEG-TS (.ts)"], ["m3u8", "HLS (.m3u8)"],
           ], value => {
-            const format = value === "ts" ? "ts" : "m3u8";
+            const format = value as Settings["liveFormat"];
             setting("liveFormat", format);
             const provider = providerRef.current;
             if (session?.kind === "Xtream" && provider) {
               setCatalog(old => ({...old, live: old.live.map(item => ({
-                ...item, url: provider.stream("live", item.id, format),
+                ...item, url: provider.stream("live", item.id, liveExtension(format)),
               }))}));
             }
           })}
@@ -1445,9 +1496,9 @@ function App() {
               setEditing(true);
             }}
           >
-            Profil hinzufügen
+            {t("Profil hinzufügen", "Add profile")}
           </button>
-          <button onClick={logout}>Profil wechseln / Abmelden</button>
+          <button onClick={logout}>{t("Profil wechseln", "Switch profile")}</button>
 
           <ConnectPanel importProfiles={importCloudProfiles} />
         </>;
@@ -1611,7 +1662,7 @@ function App() {
         </nav> : <section key={active.id} id="settings-options" class="glass settings-options"
             data-focus-zone="settings-options" data-settings-section={active.id}
             data-license-status={active.id === "license" ? "" : undefined}>
-          <button class="settings-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>
+          <button class="settings-back menu-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>
           <h2>{active[saved.settings.language]}</h2>
           {renderSection(active.id)}
         </section>}
@@ -1871,10 +1922,10 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? "catalog-shell" : ""}`}
+            class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? `catalog-shell${selectedTitle ? " has-title-detail" : ""}` : ""}${full ? " behind-player" : ""}`}
           >
             {classic ? <header data-focus-zone="navigation" class="classic-header">
-              {view !== "home" && <button onClick={() => goShortcut("home")}>{t("‹ Übersicht", "‹ Dashboard")}</button>}
+              {view !== "home" && <button class="menu-back" onClick={() => goShortcut("home")}>{t("‹ Übersicht", "‹ Dashboard")}</button>}
               <img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
               <strong>Dado Player</strong>
               {license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
@@ -2279,7 +2330,12 @@ function App() {
                     query={query}
                     setQuery={setQuery}
                     selected={selectedTitle}
+                    close={closeCatalogDetail}
                     select={(i) => {
+                      catalogOrigin.current = {
+                        titleTop: document.querySelector(".catalog-title-list")?.scrollTop || 0,
+                        categoryTop: document.querySelector(".catalog-browser .category-list")?.scrollTop || 0,
+                      };
                       setSelectedTitle(i);
                       void openDetail(i);
                     }}

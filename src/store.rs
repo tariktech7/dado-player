@@ -207,10 +207,22 @@ pub fn save_profiles(profiles: &[Profile]) -> Result<()> {
     write_json(&dir, profiles)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct StoredSettings {
+    #[serde(flatten)]
+    settings: Settings,
+    #[serde(default)]
+    live_format_automatic: bool,
+}
+
 pub fn load_settings() -> Settings {
     let mut dir = app_dir();
     dir.push("settings.json");
-    let mut s: Settings = read_json(&dir).unwrap_or_default();
+    let stored: StoredSettings = read_json(&dir).unwrap_or_default();
+    let mut s = stored.settings;
+    if stored.live_format_automatic {
+        s.live_format = crate::types::LiveFormat::Automatic;
+    }
     // Older versions always stored an explicit "Dark". The theme now follows
     // Windows by default, so migrate once (the user can still pick Dunkel/Hell).
     if s.settings_version < 1 {
@@ -256,9 +268,25 @@ pub fn load_settings() -> Settings {
 }
 
 pub fn save_settings(s: &Settings) -> Result<()> {
+    use crate::types::LiveFormat;
     let mut dir = app_dir();
     dir.push("settings.json");
-    write_json(&dir, s)
+    let mut settings = s.clone();
+    let live_format_automatic = s.live_format == LiveFormat::Automatic;
+    if live_format_automatic {
+        settings.live_format = if s.live_format.extension() == "m3u8" {
+            LiveFormat::Hls
+        } else {
+            LiveFormat::Ts
+        };
+    }
+    write_json(
+        &dir,
+        &StoredSettings {
+            settings,
+            live_format_automatic,
+        },
+    )
 }
 
 pub fn load_favorites() -> HashSet<String> {
@@ -385,6 +413,20 @@ pub fn save_profile_data(
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn automatic_stream_format_survives_save_without_changing_the_legacy_extension() {
+        use crate::types::LiveFormat;
+        let settings = Settings::default();
+        save_settings(&settings).unwrap();
+        assert_eq!(load_settings().live_format, LiveFormat::Automatic);
+        let legacy: Settings = read_json(&app_dir().join("settings.json")).unwrap();
+        assert_ne!(legacy.live_format, LiveFormat::Automatic);
+        assert_eq!(
+            legacy.live_format.extension(),
+            settings.live_format.extension()
+        );
+    }
 
     #[test]
     fn profile_data_migrates_legacy_once_and_never_leaks_matching_provider_ids() {

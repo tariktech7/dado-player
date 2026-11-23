@@ -7,11 +7,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def github_release_tag(release):
+    tag = f'v{release["version"]}'
+    if release["channel"] == "stable":
+        return tag
+    beta = release.get("betaNumber")
+    if release["channel"] != "beta" or type(beta) is not int or beta < 1:
+        raise ValueError("A beta requires a positive betaNumber")
+    return f"{tag}-beta" if beta == 1 else f"{tag}-beta.{beta}"
+
+
 def updates():
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
     version = release["version"]
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid product version")
+    github_release_tag(release)
     for key in ("androidBuild", "iosBuild", "windowsBuild", "tizenBuild"):
         if not isinstance(release[key], int) or release[key] <= 0:
             raise ValueError(f"Invalid {key}")
@@ -53,7 +64,11 @@ def updates():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--tag", action="store_true")
     args = parser.parse_args()
+    if args.tag:
+        print(github_release_tag(json.loads((ROOT / "release.json").read_text(encoding="utf-8"))))
+        return
     changed = []
     for file, desired in updates().items():
         actual = file.read_text(encoding="utf-8") if file.exists() else None
