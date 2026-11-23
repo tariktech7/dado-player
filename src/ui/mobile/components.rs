@@ -33,6 +33,7 @@ pub enum Icon {
     Close,
     ChevronRight,
     Settings,
+    Clock,
     Refresh,
     Volume,
     Fullscreen,
@@ -207,6 +208,10 @@ pub fn icon(ui: &Ui, rect: Rect, ic: Icon, color: Color32) {
             }
             p.add(egui::Shape::closed_line(outline, s));
             p.circle_stroke(c, radius * 0.30, s);
+        }
+        Icon::Clock => {
+            p.circle_stroke(c, r.width() * 0.47, s);
+            line(poly(&[(0.50, 0.22), (0.50, 0.50), (0.74, 0.63)]));
         }
         Icon::Refresh => {
             let radius = r.width().min(r.height()) * 0.39;

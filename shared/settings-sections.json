@@ -5,6 +5,21 @@
     "en": "General"
   },
   {
+    "id": "stream",
+    "de": "Streamformat",
+    "en": "Stream format"
+  },
+  {
+    "id": "clock",
+    "de": "Zeitformat",
+    "en": "Time format"
+  },
+  {
+    "id": "player",
+    "de": "Player-Auswahl",
+    "en": "Player selection"
+  },
+  {
     "id": "playback",
     "de": "Wiedergabe",
     "en": "Playback"
@@ -23,6 +38,11 @@
     "id": "parental",
     "de": "Elternsperre",
     "en": "Parental controls"
+  },
+  {
+    "id": "cache",
+    "de": "Cache leeren",
+    "en": "Clear cache"
   },
   {
     "id": "updates",

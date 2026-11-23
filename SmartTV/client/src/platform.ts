@@ -175,24 +175,8 @@ export function moveFocus(
       sibling.focus({preventScroll:true});scrollFocused(sibling);return;
     }
   }
-  const settingsGrid = zone?.closest<HTMLElement>(".settings-grid");
-  if (horizontal && settingsGrid && zone) {
-    const box = zone.getBoundingClientRect();
-    const adjacent = [...settingsGrid.querySelectorAll<HTMLElement>("[data-focus-zone]")]
-      .filter((candidate) => candidate !== zone && focusables(candidate).length > 0)
-      .map((candidate) => {
-        const rect = candidate.getBoundingClientRect();
-        const distance = (rect.left - box.left) * sign;
-        return {candidate, distance, score: distance + Math.abs(rect.top - box.top) * 3};
-      })
-      .filter((candidate) => candidate.distance > 2)
-      .sort((a, b) => a.score - b.score)[0]?.candidate;
-    const target = adjacent && zoneTarget(adjacent);
-    if (target) { target.focus({preventScroll: true}); rememberFocus(target); scrollFocused(target); }
-    else if (sign < 0) focusNavigation();
-    return;
-  }
-  if (horizontal && zone && !current.closest(".modal,.fullscreen")) {
+  const settingsTiles = current.closest<HTMLElement>(".settings-sections");
+  if (horizontal && zone && !settingsTiles && !current.closest(".modal,.fullscreen")) {
     const scope = zone.closest<HTMLElement>("[data-focus-scope]")!;
     const zones = [
       ...scope.querySelectorAll<HTMLElement>("[data-focus-zone]"),
@@ -207,7 +191,7 @@ export function moveFocus(
     }
   }
   const a = current.getBoundingClientRect(),ax=a.x+a.width/2,ay=a.y+a.height/2;
-  const candidates = focusables(!horizontal && zone ? zone : root)
+  const candidates = focusables(settingsTiles || (!horizontal && zone ? zone : root))
     .filter(
       (el) => el !== current && (horizontal || !zone || zone.contains(el)),
     )
@@ -221,23 +205,13 @@ export function moveFocus(
     })
     .filter((c) => c.primary > 2)
     .sort((a, b) => a.score - b.score);
-  let target: HTMLElement | undefined = candidates[0]?.el;
-  if (!target && !horizontal && settingsGrid && zone) {
-    const box = zone.getBoundingClientRect();
-    const next = [...settingsGrid.querySelectorAll<HTMLElement>("[data-focus-zone]")]
-      .filter((candidate) => candidate !== zone && focusables(candidate).length > 0)
-      .map((candidate) => {
-        const rect = candidate.getBoundingClientRect();
-        return {candidate, distance: (rect.top - box.top) * sign, cross: Math.abs(rect.left - box.left)};
-      })
-      .filter((candidate) => candidate.distance > 2 && candidate.cross < box.width / 2)
-      .sort((a, b) => a.distance - b.distance)[0]?.candidate;
-    target = next ? zoneTarget(next) : undefined;
-  }
+  const target = candidates[0]?.el;
   if (target) {
     target.focus({ preventScroll: true });
     rememberFocus(target);
     scrollFocused(target);
+  } else if (settingsTiles && horizontal && sign < 0) {
+    focusNavigation();
   }
 }
 let pendingFocus:HTMLElement|null=null, focusFrame=0;

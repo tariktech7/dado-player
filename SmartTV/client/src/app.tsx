@@ -96,6 +96,25 @@ function RailIcon({kind}: {kind: "settings" | "refresh" | "success" | "error"}) 
   </svg>;
 }
 
+function SettingsTileIcon({section}: {section: string}) {
+  const shapes: Record<string, string> = {
+    stream: "M3 5h18v13H3zM9 22h6m-3-4v4m-3-13 6 3-6 3z",
+    clock: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zm0 4v5l4 2",
+    player: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm5 5 6 4-6 4z",
+    playback: "M5 12a7 7 0 1 0 2-5M5 4v5h5m1 0 5 3-5 3z",
+    audio: "M3 9h4l5-4v14l-5-4H3zm12-1a5 5 0 0 1 0 8m3-11a9 9 0 0 1 0 14",
+    profiles: "M12 4a4 4 0 1 0 0 8 4 4 0 1 0 0-8zM4 21a8 6 0 0 1 16 0z",
+    parental: "m12 2 8 4v6c0 5-4 8-8 10-4-2-8-5-8-10V6zm-4 10 3 3 5-5",
+    cache: "M5 6h14m-12 0 1 15h8l1-15m-7 0V3h4v3m-4 4v7m4-7v7",
+    updates: "M20 9a8 8 0 1 0-1 8m1-13v5h-5",
+    license: "M5 3h14v18H5zm3 6h8m-8 4h8m-8 4h5",
+    advanced: "M5 4v16m7-16v16m7-16v16M2 9h6m1 7h6m1-7h6",
+  };
+  const shape = shapes[section];
+  return shape ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d={shape} /></svg>
+    : <RailIcon kind="settings" />;
+}
+
 function LibraryIcon({kind}: {kind: "live" | "vod" | "series"}) {
   return <svg class="classic-media-icon" viewBox="0 0 48 48" aria-hidden="true" fill="none"
     stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
@@ -209,7 +228,18 @@ function App() {
     [editing, setEditing] = useState(false);
   const [favoriteKind, setFavoriteKind] = useState("live");
   const [historyKind, setHistoryKind] = useState("live");
-  const [settingsSection, setSettingsSection] = useState<string | null>("general");
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<string | null>(null);
+  const [cacheCleared, setCacheCleared] = useState(false);
+  const epgCacheEpoch = useRef(0);
+  const closeSettingsSection = () => {
+    if (!settingsSection) return false;
+    const key = settingsSection;
+    setSettingsSection(null);
+    setSettingsDraft(null);
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`.settings-sections [data-focus-key="${key}"]`)?.focus());
+    return true;
+  };
   const t = (de: string, en: string) => saved.settings.language === "en" ? en : de;
   const classic = saved.settings.interfaceLayout === "classic";
   const navCollapsed = useRef(false);
@@ -539,15 +569,15 @@ function App() {
     )
       return;
     epgPending.current.add(key);
-    const gen = generation.current;
+    const gen = generation.current, cacheEpoch = epgCacheEpoch.current;
     try {
       const rows = await providerRef.current.epg(item);
-      if (gen === generation.current)
+      if (gen === generation.current && cacheEpoch === epgCacheEpoch.current)
         setEpg((old) => ({ ...old, [key]: rows }));
     } catch {
-      if (gen === generation.current) setEpg((old) => ({ ...old, [key]: [] }));
+      if (gen === generation.current && cacheEpoch === epgCacheEpoch.current) setEpg((old) => ({ ...old, [key]: [] }));
     } finally {
-      if (gen === generation.current) epgPending.current.delete(key);
+      if (gen === generation.current && cacheEpoch === epgCacheEpoch.current) epgPending.current.delete(key);
     }
   };
   async function start(item: Item, fullscreen = false, position = 0) {
@@ -655,6 +685,7 @@ function App() {
   }
   const go = (next: View) => {
     if (next === view) return;
+    if (view === "settings") { setSettingsSection(null); setSettingsDraft(null); }
     const scroll = [
       ...document.querySelectorAll<HTMLElement>(
         ".shell main, .shell .category-list, .shell .channel-list, .shell .catalog-title-list, .shell .catalog-detail-scroll",
@@ -730,6 +761,7 @@ function App() {
       setEditing(false);
       return;
     }
+    if (view === "settings" && closeSettingsSection()) return;
     if (classic) {
       if ((view === "vod" || view === "series") && selectedTitle) {
         const key = itemKey(selectedTitle);
@@ -757,6 +789,10 @@ function App() {
   const goShortcut = (next: View) => {
     go(next);
     requestAnimationFrame(() => {
+      if (next === "settings" && classic) {
+        const first = document.querySelector<HTMLElement>(".settings-sections button, .settings-options button");
+        if (first) { first.focus(); return; }
+      }
       (document.querySelector<HTMLElement>(`.navigation button[data-focus-key="${next}"]`) ||
         document.querySelector<HTMLElement>(next === "home" ? ".classic-primary button" : ".classic-header button"))?.focus();
     });
@@ -1267,8 +1303,55 @@ function App() {
   };
   const settingsView = () => {
     const active = settingsSections.find((section) => section.id === settingsSection);
+    const quickChoice = (current: string, choices: [string, string][], commit: (value: string) => void) => <>
+      <div class="settings-choices" role="group" aria-label={active?.[saved.settings.language]}>
+        {choices.map(([value, label]) => <button key={value} aria-pressed={(settingsDraft ?? current) === value}
+          onClick={() => setSettingsDraft(value)}>{label}</button>)}
+      </div>
+      <button class="primary" onClick={() => { commit(settingsDraft ?? current); closeSettingsSection(); }}>
+        {t("Änderungen speichern", "Save changes")}
+      </button>
+    </>;
     const renderSection = (id: string) => {
       switch (id) {
+        case "clock": return quickChoice(saved.settings.clockFormat, [
+          ["H24", "24 h · 18:30"], ["H12", "12 h · 06:30 PM"],
+        ], value => setting("clockFormat", value as Settings["clockFormat"]));
+        case "stream": return <>
+          <p>{t("Gilt für Xtream-Live-TV. M3U verwendet das Format der Wiedergabeliste.",
+            "Applies to Xtream live TV. M3U uses the playlist's stream format.")}</p>
+          {quickChoice(saved.settings.liveFormat, [
+            ["default", t("Standard", "Default")], ["ts", "MPEG-TS (.ts)"], ["m3u8", "HLS (.m3u8)"],
+          ], value => {
+            const format = value === "ts" ? "ts" : "m3u8";
+            setting("liveFormat", format);
+            const provider = providerRef.current;
+            if (session?.kind === "Xtream" && provider) {
+              setCatalog(old => ({...old, live: old.live.map(item => ({
+                ...item, url: provider.stream("live", item.id, format),
+              }))}));
+            }
+          })}
+        </>;
+        case "player": return quickChoice(saved.settings.player, [
+          ["auto", t("Automatisch · empfohlen", "Automatic · recommended")],
+          ["avplay", "Samsung AVPlay"], ["html", "HTML-Video"],
+        ], value => changed({...savedRef.current, settings: {...savedRef.current.settings,
+          expertMode: savedRef.current.settings.expertMode || value !== "auto", player: value as Settings["player"]}}));
+        case "cache": return <>
+          <p>{t("Temporäre Programmdaten und Episodeninfos leeren?", "Clear temporary programme data and episode details?")}</p>
+          <p class="muted">{t("Profile, Favoriten, Verlauf und Lizenz bleiben erhalten.", "Profiles, favourites, history and licence are kept.")}</p>
+          <button disabled={busy || refreshing} onClick={() => {
+            epgCacheEpoch.current++;
+            epgPending.current.clear();
+            detailRequest.current++;
+            detailCache.current.clear();
+            setEpg({});
+            for (const memory of Object.values(memories.current)) { memory.detail = null; memory.episodes = []; }
+            setCacheCleared(true);
+          }}>{t("Jetzt leeren", "Clear now")}</button>
+          {cacheCleared && <p role="status">{t("Cache geleert.", "Cache cleared.")}</p>}
+        </>;
         case "general": return <>
           <label class="field">
             <span>{t("Oberfläche", "Interface layout")}</span>
@@ -1276,9 +1359,6 @@ function App() {
           </label>
 <Field label={t("App-Sprache", "App language")}>
             {choose(saved.settings.language, (value) => setting("language", value as Settings["language"]), [["de", "Deutsch"], ["en", "English"]], t("App-Sprache", "App language"))}
-          </Field>
-          <Field label={t("Zeitformat", "Time format")}>
-            {choose(saved.settings.clockFormat, (value) => setting("clockFormat", value as Settings["clockFormat"]), [["H24", "24 h · 18:30"], ["H12", "12 h · 06:30 PM"]], t("Zeitformat", "Time format"))}
           </Field>
           <Field label={t("Farbschema", "Appearance")}>
             {choose(
@@ -1356,7 +1436,8 @@ function App() {
         </>;
         case "profiles": return <>
           <p>
-            {session?.name} · {samsung() ? "Samsung-TV" : "Browser-Vorschau"}
+            {session?.name} · {session?.kind}
+            {session?.kind === "Xtream" && session.username ? ` · ${session.username}` : ""}
           </p>
           <button
             onClick={() => {
@@ -1434,40 +1515,6 @@ function App() {
           </Field>
 
           {saved.settings.expertMode && <>
-
-          <Field label={t("Wiedergabe-Engine", "Playback engine")}>
-            {choose(
-              saved.settings.player,
-              (v) => setting("player", v as Settings["player"]),
-              [
-                ["auto", "Automatisch · empfohlen"],
-                ["avplay", "Samsung AVPlay"],
-                ["html", "HTML-Video · Alternative"],
-              ],
-            )}
-          </Field>
-          <Field label={t("Live-Streamformat", "Live stream format")}>
-            {choose(
-              saved.settings.liveFormat,
-              (v) => {
-                setting("liveFormat", v as Settings["liveFormat"]);
-                setCatalog((old) => ({
-                  ...old,
-                  live: old.live.map((i) => ({
-                    ...i,
-                    url:
-                      session?.kind === "Xtream"
-                        ? providerRef.current!.stream("live", i.id, v)
-                        : i.url,
-                  })),
-                }));
-              },
-              [
-                ["m3u8", "HLS (.m3u8)"],
-                ["ts", "MPEG-TS (.ts)"],
-              ],
-            )}
-          </Field>
 
           <Field label={t("Stream-Puffer", "Stream buffer")}>
             {choose(
@@ -1549,24 +1596,25 @@ function App() {
     return (
       <div class="settings-page">
         <h1>{t("Einstellungen", "Settings")}</h1>
-        <div class="settings-grid">
-          <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
-            {settingsSections.map((section) => (
-              <button key={section.id} data-focus-key={section.id}
-                aria-expanded={settingsSection === section.id} aria-controls="settings-options"
-                class={settingsSection === section.id ? "selected" : ""}
-                onClick={() => setSettingsSection(section.id)}>
-                <span>{section[saved.settings.language]}</span><span aria-hidden="true">›</span>
-              </button>
-            ))}
-          </nav>
-          {active && <section key={active.id} id="settings-options" class="glass settings-options"
-              data-focus-zone="settings-options" data-settings-section={active.id}
-              data-license-status={active.id === "license" ? "" : undefined}>
-            <h2>{active[saved.settings.language]}</h2>
-            {renderSection(active.id)}
-          </section>}
-        </div>
+        {!active ? <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
+          {settingsSections.map(section => (
+            <button key={section.id} data-focus-key={section.id} onClick={() => {
+              setSettingsDraft(null);
+              setCacheCleared(false);
+              setSettingsSection(section.id);
+              requestAnimationFrame(() => document.querySelector<HTMLElement>(".settings-options button")?.focus());
+            }}>
+              <SettingsTileIcon section={section.id} />
+              <span>{section[saved.settings.language]}</span>
+            </button>
+          ))}
+        </nav> : <section key={active.id} id="settings-options" class="glass settings-options"
+            data-focus-zone="settings-options" data-settings-section={active.id}
+            data-license-status={active.id === "license" ? "" : undefined}>
+          <button class="settings-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>
+          <h2>{active[saved.settings.language]}</h2>
+          {renderSection(active.id)}
+        </section>}
       </div>
     );
   };
@@ -2064,7 +2112,7 @@ function App() {
                           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.6" /><path d="M4 21v-1.5a8 6 0 0 1 16 0V21z" /></svg>
                           {t("Profile", "Profiles")}
                         </button>
-                        <button data-focus-key="settings" onClick={() => { setSettingsSection("general"); goShortcut("settings"); }}>
+                        <button data-focus-key="settings" onClick={() => { setSettingsSection(null); goShortcut("settings"); }}>
                           <RailIcon kind="settings" />{t("Einstellungen", "Settings")}
                         </button>
                       </div>

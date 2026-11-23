@@ -264,6 +264,8 @@ pub struct App {
     pub history: Vec<HistEntry>,
     pub continue_tab: ContinueTab,
     pub settings: Settings,
+    pub settings_section: Option<usize>,
+    pub settings_return_tile: Option<usize>,
 
     pub images: ImageState,
     pub connect: crate::connect::DeviceClient,
@@ -486,6 +488,8 @@ impl App {
             history: store::load_history(),
             continue_tab: ContinueTab::Movies,
             settings: store::load_settings(),
+            settings_section: None,
+            settings_return_tile: None,
             images: ImageState::default(),
             connect: crate::connect::DeviceClient::default(),
             epg: HashMap::new(),
@@ -1657,6 +1661,10 @@ impl App {
     /// leave goes on the stack, so BACK retraces the path instead of dumping
     /// the user on "Live TV" no matter where they were.
     pub fn navigate(&mut self, view: View) {
+        if view != View::Settings || self.view != View::Settings {
+            self.settings_section = None;
+            self.settings_return_tile = None;
+        }
         if self.tv {
             self.tv_goto(Self::tv_section(view));
         }
@@ -1695,7 +1703,8 @@ impl App {
         if self.parental.open {
             return true;
         }
-        if self.description_open.is_some()
+        if (self.view == View::Settings && self.settings_section.is_some())
+            || self.description_open.is_some()
             || (self.tv && self.preview.is_some())
             || self.pending_delete.is_some()
             || self.mobile_more
@@ -1713,6 +1722,26 @@ impl App {
         self.view != View::Live && self.view != View::Home && self.view != View::Login
     }
 
+    pub(crate) fn close_settings_section(&mut self) -> bool {
+        if self.view != View::Settings {
+            return false;
+        }
+        self.settings_return_tile = self.settings_section.take();
+        self.settings_return_tile.is_some()
+    }
+
+    pub(crate) fn clear_app_cache(&mut self) -> bool {
+        if self.busy || self.catalog_refreshing {
+            return false;
+        }
+        // Reject outstanding image, EPG and episode responses from before the clear.
+        self.login_generation = self.login_generation.wrapping_add(1);
+        self.images = ImageState::default();
+        self.clear_detail_caches();
+        self.pending_history_key = None;
+        true
+    }
+
     pub fn mobile_back(&mut self) -> bool {
         if self.parental.open {
             self.parental.close();
@@ -1726,6 +1755,9 @@ impl App {
         // dialog, which reads as "confirm".
         if self.pending_delete.is_some() {
             self.pending_delete = None;
+            return true;
+        }
+        if self.close_settings_section() {
             return true;
         }
         if self.mobile_more {
@@ -4453,6 +4485,29 @@ mod tests {
         assert_eq!(app.live_cat, "sports");
         assert_eq!(app.active_profile.as_ref().unwrap().name, "current");
         assert!(app.library.loaded);
+    }
+
+    #[test]
+    fn clearing_app_cache_rejects_stale_results_and_keeps_the_active_profile() {
+        let mut app = App::test_app();
+        app.load_demo();
+        let profile = app.active_profile.as_ref().unwrap().id.clone();
+        let channels = app.library.channels.len();
+        let cached_generation = app.login_generation;
+        app.epg.insert(1, Vec::new());
+        app.series_episodes.insert(1, Vec::new());
+        app.images.failed.insert("logo:1".into());
+        app.catalog_refreshing = true;
+        assert!(!app.clear_app_cache());
+        app.catalog_refreshing = false;
+        assert!(app.clear_app_cache());
+        app.handle_event(AppEvent::Epg(cached_generation, 1, Ok(Vec::new())));
+        app.handle_event(AppEvent::SeriesInfo(cached_generation, 1, Ok(Vec::new())));
+        assert!(app.epg.is_empty());
+        assert!(app.series_episodes.is_empty());
+        assert!(app.images.failed.is_empty());
+        assert_eq!(app.active_profile.as_ref().unwrap().id, profile);
+        assert_eq!(app.library.channels.len(), channels);
     }
 
     #[test]

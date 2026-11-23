@@ -4,10 +4,6 @@ use crate::types::{
 };
 use egui::{RichText, Ui};
 
-/// Content is kept in a readable column instead of stretching across the
-/// whole window on wide screens.
-const COL_W: f32 = 720.0;
-
 /// Every settings section with the words that should find it. One table so the
 /// filter and the section headers can never drift apart.
 const SECTIONS: &[(&str, &str)] = &[
@@ -146,168 +142,205 @@ fn switch(ui: &mut Ui, label: &str, value: &mut bool) -> bool {
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
+    use super::mobile::{components, focus, tokens};
+    use components::Icon;
+
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
+    let scale = super::desktop::scale(ui.ctx());
+    let width = ui.available_width();
     let mut changed = false;
     let mut playback_changed = false;
-    let section_key = egui::Id::new("settings-current-section");
-    let mut current = ui
-        .ctx()
-        .data(|data| data.get_temp::<usize>(section_key).unwrap_or(0));
-    let mobile = super::mobile::active(ui.ctx());
-    if super::desktop::active(ui.ctx()) && ui.available_width() >= 275.0 {
-        let scale = super::desktop::scale(ui.ctx());
-        ui.heading(t("Einstellungen", "Settings"));
-        ui.add_space(12.0 * scale);
-        let width = ui.available_width().min(1360.0 * scale);
-        let height = ui.available_height();
-        let menu_width = super::desktop::appearance().category_width * scale;
-        ui.horizontal_top(|ui| {
-            ui.allocate_ui_with_layout(
-                egui::vec2(menu_width, height),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    ui.set_width(menu_width);
-                    egui::ScrollArea::vertical()
-                        .id_source("settings-menu")
-                        .show(ui, |ui| {
-                            ui.add_space(4.0 * scale);
-                            super::mobile::focus::set_zone(1);
-                            for (index, section) in sections().iter().enumerate() {
-                                if section.id == "license" && !cfg!(target_os = "windows") {
-                                    continue;
-                                }
-                                let label = language.text(&section.de, &section.en);
-                                let response = ui.add_sized(
-                                    [(ui.available_width() - 8.0 * scale).max(0.0), 42.0 * scale],
-                                    egui::Button::new(label)
-                                        .selected(current == index)
-                                        .rounding(12.0 * scale),
-                                );
-                                if activate(ui, &response) {
-                                    current = index;
-                                    ui.ctx()
-                                        .data_mut(|data| data.insert_temp(section_key, current));
-                                }
-                            }
-                        });
-                },
-            );
-            let panel_width = (width - menu_width - ui.spacing().item_spacing.x).max(1.0);
-            ui.allocate_ui_with_layout(
-                egui::vec2(panel_width, height),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    super::mobile::focus::set_zone(2);
-                    ui.set_width(panel_width);
-                    if let Some(section) = sections().get(current) {
-                        egui::ScrollArea::vertical()
-                            .id_source(("settings-options", current))
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                ui.heading(language.text(&section.de, &section.en));
-                                panel(
-                                    app,
-                                    ui,
-                                    &section.id,
-                                    mobile,
-                                    &mut changed,
-                                    &mut playback_changed,
-                                );
-                            });
-                    }
-                },
-            );
-        });
-    } else {
-        egui::ScrollArea::vertical()
-            .id_source("settings-section-scroll")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                let width = ui.available_width().min(COL_W);
-                ui.vertical_centered(|ui| {
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(width, 0.0),
-                        egui::Layout::top_down(egui::Align::Min),
-                        |ui| {
-                            ui.set_width(width);
-                            if mobile {
-                                super::mobile::components::storage_banner(
-                                    ui,
-                                    crate::store::storage_failed(),
-                                );
-                            }
-                            ui.heading(t("Einstellungen", "Settings"));
-                            ui.add_space(8.0);
-                            for (index, section) in sections().iter().enumerate() {
-                                if section.id == "license" && !cfg!(target_os = "windows") {
-                                    continue;
-                                }
-                                let open = current == index;
-                                let label = language.text(&section.de, &section.en);
-                                let response = ui.add_sized(
-                                    [ui.available_width(), 36.0],
-                                    egui::Button::new(format!(
-                                        "{}  {label}",
-                                        if open { "▾" } else { "›" }
-                                    ))
-                                    .selected(open)
-                                    .rounding(12.0),
-                                );
-                                if activate(ui, &response) {
-                                    current = if open { usize::MAX } else { index };
-                                    ui.ctx()
-                                        .data_mut(|data| data.insert_temp(section_key, current));
-                                    response.scroll_to_me(Some(egui::Align::Min));
-                                    ui.ctx().request_repaint();
-                                }
-                                if current != index {
-                                    continue;
-                                }
-                                panel(
-                                    app,
-                                    ui,
-                                    &section.id,
-                                    mobile,
-                                    &mut changed,
-                                    &mut playback_changed,
-                                );
-                                ui.add_space(6.0);
-                            }
-                            ui.add_space(12.0);
-                        },
+    ui.heading(t("Einstellungen", "Settings"));
+    let draft = ui.id().with("settings-draft");
+    egui::ScrollArea::vertical()
+        .id_source(("settings-page", app.settings_section))
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if let Some(index) = app.settings_section {
+                let section = &sections()[index];
+                focus::set_zone(1);
+                let back = ui.button(t("‹ Alle Einstellungen", "‹ All settings"));
+                if app.settings_return_tile.take().is_some() {
+                    back.request_focus();
+                    focus::request_id(back.id);
+                }
+                if activate(ui, &back) {
+                    app.close_settings_section();
+                    return;
+                }
+                ui.heading(t(&section.de, &section.en));
+                let mobile = super::mobile::active(ui.ctx());
+                ui.push_id(draft.with(index), |ui| {
+                    ui.set_width(ui.available_width().min((920.0 * scale).max(360.0)));
+                    panel(
+                        app,
+                        ui,
+                        &section.id,
+                        draft.with(index).with("choice"),
+                        mobile,
+                        &mut changed,
+                        &mut playback_changed,
                     );
                 });
-            });
-    }
+            } else {
+                let columns = if width < 580.0 { 2 } else { 3 };
+                let gap = (18.0 * scale).max(10.0);
+                let tile_width =
+                    ((width - (columns - 1) as f32 * gap) / columns as f32 - 2.0).max(1.0);
+                let tile_height = (150.0 * scale).max(73.0);
+                let tiles: Vec<_> = sections()
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, section)| section.id != "license" || cfg!(windows))
+                    .collect();
+                focus::set_zone(1);
+                for row in tiles.chunks(columns) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
+                        for &(index, section) in row {
+                            let label = t(&section.de, &section.en);
+                            let icon = match section.id.as_str() {
+                                "clock" => Icon::Clock,
+                                "updates" => Icon::Refresh,
+                                "player" | "playback" => Icon::Play,
+                                "stream" => Icon::Tv,
+                                "audio" => Icon::Volume,
+                                "profiles" => Icon::User,
+                                "cache" => Icon::Trash,
+                                "parental" => Icon::EyeOff,
+                                "license" => Icon::Info,
+                                _ => Icon::Settings,
+                            };
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(tile_width, tile_height),
+                                egui::Sense::click(),
+                            );
+                            if app.settings_return_tile == Some(index) {
+                                app.settings_return_tile = None;
+                                response.request_focus();
+                                focus::request_id(response.id);
+                            }
+                            let style = ui.style().interact(&response);
+                            let focused =
+                                response.has_focus() || focus::focused_id() == Some(response.id);
+                            ui.painter().rect(
+                                rect,
+                                14.0,
+                                style.bg_fill,
+                                if focused {
+                                    egui::Stroke::new(3.0, crate::theme::accent(ui))
+                                } else {
+                                    style.bg_stroke
+                                },
+                            );
+                            let icon_size = (tile_height * 0.30).min(tile_width * 0.28);
+                            components::icon(
+                                ui,
+                                egui::Rect::from_center_size(
+                                    egui::pos2(rect.center().x, rect.top() + tile_height * 0.34),
+                                    egui::Vec2::splat(icon_size),
+                                ),
+                                icon,
+                                crate::theme::accent(ui),
+                            );
+                            let font_size = (31.0 * scale).max(16.0);
+                            let font = tokens::bold(font_size);
+                            let label_width = ui
+                                .painter()
+                                .layout_no_wrap(
+                                    label.into(),
+                                    font.clone(),
+                                    ui.visuals().text_color(),
+                                )
+                                .size()
+                                .x;
+                            let font = tokens::bold(
+                                font_size * ((tile_width - 12.0).max(1.0) / label_width).min(1.0),
+                            );
+                            ui.painter().text(
+                                egui::pos2(rect.center().x, rect.top() + tile_height * 0.73),
+                                egui::Align2::CENTER_CENTER,
+                                label,
+                                font,
+                                ui.visuals().text_color(),
+                            );
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::Button, label)
+                            });
+                            if activate(ui, &response) {
+                                app.settings_section = Some(index);
+                                app.settings_return_tile = Some(index);
+                                if section.id == "cache" {
+                                    ui.ctx().data_mut(|data| {
+                                        data.remove::<bool>(egui::Id::new("settings-cache-cleared"))
+                                    });
+                                }
+                                ui.ctx().data_mut(|data| {
+                                    data.remove::<usize>(draft.with(index).with("choice"))
+                                });
+                                ui.ctx().request_repaint();
+                            }
+                        }
+                    });
+                    ui.add_space(gap);
+                }
+            }
+        });
     if changed || playback_changed {
         app.save_settings_now();
         ui.ctx().request_repaint();
     }
-    if playback_changed && !mobile {
+    if playback_changed && !super::mobile::active(ui.ctx()) {
         app.reset_player();
     }
 }
 
-pub(super) fn open_profiles(ctx: &egui::Context) {
-    if let Some(index) = sections()
+pub(super) fn open_profiles(app: &mut App) {
+    app.settings_section = sections()
         .iter()
-        .position(|section| section.id == "profiles")
-    {
-        ctx.data_mut(|data| data.insert_temp(egui::Id::new("settings-current-section"), index));
+        .position(|section| section.id == "profiles");
+}
+
+fn quick_choice<T: Copy + PartialEq>(
+    ui: &mut Ui,
+    key: egui::Id,
+    current: T,
+    options: &[(T, &str)],
+    save_label: &str,
+) -> Option<T> {
+    let mut index = ui
+        .ctx()
+        .data(|data| data.get_temp::<usize>(key))
+        .or_else(|| options.iter().position(|(value, _)| *value == current))
+        .unwrap_or(0);
+    for (slot, (_, label)) in options.iter().enumerate() {
+        let response = ui.selectable_label(slot == index, *label);
+        if activate(ui, &response) {
+            index = slot;
+            ui.ctx().data_mut(|data| data.insert_temp(key, index));
+        }
     }
+    ui.add_space(10.0);
+    if action(ui, save_label) {
+        ui.ctx().data_mut(|data| data.remove::<usize>(key));
+        return options.get(index).map(|(value, _)| *value);
+    }
+    None
 }
 
 fn panel(
     app: &mut App,
     ui: &mut Ui,
     section: &str,
+    draft: egui::Id,
     mobile: bool,
     changed: &mut bool,
     playback_changed: &mut bool,
 ) {
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
+    let save = t("Änderungen speichern", "Save changes");
     egui::Frame::none()
         .fill(ui.visuals().window_fill)
         .stroke(ui.visuals().window_stroke)
@@ -316,6 +349,115 @@ fn panel(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             match section {
+                "clock" => {
+                    if let Some(value) = quick_choice(
+                        ui,
+                        draft,
+                        app.settings.clock_format,
+                        &[
+                            (ClockFormat::H24, "24 h · 18:30"),
+                            (ClockFormat::H12, "12 h · 06:30 PM"),
+                        ],
+                        save,
+                    ) {
+                        app.settings.clock_format = value;
+                        *changed = true;
+                        app.close_settings_section();
+                    }
+                }
+                "stream" => {
+                    use crate::types::LiveFormat;
+                    let default = crate::types::Settings::default().live_format;
+                    let options = [
+                        (None, t("Standard", "Default")),
+                        (Some(LiveFormat::Ts), "MPEG-TS (.ts)"),
+                        (Some(LiveFormat::Hls), "HLS (.m3u8)"),
+                    ];
+                    ui.label(t(
+                        "Gilt für Xtream-Live-TV. M3U verwendet das Format der Wiedergabeliste.",
+                        "Applies to Xtream live TV. M3U uses the playlist's stream format.",
+                    ));
+                    if let Some(value) =
+                        quick_choice(ui, draft, Some(app.settings.live_format), &options, save)
+                    {
+                        app.settings.live_format = value.unwrap_or(default);
+                        app.apply_live_format();
+                        *changed = true;
+                        app.close_settings_section();
+                    }
+                }
+                "player" => {
+                    #[cfg(target_os = "android")]
+                    if let Some(value) = quick_choice(
+                        ui,
+                        draft,
+                        app.settings.effective_player_backend(),
+                        &crate::types::PlayerBackend::all().map(|player| (player, player.label())),
+                        save,
+                    ) {
+                        app.settings.settings_mode = SettingsMode::Expert;
+                        app.settings.player_backend = value;
+                        *changed = true;
+                        app.close_settings_section();
+                    }
+                    #[cfg(target_os = "ios")]
+                    {
+                        use crate::types::IosPlaybackEngine as Engine;
+                        let current = (
+                            app.settings.ios_native_player,
+                            app.settings.ios_playback_engine,
+                        );
+                        let options = [
+                            (
+                                (false, Engine::Auto),
+                                t("Dado Player · automatisch", "Dado Player · automatic"),
+                            ),
+                            ((true, Engine::Apple), "Apple Player"),
+                            ((false, Engine::Apple), "Dado Player · AVPlayer"),
+                            ((false, Engine::Vlc), "Dado Player · VLC"),
+                        ];
+                        if let Some((native, engine)) =
+                            quick_choice(ui, draft, current, &options, save)
+                        {
+                            app.settings.settings_mode = SettingsMode::Expert;
+                            app.settings.ios_native_player = native;
+                            app.settings.ios_playback_engine = engine;
+                            crate::platform::ios::bridge::native_player(native);
+                            *changed = true;
+                            app.close_settings_section();
+                        }
+                    }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    ui.label(t("Integrierter Dado Player", "Built-in Dado Player"));
+                }
+                "cache" => {
+                    ui.label(t(
+                        "Temporäre Bilder, Programmdaten und Episodeninfos leeren?",
+                        "Clear temporary images, programme data and episode details?",
+                    ));
+                    ui.label(t(
+                        "Profile, Favoriten, Verlauf und Lizenz bleiben erhalten.",
+                        "Profiles, favourites, history and licence are kept.",
+                    ));
+                    if ui
+                        .add_enabled_ui(!app.busy && !app.catalog_refreshing, |ui| {
+                            action(ui, t("Jetzt leeren", "Clear now"))
+                        })
+                        .inner
+                        && app.clear_app_cache()
+                    {
+                        ui.ctx().data_mut(|data| {
+                            data.insert_temp(egui::Id::new("settings-cache-cleared"), true)
+                        });
+                    }
+                    if ui
+                        .ctx()
+                        .data(|data| data.get_temp::<bool>(egui::Id::new("settings-cache-cleared")))
+                        .unwrap_or(false)
+                    {
+                        ui.label(t("Cache geleert.", "Cache cleared."));
+                    }
+                }
                 "general" => {
                     *changed |= select(
                         ui,
@@ -331,15 +473,6 @@ fn panel(
                         t("App-Sprache", "App language"),
                         &mut app.settings.language,
                         &[(AppLanguage::De, "Deutsch"), (AppLanguage::En, "English")],
-                    );
-                    *changed |= select(
-                        ui,
-                        t("Zeitformat", "Time format"),
-                        &mut app.settings.clock_format,
-                        &[
-                            (ClockFormat::H24, "24 h · 18:30"),
-                            (ClockFormat::H12, "12 h · 06:30 PM"),
-                        ],
                     );
                     let themes = [
                         (Theme::Warm, t("Blau", "Blue")),
@@ -419,7 +552,14 @@ fn panel(
                 }
                 "profiles" => {
                     if let Some(profile) = &app.active_profile {
-                        ui.label(&profile.name);
+                        ui.strong(&profile.name);
+                        ui.label(match profile.kind {
+                            crate::types::ProfileKind::Xtream => "Xtream Codes",
+                            crate::types::ProfileKind::M3u => "M3U",
+                        });
+                        if profile.kind == crate::types::ProfileKind::Xtream {
+                            ui.label(&profile.username);
+                        }
                     }
                     app.cloud_profiles_ui(ui);
                     if action(ui, t("Abmelden", "Sign out")) {

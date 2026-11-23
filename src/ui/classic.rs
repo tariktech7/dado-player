@@ -412,6 +412,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         ),
     ];
     let width = ((right - left - gap * 3.0) / 4.0).max(1.0);
+    let mut open_profiles = false;
     focus::set_zone(2);
     for (index, (view, label, icon, profiles)) in actions.into_iter().enumerate() {
         let rect = Rect::from_min_size(
@@ -458,17 +459,15 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
         if activate(ui, &response, app.tv) {
-            if profiles {
-                settings::open_profiles(ui.ctx());
-            } else if view == View::Settings {
-                ui.ctx()
-                    .data_mut(|data| data.remove::<usize>(Id::new("settings-current-section")));
-            }
+            open_profiles = profiles;
             next = Some(view);
         }
     }
     if let Some(view) = next {
         app.navigate(view);
+        if open_profiles {
+            settings::open_profiles(app);
+        }
         focus::request_index(0);
         ui.ctx().request_repaint();
     }

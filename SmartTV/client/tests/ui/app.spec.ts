@@ -133,6 +133,7 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   expect(await page.evaluate(() => (window as any).webapis.avplay.getState())).toBe('PLAYING');
   await page.getByRole('button', {name: /Übersicht/}).click();
   await page.locator('.classic-actions').getByRole('button', {name: 'Einstellungen'}).click();
+  await openSettingsSection(page, 'general');
   await page.getByRole('combobox', {name: 'Oberfläche'}).click();
   await page.getByRole('option', {name: 'Modern', exact: true}).click();
   await expect(page.locator('.navigation')).toBeVisible();
@@ -622,6 +623,7 @@ test('blue, midnight and white appearances switch immediately and persist', asyn
   await fixture(page);
   await page.goto('/');
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'general');
   for(const [name,value,color] of [['Blau','warm','rgb(25, 51, 78)'],['Dunkel','dark','rgb(16, 25, 39)'],['Hell','light','rgb(247, 248, 250)']] as const){
     await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
@@ -632,6 +634,7 @@ test('blue, midnight and white appearances switch immediately and persist', asyn
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme',value);
     await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'general');
   }
   await page.getByRole('combobox',{name:'Farbschema',exact:true}).click();
   await page.getByRole('option',{name:'Blau',exact:true}).click();
@@ -976,19 +979,13 @@ test("favorites remain separate from history; series and settings work with remo
   await page
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
-  await expect(page.getByRole("combobox", { name: "Live-Streamformat" })).toHaveCount(0);
-  await openSettingsSection(page, "advanced");
-  await page.getByLabel("Expertenmodus", {exact:true}).click();
-  await page.getByRole("combobox", { name: "Live-Streamformat" }).click();
-  await page.getByRole("option", { name: "MPEG-TS (.ts)" }).click();
+  await openSettingsSection(page, "stream");
+  await page.getByRole("button", {name: "MPEG-TS (.ts)"}).click();
+  await page.getByRole("button", {name: "Änderungen speichern"}).click();
   await page.reload();
-  await page
-    .getByRole("button", { name: "⚙ Einstellungen", exact: true })
-    .click();
-  await openSettingsSection(page, "advanced");
-  await expect(
-    page.getByRole("combobox", { name: "Live-Streamformat" }),
-  ).toContainText("MPEG-TS (.ts)");
+  await page.getByRole("button", { name: "⚙ Einstellungen", exact: true }).click();
+  await openSettingsSection(page, "stream");
+  await expect(page.getByRole("button", {name: "MPEG-TS (.ts)"})).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "⌂ Startseite", exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await expect(
@@ -1723,45 +1720,71 @@ test("rounded list focus stays inside the first row at the scroll boundary", asy
   await page.screenshot({path:"test-results/tizen-rounded-live-075.png"});
 });
 
-test("settings remote navigation moves between sections and the selected panel", async ({page}) => {
+test("settings tiles support spatial navigation and return to the originating tile", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
-  const navigation = page.getByRole("button", {name: "⚙ Einstellungen", exact: true});
-  await navigation.click();
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
   const general = page.locator('.settings-sections [data-focus-key="general"]');
+  const stream = page.locator('.settings-sections [data-focus-key="stream"]');
+  const player = page.locator('.settings-sections [data-focus-key="player"]');
   await general.focus();
-  await page.keyboard.press("ArrowDown");
-  const playback = page.locator('.settings-sections [data-focus-key="playback"]');
-  await expect(playback).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page.locator('[data-settings-section="playback"]')).toBeVisible();
+  await page.screenshot({path:"test-results/dado-settings-tiles.png", animations:"disabled"});
   await page.keyboard.press("ArrowRight");
-  await expect(page.locator('[data-settings-section="playback"]').getByRole("combobox")).toBeFocused();
+  await expect(stream).toBeFocused();
   await page.keyboard.press("ArrowLeft");
-  await expect(playback).toBeFocused();
-  await page.screenshot({path:"test-results/tizen-settings-075.png"});
+  await expect(general).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(player).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-settings-section="player"]')).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(navigation).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", {name:"Dado Player beenden?"})).toBeVisible();
+  await expect(player).toBeFocused();
 });
 
 test("language and time format persist and the live guide uses the selected time format", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
-  await page.getByRole("combobox", {name: "Zeitformat"}).click();
-  await page.getByRole("option", {name: "12 h · 06:30 PM"}).click();
+  await openSettingsSection(page, "clock");
+  await page.getByRole("button", {name: "12 h · 06:30 PM"}).click();
+  await page.keyboard.press("Escape");
+  await openSettingsSection(page, "clock");
+  await expect(page.getByRole("button", {name: "24 h · 18:30"})).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", {name: "12 h · 06:30 PM"}).click();
+  await page.getByRole("button", {name: "Änderungen speichern"}).click();
+  await openSettingsSection(page, "general");
   await page.getByRole("combobox", {name: "App-Sprache"}).click();
   await page.getByRole("option", {name: "English"}).click();
-  await expect(page.getByRole("heading", {name: "Settings", exact: true})).toBeVisible();
-  await expect(page.getByRole("combobox", {name: "Time format"})).toContainText("12 h");
   await page.reload();
   await page.getByRole("button", {name: "⚙ Settings", exact: true}).click();
-  await expect(page.getByRole("combobox", {name: "Time format"})).toContainText("12 h");
+  await openSettingsSection(page, "clock");
+  await expect(page.getByRole("button", {name: "12 h · 06:30 PM"})).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({path:"test-results/dado-settings-clock.png", animations:"disabled"});
   await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
   await page.locator(".channel-list button").first().click();
   await expect(page.locator(".epg-detail")).toContainText(/\d{2}:\d{2} (AM|PM)/);
+});
+
+test("clearing the app cache reloads EPG without discarding saved preferences", async ({page}) => {
+  await fixture(page, true, true);
+  let requests = 0;
+  page.on('request', request => { if (request.url().includes('action=get_short_epg')) requests++; });
+  await page.goto("/");
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel-list button").first().click();
+  await expect(page.locator(".epg-detail")).toContainText('Sport am Abend');
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
+  await openSettingsSection(page, "cache");
+  const saved = () => page.evaluate(() => localStorage.getItem('dado.tv.v1'));
+  const before = await saved();
+  const requestsBefore = requests;
+  await page.getByRole('button', {name: 'Jetzt leeren'}).click();
+  await expect(page.getByRole('status').filter({hasText: 'Cache geleert.'})).toBeVisible();
+  expect(await saved()).toBe(before);
+  await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
+  await page.locator(".channel-list button").first().click();
+  await expect.poll(() => requests).toBeGreaterThan(requestsBefore);
+  await expect(page.locator(".epg-detail")).toContainText('Sport am Abend');
 });
 
 test("rail motion keeps layout widths fixed while only transform offsets animate", async ({page}) => {

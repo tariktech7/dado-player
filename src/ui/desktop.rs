@@ -594,6 +594,10 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
     match key {
         egui::Key::F1 => super::parental::open_management(app),
         egui::Key::Escape => {
+            if app.close_settings_section() {
+                ctx.request_repaint();
+                return true;
+            }
             if player {
                 if !super::player_desktop::dismiss_menus(app, ctx) {
                     app.back_from_player();
