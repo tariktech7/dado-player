@@ -84,6 +84,8 @@ extern "C" {
     fn dado_host_pause(paused: i32);
     fn dado_host_seek(secs: f64);
     fn dado_host_volume(vol: i32);
+    fn dado_host_brightness(requested: f32) -> f32;
+    fn dado_host_speed(speed: f32);
     fn dado_host_position() -> f64;
     fn dado_host_duration() -> f64;
     fn dado_host_cache_time() -> f64;
@@ -192,6 +194,14 @@ pub fn seek(secs: f64) {
 
 pub fn set_volume(vol: i64) {
     unsafe { dado_host_volume(vol.clamp(0, 100) as i32) }
+}
+
+pub fn player_brightness(requested: f32) -> Option<f32> {
+    Some(unsafe { dado_host_brightness(requested) })
+}
+
+pub fn set_speed(speed: f32) {
+    unsafe { dado_host_speed(speed) }
 }
 
 pub fn position() -> f64 {

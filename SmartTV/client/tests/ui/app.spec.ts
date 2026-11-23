@@ -250,7 +250,7 @@ test("live preview fits the stream from prepare and follows fullscreen transitio
   await page.getByRole("button", {name: /Vollbild öffnen/}).click();
   await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]).toEqual(["rect", 0, 0, 1920, 1080]);
   await expect.poll(async () => (await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_FULL_SCREEN"]);
-  await page.getByRole("button", {name: "Senderliste"}).click();
+  await page.getByRole("button", {name: "← Zurück"}).click();
   await expect.poll(async () => (await log()).filter(([event]) => event === "rect").slice(-1)[0]?.slice(3)).toEqual(previewSize);
   expect((await log()).filter(([event]) => event === "aspect").slice(-1)[0]).toEqual(["aspect", "PLAYER_DISPLAY_MODE_LETTER_BOX"]);
   expect((await log()).filter(([event]) => event === "open")).toHaveLength(1);

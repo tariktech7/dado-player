@@ -11,6 +11,9 @@ pub mod palette;
 pub mod parental;
 pub mod player;
 pub(crate) mod player_desktop;
+#[cfg(any(test, target_os = "android", target_os = "ios"))]
+#[cfg(any(test, target_os = "android", target_os = "ios"))]
+mod player_gestures;
 pub mod search;
 pub mod series;
 pub mod settings;

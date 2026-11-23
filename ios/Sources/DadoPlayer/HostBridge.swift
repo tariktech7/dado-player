@@ -337,6 +337,21 @@ public func dado_host_volume(_ vol: Int32) {
     }
 }
 
+@_cdecl("dado_host_brightness")
+public func dado_host_brightness(_ requested: Float) -> Float {
+    let update = {
+        let screen = VideoHost.shared.view?.window?.screen ?? UIScreen.main
+        if requested >= 0 { screen.brightness = CGFloat(min(1, requested)) }
+        return Float(screen.brightness)
+    }
+    return Thread.isMainThread ? update() : DispatchQueue.main.sync(execute: update)
+}
+
+@_cdecl("dado_host_speed")
+public func dado_host_speed(_ speed: Float) {
+    VideoHost.shared.withView { $0.setSpeed(speed) }
+}
+
 // MARK: - Queries
 
 @_cdecl("dado_host_position")

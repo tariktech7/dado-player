@@ -111,6 +111,10 @@ impl Mpv {
         bridge::set_volume(vol);
     }
 
+    pub fn set_speed(&self, speed: f32) {
+        bridge::set_speed(speed);
+    }
+
     pub fn position(&self) -> f64 {
         bridge::position()
     }

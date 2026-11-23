@@ -106,6 +106,8 @@ void dado_host_seek(double secs);
 
 /// 0..100, matching mpv's volume scale.
 void dado_host_volume(int32_t vol);
+float dado_host_brightness(float requested);
+void dado_host_speed(float speed);
 
 double  dado_host_position(void);
 double  dado_host_duration(void);

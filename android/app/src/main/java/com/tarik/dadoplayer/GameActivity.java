@@ -78,6 +78,26 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
                     | EditorInfo.IME_FLAG_NO_FULLSCREEN;
 
     private static GameActivity sSelf;
+    private volatile float playerBrightness = -1;
+
+    public static float playerBrightness(float requested) {
+        GameActivity activity = sSelf;
+        if (activity == null) return 0.5f;
+        if (requested < 0) {
+            if (activity.playerBrightness >= 0) return activity.playerBrightness;
+            return android.provider.Settings.System.getInt(activity.getContentResolver(),
+                    android.provider.Settings.System.SCREEN_BRIGHTNESS, 128) / 255f;
+        }
+        float level = Math.max(0, Math.min(1, requested));
+        activity.playerBrightness = level;
+        activity.runOnUiThread(() -> {
+            android.view.Window window = activity.getWindow();
+            android.view.WindowManager.LayoutParams attributes = window.getAttributes();
+            attributes.screenBrightness = level;
+            window.setAttributes(attributes);
+        });
+        return level;
+    }
 
     public static boolean copyDeviceAddress(String address) {
         GameActivity activity = sSelf;

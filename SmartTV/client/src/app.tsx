@@ -2312,6 +2312,9 @@ function App() {
               onClick={showControls}
             >
               <div ref={surface} class="full-surface" />
+              {preview.kind === "live" && <button class="live-back" onClick={() => leavePlayer(true, true)}>
+                {t("← Zurück", "← Back")}
+              </button>}
               {preview.kind !== "live" && <div class="player-top glass">
                 <button onClick={() => leavePlayer()}>{t("← Zurück", "← Back")}</button>
                 <span>

@@ -58,7 +58,7 @@ fn pane<R>(
             area.set_min_size(rect.size());
             area.set_clip_rect(rect);
             let p = Palette::get();
-            if name != "transport" {
+            if !matches!(name, "transport" | "live-back") {
                 area.painter().rect(
                     rect.shrink(1.0),
                     super::desktop::appearance().player_corner_radius * scale,
@@ -157,6 +157,24 @@ fn button(
         });
     }
     crate::ui::mobile::focus::clicked_player(ui, &response)
+}
+
+fn live_back(
+    ctx: &Context,
+    rect: Rect,
+    scale: f32,
+    language: crate::types::AppLanguage,
+) -> (bool, (LayerId, Rect)) {
+    pane(ctx, "live-back", rect, scale, |ui| {
+        button(
+            ui,
+            "live-back",
+            rect,
+            language.text("← Zurück", "← Back"),
+            22.0 * scale,
+            false,
+        )
+    })
 }
 
 fn line(ui: &Ui, at: egui::Pos2, width: f32, text: &str, size: f32, bold: bool) {
@@ -432,6 +450,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ),
         top_size,
     );
+    let back_bounds = Rect::from_min_size(
+        title.min,
+        vec2(
+            137.0 * s,
+            if handheld {
+                (44.0 * s).max(44.0)
+            } else {
+                44.0 * s
+            },
+        ),
+    );
     let stacked_live = live && safe.width() / s < 1640.0;
     let bottom_size = vec2(
         if live {
@@ -489,7 +518,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     #[cfg(windows)]
     let hovering_controls = app.player_chrome
         && video.is_some_and(|handle| {
-            (!live && cursor_inside(handle, title, ppp)) || cursor_inside(handle, bottom, ppp)
+            cursor_inside(handle, if live { back_bounds } else { title }, ppp)
+                || cursor_inside(handle, bottom, ppp)
         });
     #[cfg(not(windows))]
     let hovering_controls = false;
@@ -507,6 +537,27 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let remaining = crate::release_info::CONTROLS_HIDE_SECONDS - (time - app.ui_activity);
     let reveal_only = std::mem::take(&mut app.player_reveal);
     let visible = (keep || remaining > 0.0) && !reveal_only;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    if handheld {
+        let blocked = [
+            if live || app.player_chrome {
+                if live {
+                    back_bounds
+                } else {
+                    title
+                }
+            } else {
+                Rect::NOTHING
+            },
+            if app.player_chrome {
+                bottom
+            } else {
+                Rect::NOTHING
+            },
+        ];
+        let modal = app.audio_menu_open || app.sub_menu_open || options_open || aspect_open;
+        super::player_gestures::frame(app, &ctx, safe, live, &blocked, modal);
+    }
     app.player_chrome = visible;
     let error = app.player_error.clone().or_else(platform_error);
     if !visible && error.is_none() {
@@ -518,6 +569,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         app.player_menu_navigation = false;
         dismiss_menus(app, &ctx);
         crate::ui::mobile::focus::clear_activation();
+        if live && handheld && live_back(&ctx, back_bounds, s, app.settings.language).0 {
+            app.open_live_list();
+            return;
+        }
         ctx.set_cursor_icon(egui::CursorIcon::None);
         return;
     }
@@ -534,7 +589,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let height = a.live_scrim_height + if stacked_live { 76.0 } else { 0.0 };
         layers.push(player_scrim(&ctx, full, height * s, scrim));
     }
-    if !live {
+    if live {
+        let (back, layer) = live_back(&ctx, back_bounds, s, language);
+        if back {
+            dismiss_menus(app, &ctx);
+            app.open_live_list();
+            return;
+        }
+        layers.push(layer);
+    } else {
         let (back, layer) = pane(&ctx, "top", title, s, |ui| {
             let center = title.center().y;
             let control = |offset: f32, width: f32| {

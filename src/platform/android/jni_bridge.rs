@@ -42,6 +42,25 @@ use crate::platform::RemoteKey;
 /// frame, so its `JClass` argument already carries the app classloader.
 static ACTIVITY_CLASS: OnceLock<GlobalRef> = OnceLock::new();
 
+pub fn player_brightness(requested: f32) -> Option<f32> {
+    let app = super::entry::app_handle()?;
+    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }.ok()?;
+    let mut env = vm.get_env().ok()?;
+    let class = ACTIVITY_CLASS.get()?;
+    match env.call_static_method(
+        class,
+        "playerBrightness",
+        "(F)F",
+        &[jni::objects::JValue::Float(requested)],
+    ) {
+        Ok(value) => value.f().ok(),
+        Err(_) => {
+            let _ = env.exception_clear();
+            None
+        }
+    }
+}
+
 static SYS: [AtomicI32; 4] = [
     AtomicI32::new(0),
     AtomicI32::new(0),

@@ -363,6 +363,8 @@ impl Mpv {
         self.load_at(url, 0.0);
     }
     fn load_command(&self, url: &str) {
+        #[cfg(target_os = "android")]
+        self.set_speed(1.0);
         let rc = self.command(&["loadfile", url]);
         if rc < 0 {
             // Never log the URL: provider URLs carry credentials in the query.
@@ -458,6 +460,11 @@ impl Mpv {
     pub fn set_volume(&self, vol: i64) {
         let v = vol.clamp(0, 100).to_string();
         let _ = self.command(&["set", "volume", &v]);
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn set_speed(&self, speed: f32) {
+        let _ = self.command(&["set", "speed", &speed.to_string()]);
     }
 
     fn get_double(&self, name: &str) -> Option<f64> {

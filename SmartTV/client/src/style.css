@@ -1807,6 +1807,18 @@ hr {
 .vod-player progress::-webkit-progress-bar { background: #4c6580; border-radius: 9px; }
 .vod-player progress::-webkit-progress-value { background: #add8ff; border-radius: 9px; }
 .fullscreen.live-player:focus { position: absolute; outline: none; z-index: auto; }
+#app .fullscreen .live-back {
+  position: absolute;
+  top: var(--player-top-inset-y);
+  left: var(--player-top-inset-x);
+  z-index: 30;
+  background: var(--player-panel-color);
+  color: var(--player-text-color);
+  border-color: var(--player-border-color);
+  font-size: var(--player-button-font);
+}
+#app .fullscreen.controls-hidden .live-back { visibility: hidden; pointer-events: none; }
+#app .fullscreen .live-back:focus { background: var(--player-focus-color); color: #0c2134; }
 .fullscreen::before {
   content: "";
   position: absolute;

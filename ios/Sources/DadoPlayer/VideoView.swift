@@ -195,6 +195,14 @@ final class VideoView: UIView, VLCMediaPlayerDelegate {
         }
     }
 
+    func setSpeed(_ speed: Float) {
+        if let vlc {
+            vlc.rate = speed
+        } else if !requestedPause && player.currentItem != nil {
+            player.rate = speed
+        }
+    }
+
     func seek(to seconds: Double) {
         guard seconds.isFinite else { return }
         let clamped = max(0, seconds)
