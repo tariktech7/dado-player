@@ -1387,9 +1387,9 @@ hr {
 .catalog-poster strong {
   font-size: 18px;
   line-height: 1.2;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
   width: 100%;
   text-align: left;
@@ -1621,7 +1621,13 @@ hr {
   z-index: 34;
 }
 .transport { gap: 8px; }
-.transport .player-options-toggle { margin-left: 10px; }
+#app .fullscreen .transport .player-options-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  padding: 0 7px;
+}
+.transport .player-options-toggle svg { width: 24px; height: 24px; }
 .timeline { gap: 12px; margin-top: 8px; font-size: 20px; }
 #app .fullscreen .player-top small, #app .fullscreen .timeline { color: var(--player-muted-color); }
 #app .fullscreen .player-top button, #app .fullscreen .player-controls button, #app .fullscreen .player-options button {

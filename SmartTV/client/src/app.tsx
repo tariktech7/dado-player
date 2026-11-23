@@ -2350,7 +2350,7 @@ function App() {
                     setPlayerOptions(null);
                     p?.refreshTracks();
                     setTracks(true);
-                  }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>
+                  }}>{preview.kind === "live" ? t("Ton & Untertitel", "Audio & subtitles") : "Audio"}</button>
                   <button onClick={() => setPlayerOptions("aspect")}>{t("Bildformat", "Aspect ratio")}</button>
                   <button onClick={() => leavePlayer(false)}>{t("Beenden", "Stop")}</button>
                 </div>
@@ -2400,21 +2400,16 @@ function App() {
                   <span>{time(status?.duration || 0)}</span>
                 </div>
                 <div class="transport">
-                  <button onClick={() => safe(() => p?.seek(-policy.seekStepSeconds))}>
-                    {"↶ " + policy.seekStepSeconds + " s"}
+                  <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>Audio</button>
+                  <button class="player-options-toggle" aria-expanded={!!playerOptions}
+                    aria-label={t("Optionen", "Options")}
+                    onClick={() => setPlayerOptions(playerOptions ? null : "options")}>
+                    <RailIcon kind="settings" />
                   </button>
-                  <button onClick={() => safe(() => p?.seek(policy.seekStepSeconds))}>
-                    {policy.seekStepSeconds + " s ↷"}
-                  </button>
-                  <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>{t("Ton & Untertitel", "Audio & subtitles")}</button>
                   {following?.source === itemKey(preview) && <button onClick={() => {
                     const position = history.find((entry) => itemKey(entry.item) === itemKey(following.item))?.position || 0;
                     void start(following.item, true, position);
                   }}>{t("Nächste Folge", "Next episode")}</button>}
-                  <button class="player-options-toggle" aria-expanded={!!playerOptions}
-                    onClick={() => setPlayerOptions(playerOptions ? null : "options")}>
-                    {t("Optionen", "Options")}
-                  </button>
                 </div>
                 </div>
               </>}
@@ -2486,7 +2481,7 @@ function App() {
             )}
           {tracks &&
             modal(
-              "Ton & Untertitel",
+              preview && preview.kind !== "live" ? "Audio" : t("Ton & Untertitel", "Audio & subtitles"),
               <>
                 <h2>Tonspuren</h2>
                 {status?.tracks

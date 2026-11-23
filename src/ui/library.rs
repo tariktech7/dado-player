@@ -655,6 +655,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     };
     let gap = 8.0;
     let classic = super::classic::enabled(app);
+    let handheld = super::desktop::handheld();
     let a = super::desktop::appearance();
     let min_width = if classic {
         (a.classic_poster_width * scale).max(136.0)
@@ -663,11 +664,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     } else {
         128.0
     };
-    let min_cols = if touch || super::desktop::handheld() {
-        1
-    } else {
-        2
-    };
+    let min_cols = if touch || handheld { 1 } else { 2 };
     let cols = (((ui.available_width() + gap) / (min_width + gap)).floor() as usize)
         .clamp(min_cols, if touch { 5 } else { usize::MAX });
     let width = ((ui.available_width() - gap * (cols - 1) as f32) / cols as f32).max(24.0);
@@ -778,27 +775,26 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                                 );
                                 super::favorite_star(ui, center, radius, app.is_favorite(&key));
                             }
-                            let mut job = egui::text::LayoutJob::simple(
-                                entry.name.clone(),
-                                tokens::medium(super::desktop::handheld_type(
-                                    if classic {
-                                        (22.0 * scale).max(14.0)
-                                    } else if tv {
-                                        11.0
-                                    } else {
-                                        13.0
-                                    },
-                                    14.0,
-                                )),
-                                ui.visuals().text_color(),
-                                (width - 8.0).max(1.0),
+                            let size = if handheld {
+                                15.0
+                            } else if classic {
+                                (22.0 * scale).max(14.0)
+                            } else if tv {
+                                11.0
+                            } else {
+                                13.0
+                            };
+                            let caption = Rect::from_min_max(
+                                pos2(art.left(), art.bottom()),
+                                pos2(art.right(), rect.bottom() - 2.0),
                             );
-                            job.wrap.max_rows = 2;
-                            let galley = ui.fonts(|f| f.layout_job(job));
-                            ui.painter().galley(
-                                pos2(rect.left() + 4.0, rect.top() + art_h + 4.0),
-                                galley,
+                            components::draw_line(
+                                ui,
+                                pos2(caption.left() + 2.0, caption.center().y),
+                                &entry.name,
+                                tokens::medium(size),
                                 ui.visuals().text_color(),
+                                caption.width() - 4.0,
                             );
                         }
                         if hit(ui, &response, tv) {

@@ -102,7 +102,10 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await page.screenshot({path: 'test-results/classic-movies.png'});
   await page.locator('.catalog-details button.primary').click();
   await expect(page.locator('.vod-player .seek-transport .player-play-toggle')).toBeVisible();
-  await expect(page.locator('.vod-player .transport').getByRole('button', {name: 'Ton & Untertitel'})).toBeVisible();
+  const transport = page.locator('.vod-player .transport');
+  await expect(transport.getByRole('button', {name: 'Audio', exact: true})).toBeVisible();
+  await expect(transport.getByRole('button', {name: 'Optionen', exact: true}).locator('svg')).toBeVisible();
+  await expect(transport.getByRole('button', {name: /10 s/})).toHaveCount(0);
   expect(await page.locator('.vod-player').evaluate(node => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
   await expect(page.locator('.vod-player .seek-bar')).toBeVisible();
   await page.screenshot({path: 'test-results/compact-vod-player.png'});
@@ -1844,7 +1847,9 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   const before=(await seeks()).length;await page.keyboard.press('ArrowRight');expect((await seeks()).length).toBe(before);
   await expect(page.locator('.fullscreen')).toHaveClass(/controls-hidden/,{timeout:7000});
   await page.keyboard.press('ArrowRight');await expect.poll(async()=> (await seeks()).length).toBe(before+1);
-  await page.getByRole('button', {name: 'Nächste Folge', exact: true}).click();
+  const nextEpisode = page.locator('.vod-player .transport button').last();
+  await expect(nextEpisode).toHaveAccessibleName('Nächste Folge');
+  await nextEpisode.click();
   await expect(page.locator('.player-top')).toContainText('Staffel 1 · Folge 2');
 });
 
@@ -1896,7 +1901,7 @@ test('rapid seeks serialize AVPlay and exiting a file closes the decoder',async(
     await page.evaluate(() => (window as any).webapis.avplay.getCurrentTime()) - duration / 2,
   )).toBeLessThan(2000);
   const before = await page.evaluate(() => (window as any).webapis.avplay.getCurrentTime());
-  await page.getByRole("button", {name:"10 s ↷", exact: true}).click();
+  await page.keyboard.press('ArrowRight');
   await expect.poll(() => page.evaluate(() => (window as any).webapis.avplay.getCurrentTime())).toBe(before + 10000);
 
   await expect(page.locator('.fullscreen [role=alert]')).toHaveCount(0);

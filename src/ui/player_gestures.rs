@@ -141,12 +141,12 @@ mod mobile {
         live: bool,
         blocked: &[Rect],
         modal: bool,
-    ) {
+    ) -> bool {
         let Some(item) = app.current_play.as_ref() else {
-            return;
+            return false;
         };
         let Some(player) = app.player.as_ref() else {
-            return;
+            return false;
         };
         let may_seek = !live || player.duration > 0.0;
         let may_boost = may_seek && !player.paused;
@@ -238,7 +238,12 @@ mod mobile {
                 }
             };
             if let Some(feedback) = feedback {
-                state.feedback = Some((feedback, time + 1.1));
+                let seconds = if matches!(feedback, Feedback::Speed) {
+                    2.0
+                } else {
+                    1.1
+                };
+                state.feedback = Some((feedback, time + seconds));
             }
         }
         if let Some(touch) = state.gesture.touch {
@@ -249,16 +254,19 @@ mod mobile {
             }
         }
         if let Some((feedback, expiry)) = state.feedback {
-            if time < expiry || matches!(feedback, Feedback::Speed) {
+            if time < expiry {
                 draw(app, ctx, bounds, feedback);
-                if !matches!(feedback, Feedback::Speed) {
-                    ctx.request_repaint_after(Duration::from_secs_f64(expiry - time));
-                }
+                ctx.request_repaint_after(Duration::from_secs_f64(expiry - time));
             } else {
                 state.feedback = None;
             }
         }
+        let boosting = state
+            .gesture
+            .touch
+            .is_some_and(|touch| matches!(touch.mode, Mode::Boost));
         ctx.data_mut(|data| data.insert_temp(id, state));
+        boosting
     }
 
     fn draw(app: &App, ctx: &Context, bounds: Rect, feedback: Feedback) {
@@ -342,7 +350,8 @@ mod tests {
             gesture.update(right, 1.5, bounds.height(), true),
             Some(Action::Speed(1.5))
         );
-        assert_eq!(gesture.finish(1.6, None), Some(Action::Speed(1.0)));
+        assert_eq!(gesture.update(right, 4.0, bounds.height(), true), None);
+        assert_eq!(gesture.finish(4.1, None), Some(Action::Speed(1.0)));
     }
 
     #[test]

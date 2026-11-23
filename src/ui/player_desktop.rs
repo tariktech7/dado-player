@@ -136,6 +136,12 @@ fn button(
                 );
             }
         }
+        "⚙" => super::mobile::components::icon(
+            ui,
+            Rect::from_center_size(center, vec2(size, size)),
+            super::mobile::components::Icon::Settings,
+            ink,
+        ),
         _ => {
             ui.painter()
                 .with_clip_rect(rect.shrink2(vec2(4.0, 0.0)))
@@ -155,6 +161,9 @@ fn button(
                 if label == "▶" { "Play" } else { "Pause" },
             )
         });
+    }
+    if label == "⚙" {
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, "Optionen"));
     }
     crate::ui::mobile::focus::clicked_player(ui, &response)
 }
@@ -221,7 +230,14 @@ fn player_scrim(ctx: &Context, full: Rect, height: f32, color: Color32) -> (Laye
     (layer, bounds)
 }
 
-fn live_hints(ui: &mut Ui, app: &App, bounds: Rect, scale: f32, marked: bool) -> Option<egui::Key> {
+fn live_hints(
+    ui: &mut Ui,
+    app: &App,
+    bounds: Rect,
+    scale: f32,
+    marked: bool,
+    handheld: bool,
+) -> Option<egui::Key> {
     let language = app.settings.language;
     let keys = [egui::Key::F1, egui::Key::F2, egui::Key::F3, egui::Key::F4];
     let appearance = super::desktop::appearance();
@@ -231,7 +247,7 @@ fn live_hints(ui: &mut Ui, app: &App, bounds: Rect, scale: f32, marked: bool) ->
             "F4" => language.text("Bildformat", "Aspect ratio"),
             _ => language.text(&shortcut.de, &shortcut.en),
         };
-        if cfg!(windows) {
+        if cfg!(windows) && !handheld {
             format!("{} {label}", shortcut.key)
         } else {
             label.into()
@@ -266,7 +282,12 @@ fn live_hints(ui: &mut Ui, app: &App, bounds: Rect, scale: f32, marked: bool) ->
         let width = galley.size().x + padding * scale;
         let rect = Rect::from_min_size(pos2(x, bounds.top()), vec2(width, bounds.height()));
         x += width + gap;
-        let response = ui.interact(rect, ui.id().with(key), Sense::click());
+        let hit_rect = if handheld {
+            rect.expand2(vec2(gap / 2.0, 0.0)).intersect(bounds)
+        } else {
+            rect
+        };
+        let response = ui.interact(hit_rect, ui.id().with(key), Sense::click());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, &labels[slot]));
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -461,7 +482,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             },
         ),
     );
-    let stacked_live = live && safe.width() / s < 1640.0;
+    let handheld_live = live && handheld;
+    let live_scale = if handheld_live {
+        (safe.height() / 800.0).clamp(0.42, 0.54)
+    } else {
+        s
+    };
+    let stacked_live = live && (handheld_live || safe.width() / s < 1640.0);
+    let live_row_height = a.live_controls_height * live_scale;
+    let hint_height = if handheld_live { 44.0 } else { 48.0 * s };
     let bottom_size = vec2(
         if live {
             safe.width() * 0.92
@@ -470,10 +499,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 .min(a.player_controls_max_width * s)
         },
         if live {
-            a.live_controls_height + if stacked_live { 48.0 } else { 0.0 }
+            live_row_height + if stacked_live { hint_height } else { 0.0 }
         } else {
-            a.player_controls_height
-        } * s,
+            a.player_controls_height * s
+        },
     );
     let bottom = Rect::from_center_size(
         pos2(
@@ -534,11 +563,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     {
         app.ui_activity = time;
     }
-    let remaining = crate::release_info::CONTROLS_HIDE_SECONDS - (time - app.ui_activity);
-    let reveal_only = std::mem::take(&mut app.player_reveal);
-    let visible = (keep || remaining > 0.0) && !reveal_only;
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    if handheld {
+    let boosting = if handheld {
         let blocked = [
             if live || app.player_chrome {
                 if live {
@@ -556,8 +582,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             },
         ];
         let modal = app.audio_menu_open || app.sub_menu_open || options_open || aspect_open;
-        super::player_gestures::frame(app, &ctx, safe, live, &blocked, modal);
+        super::player_gestures::frame(app, &ctx, safe, live, &blocked, modal)
+    } else {
+        false
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let boosting = false;
+    if boosting {
+        app.ui_activity = time - crate::release_info::CONTROLS_HIDE_SECONDS;
     }
+    let remaining = crate::release_info::CONTROLS_HIDE_SECONDS - (time - app.ui_activity);
+    let reveal_only = std::mem::take(&mut app.player_reveal);
+    let visible = (keep || remaining > 0.0) && !reveal_only && !boosting;
     app.player_chrome = visible;
     let error = app.player_error.clone().or_else(platform_error);
     if !visible && error.is_none() {
@@ -569,7 +605,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         app.player_menu_navigation = false;
         dismiss_menus(app, &ctx);
         crate::ui::mobile::focus::clear_activation();
-        if live && handheld && live_back(&ctx, back_bounds, s, app.settings.language).0 {
+        if live && handheld && !boosting && live_back(&ctx, back_bounds, s, app.settings.language).0
+        {
             app.open_live_list();
             return;
         }
@@ -586,8 +623,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let mut layers = Vec::with_capacity(4);
     {
         let scrim = Color32::from_hex(&a.live_scrim_color).expect("bundled live scrim color");
-        let height = a.live_scrim_height + if stacked_live { 76.0 } else { 0.0 };
-        layers.push(player_scrim(&ctx, full, height * s, scrim));
+        let height = if handheld_live {
+            full.bottom() - bottom.top() + 40.0
+        } else {
+            (a.live_scrim_height + if stacked_live { 76.0 } else { 0.0 }) * s
+        };
+        layers.push(player_scrim(&ctx, full, height, scrim));
     }
     if live {
         let (back, layer) = live_back(&ctx, back_bounds, s, language);
@@ -695,15 +736,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
         let mut action = None;
         if !live {
-            let mut controls = vec![
-                (0, "−10 s", 58.0),
-                (2, "+10 s", 58.0),
-                (4, t("Ton & Untertitel", "Audio & subtitles"), 156.0),
-            ];
+            let mut controls = vec![(4, "Audio", 78.0), (3, "⚙", 44.0)];
             if next.is_some() {
                 controls.push((5, t("Nächste Folge", "Next episode"), 132.0));
             }
-            controls.push((3, t("Optionen", "Options"), 103.0));
             let gap = 7.0;
             let total = controls
                 .iter()
@@ -720,7 +756,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     r,
                     name,
                     a.player_button_font * 0.88 * s,
-                    i == 1 || (i == 3 && options_open),
+                    i == 3 && options_open,
                 ) {
                     action = Some(i);
                 }
@@ -728,6 +764,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         }
         if live {
+            let s = live_scale;
             let utc = chrono::Utc::now().timestamp();
             let channel_id = item
                 .progress_key
@@ -737,7 +774,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 .and_then(|id| app.library.channels.iter().find(|entry| entry.id == id))
                 .map(|entry| (entry.id, entry.num, entry.logo.clone()));
             let y = if stacked_live {
-                bottom.bottom() - a.live_controls_height * s * 0.5
+                bottom.bottom() - live_row_height * 0.5
             } else {
                 bottom.center().y
             };
@@ -754,7 +791,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             };
             let hint_bounds = Rect::from_min_max(
                 pos2(hint_min, hint_top),
-                pos2(bottom.right(), hint_top + 48.0 * s),
+                pos2(bottom.right(), hint_top + hint_height),
             );
             let mut title_left = bottom.left() + 4.0 * s;
             if let Some((_, number, _)) = &channel {
@@ -828,14 +865,20 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     true,
                 );
             }
-            return live_hints(ui, app, hint_bounds, s, app.is_favorite(&item.progress_key)).map(
-                |key| match key {
-                    egui::Key::F1 => 8,
-                    egui::Key::F2 => 6,
-                    egui::Key::F3 => 7,
-                    _ => 9,
-                },
-            );
+            return live_hints(
+                ui,
+                app,
+                hint_bounds,
+                s,
+                app.is_favorite(&item.progress_key),
+                handheld_live,
+            )
+            .map(|key| match key {
+                egui::Key::F1 => 8,
+                egui::Key::F2 => 6,
+                egui::Key::F3 => 7,
+                _ => 9,
+            });
         }
         let y = bottom.top() + 29.0 * s;
         let play = Rect::from_center_size(pos2(bottom.left() + 39.0 * s, y), vec2(51.0, 36.0) * s);
@@ -901,14 +944,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         action
     });
     layers.push(layer);
-    let step = crate::release_info::SEEK_STEP_SECONDS;
     match action {
-        Some(0 | 2) => {
-            let direction = if action == Some(0) { -1 } else { 1 };
-            if let Some(player) = &app.player {
-                player.mpv.seek_relative(step * f64::from(direction));
-            }
-        }
         Some(1) => {
             if let Some(player) = &app.player {
                 player.mpv.toggle_pause();
@@ -951,7 +987,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             bottom,
             s,
             &[
-                (t("Ton & Untertitel", "Audio & subtitles"), 202.0, false),
+                (
+                    if live {
+                        t("Ton & Untertitel", "Audio & subtitles")
+                    } else {
+                        "Audio"
+                    },
+                    132.0,
+                    false,
+                ),
                 (t("Bildformat", "Aspect ratio"), 146.0, false),
                 (t("Beenden", "Stop"), 128.0, false),
             ],

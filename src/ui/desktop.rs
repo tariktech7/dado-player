@@ -154,11 +154,17 @@ pub(super) fn search_field(
     hint: &str,
     remote: bool,
 ) -> egui::Response {
-    let height = handheld_size((56.0 * scale(ui.ctx())).max(26.0), 44.0);
-    let response = ui.add_sized(
-        [ui.available_width().max(1.0), height],
-        egui::TextEdit::singleline(value).hint_text(hint),
-    );
+    let mut edit = egui::TextEdit::singleline(value).hint_text(hint);
+    let height = if handheld() {
+        edit = edit
+            .font(FontId::proportional(15.0))
+            .margin(egui::Margin::symmetric(7.0, 7.0))
+            .vertical_align(Align::Center);
+        34.0
+    } else {
+        (56.0 * scale(ui.ctx())).max(26.0)
+    };
+    let response = ui.add_sized([ui.available_width().max(1.0), height], edit);
     if remote && ui::mobile::focus::clicked(ui, &response) {
         response.request_focus();
     }
