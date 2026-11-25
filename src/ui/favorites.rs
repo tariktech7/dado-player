@@ -261,6 +261,7 @@ pub fn category_tabs(app: &mut App, ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         for (i, label) in ["Live-TV", "Serien", "Filme"].iter().enumerate() {
             let r = ui.selectable_label(app.favorite_section == i, *label);
+            crate::ui::mobile::focus::prefer_entry(r.id);
             let clicked = if app.shared_remote_navigation() {
                 crate::ui::mobile::focus::clicked(ui, &r)
             } else {

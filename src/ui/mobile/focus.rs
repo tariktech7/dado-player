@@ -20,7 +20,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use egui::{Color32, Rect, Response, Rounding, Stroke, Ui};
+use egui::{Rect, Response, Rounding, Stroke, Ui};
 
 use super::tokens;
 use crate::platform::RemoteKey;

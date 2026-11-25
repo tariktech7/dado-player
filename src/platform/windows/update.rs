@@ -87,7 +87,7 @@ pub fn show(ui: &mut egui::Ui) {
     };
     let mut state = state().lock().unwrap();
     ui.add_enabled_ui(!state.busy, |ui| {
-        ui.collapsing("Zugang zum privaten GitHub-Release", |ui| {
+        let access = ui.collapsing("Zugang zum privaten GitHub-Release", |ui| {
             ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
             ui.add(crate::ui::text_field(
                 &mut state.token,
@@ -96,6 +96,7 @@ pub fn show(ui: &mut egui::Ui) {
                 |edit| edit.password(true),
             ));
         });
+        crate::ui::settings::focus_option(ui, &access.header_response);
     });
     if state.busy {
         ui.spinner();

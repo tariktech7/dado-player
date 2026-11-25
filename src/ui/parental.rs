@@ -6,6 +6,7 @@ fn button(ui: &mut Ui, label: &str) -> bool {
         [ui.available_width().min(360.0), 38.0],
         egui::Button::new(label),
     );
+    super::settings::focus_option(ui, &r);
     clicked(ui, &r)
 }
 fn clicked(ui: &Ui, r: &egui::Response) -> bool {

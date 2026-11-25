@@ -375,6 +375,7 @@ pub fn category_tabs(app: &mut App, ui: &mut Ui) {
             (ContinueTab::Movies, "Filme"),
         ] {
             let r = ui.selectable_label(app.continue_tab == tab, label);
+            crate::ui::mobile::focus::prefer_entry(r.id);
             let hit = if app.shared_remote_navigation() {
                 crate::ui::mobile::focus::clicked(ui, &r)
             } else {

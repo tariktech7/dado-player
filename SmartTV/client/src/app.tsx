@@ -800,12 +800,19 @@ function App() {
     setDetail(memory?.detail || null);
     setEpisodes(memory?.episodes || []);
     setEpisodeLoad(memory?.episodeLoad || "loading");
-    if (next === "live" || next === "vod" || next === "series") {
-      requestAnimationFrame(() => {
-        const content = document.querySelector<HTMLElement>(`.shell[data-focus-scope="${next}"] .category-list button`);
-        content?.focus({preventScroll:true});
-      });
-    }
+    const entrySelector = {
+      live: ".category-list",
+      vod: ".category-list",
+      series: ".category-list",
+      settings: ".settings-sections",
+      history: ".kind-tabs",
+      favorites: ".kind-tabs",
+      search: ".header-search"
+    }[next as Exclude<View, "home">];
+    if (entrySelector) requestAnimationFrame(() => {
+      const entry = document.querySelector(`.shell[data-focus-scope="${next}"] ${entrySelector}`);
+      if (entry) focusables(entry)[0]?.focus({preventScroll:true});
+    });
   };
   const importCloudProfiles = (profiles:Profile[]) => {
     const merged=mergeCloudProfiles(savedRef.current.profiles,profiles);
@@ -904,18 +911,8 @@ function App() {
   };
   const goShortcut = (next: View) => {
     go(next);
-    requestAnimationFrame(() => {
-      if (next === "live" || next === "vod" || next === "series") return;
-      if (next === "search") {
-        document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
-        return;
-      }
-      if (next === "settings" && classic) {
-        const first = document.querySelector<HTMLElement>(".settings-sections button, .settings-options button");
-        if (first) { first.focus(); return; }
-      }
-      (document.querySelector<HTMLElement>(`.navigation button[data-focus-key="${next}"]`) ||
-        document.querySelector<HTMLElement>(next === "home" ? ".classic-primary button" : ".classic-header button"))?.focus();
+    if (next === "home") requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(classic ? ".classic-primary button" : '.navigation [data-focus-key="home"]')?.focus();
     });
   };
   const stepLive = (delta: number) => {
@@ -1788,7 +1785,10 @@ function App() {
               setSettingsDraft(null);
               setCacheCleared(false);
               setSettingsSection(section.id);
-              requestAnimationFrame(() => document.querySelector<HTMLElement>(".classic-header .settings-back")?.focus());
+              requestAnimationFrame(() => {
+                const options = document.querySelector(`[data-settings-section="${section.id}"]`);
+                if (options) focusables(options)[0]?.focus({preventScroll:true});
+              });
             }}>
               <SettingsTileIcon section={section.id} />
               <span>{section[saved.settings.language]}</span>

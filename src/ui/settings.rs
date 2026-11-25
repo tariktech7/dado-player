@@ -93,7 +93,16 @@ pub(crate) fn uses_ordered_focus(index: usize) -> bool {
     })
 }
 
+pub(crate) fn focus_option(ui: &Ui, response: &egui::Response) {
+    let pending = egui::Id::new("settings-option-entry");
+    if response.enabled() && ui.data_mut(|data| data.remove_temp::<bool>(pending)) == Some(true) {
+        response.request_focus();
+        super::mobile::focus::prefer_entry(response.id);
+    }
+}
+
 fn activate(ui: &Ui, response: &egui::Response) -> bool {
+    focus_option(ui, response);
     if super::mobile::active(ui.ctx()) {
         super::mobile::focus::clicked(ui, response)
     } else {
@@ -127,7 +136,7 @@ fn select<T: Copy + PartialEq>(
             .iter()
             .find(|(option, _)| option == value)
             .map_or("–", |(_, label)| *label);
-        egui::ComboBox::from_id_source(("setting-option", label))
+        let combo = egui::ComboBox::from_id_source(("setting-option", label))
             .selected_text(selected)
             .width(ui.available_width().min(360.0))
             .show_ui(ui, |ui| {
@@ -137,6 +146,7 @@ fn select<T: Copy + PartialEq>(
                         .changed();
                 }
             });
+        focus_option(ui, &combo.response);
         return changed;
     }
     ui.horizontal_wrapped(|ui| {
@@ -171,6 +181,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let mut changed = false;
     let mut playback_changed = false;
     let draft = ui.id().with("settings-draft");
+    let available = ui.available_size();
+    let section_key = egui::Id::new("last-settings-section");
+    let pending = egui::Id::new("settings-option-entry");
+    ui.data_mut(|data| {
+        let previous = data.remove_temp::<usize>(section_key);
+        if let Some(index) = app.settings_section {
+            data.insert_temp(section_key, index);
+            if previous != Some(index) {
+                data.insert_temp(pending, true);
+            }
+        }
+    });
     egui::ScrollArea::vertical()
         .id_source(("settings-page", app.settings_section))
         .auto_shrink([false, false])
@@ -186,12 +208,18 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 let mobile = super::mobile::active(ui.ctx());
                 centered_contents(
                     ui,
-                    super::desktop::appearance().settings_panel_width * scale,
+                    (available.x * 0.85)
+                        .min(super::desktop::appearance().settings_panel_width * scale.max(0.8)),
                     draft.with(index),
                     300.0 * scale,
                     |ui| {
-                        ui.vertical_centered(|ui| ui.heading(t(&section.de, &section.en)));
-                        ui.add_space(14.0);
+                        ui.vertical_centered(|ui| {
+                            ui.heading(
+                                egui::RichText::new(t(&section.de, &section.en))
+                                    .size((available.y * 0.055).clamp(23.0, 45.0)),
+                            );
+                        });
+                        ui.add_space((available.y * 0.022).clamp(12.0, 26.0));
                         panel(
                             app,
                             ui,
@@ -206,18 +234,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             } else {
                 centered_contents(
                     ui,
-                    1380.0 * scale,
+                    available.x * 0.95,
                     draft.with("overview"),
                     640.0 * scale,
                     |ui| {
-                        ui.vertical_centered(|ui| ui.heading(t("Einstellungen", "Settings")));
+                        ui.vertical_centered(|ui| {
+                            ui.heading(
+                                egui::RichText::new(t("Einstellungen", "Settings"))
+                                    .size((available.y * 0.06).clamp(24.0, 52.0)),
+                            );
+                        });
                         ui.add_space((24.0 * scale).max(12.0));
                         let width = ui.available_width();
                         let columns = if width < 580.0 { 2 } else { 3 };
                         let gap = (18.0 * scale).max(10.0);
                         let tile_width =
                             ((width - (columns - 1) as f32 * gap) / columns as f32 - 2.0).max(1.0);
-                        let tile_height = (128.0 * scale).max(64.0);
+                        let tile_height = ((available.y - (130.0 * scale).max(82.0))
+                            / (sections().len().div_ceil(columns) as f32)
+                            - gap)
+                            .clamp((112.0 * scale).max(58.0), (240.0 * scale).max(82.0));
                         let tiles: Vec<_> = sections()
                             .iter()
                             .enumerate()
@@ -250,6 +286,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                         egui::vec2(tile_width, tile_height),
                                         egui::Sense::click(),
                                     );
+                                    if app.settings_return_tile.is_none() {
+                                        focus::prefer_entry(response.id);
+                                    }
                                     if app.settings_return_tile == Some(index) {
                                         app.settings_return_tile = None;
                                         response.request_focus();
@@ -318,7 +357,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                     };
                                     if clicked {
                                         app.settings_section = Some(index);
-                                        app.settings_return_tile = Some(index);
                                         if section.id == "cache" {
                                             ui.ctx().data_mut(|data| {
                                                 data.remove::<bool>(egui::Id::new(
@@ -339,6 +377,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 );
             }
         });
+    ui.data_mut(|data| data.remove::<bool>(pending));
     if changed || playback_changed {
         app.save_settings_now();
         ui.ctx().request_repaint();
@@ -386,7 +425,6 @@ pub(super) fn open_profiles(app: &mut App) {
     app.settings_section = sections()
         .iter()
         .position(|section| section.id == "profiles");
-    app.settings_return_tile = app.settings_section;
 }
 
 fn quick_choice<T: Copy + PartialEq>(
@@ -407,6 +445,7 @@ fn quick_choice<T: Copy + PartialEq>(
             [ui.available_width(), ui.spacing().interact_size.y.max(40.0)],
             egui::SelectableLabel::new(slot == index, choice_label(label, *value == current)),
         );
+        focus_option(ui, &response);
         if super::mobile::focus::clicked(ui, &response) {
             index = slot;
             ui.ctx().data_mut(|data| data.insert_temp(key, index));
@@ -460,6 +499,7 @@ fn profiles(app: &mut App, ui: &mut Ui) {
                                 )
                             })
                             .inner;
+                        focus_option(ui, &response);
                         if focus::clicked(ui, &response) {
                             select = Some(index);
                         }
@@ -475,6 +515,7 @@ fn profiles(app: &mut App, ui: &mut Ui) {
         ui.spinner();
     }
     let add = ui.button(t.text("Profil hinzufügen", "Add profile"));
+    focus_option(ui, &add);
     if focus::clicked(ui, &add) {
         app.begin_profile_add();
     }
@@ -590,11 +631,12 @@ fn panel(
                 .max(16.0),
         )
         .inner_margin(egui::Margin::same(
-            (24.0 * super::desktop::scale(ui.ctx())).max(16.0),
+            (32.0 * super::desktop::scale(ui.ctx())).max(16.0),
         ))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.spacing_mut().item_spacing.y = ui.spacing().item_spacing.y.max(10.0);
+            let spacing = (super::desktop::scale(ui.ctx()) * 20.0).max(12.0);
+            ui.spacing_mut().item_spacing.y = ui.spacing().item_spacing.y.max(spacing);
             match section {
                 "clock" => {
                     if let Some(value) = quick_choice(

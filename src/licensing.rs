@@ -395,7 +395,9 @@ fn license_controls(ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         ui.label("Geräte-ID");
         ui.label(egui::RichText::new(&code).monospace());
-        if ui.small_button("ID kopieren").clicked() {
+        let copy = ui.small_button("ID kopieren");
+        crate::ui::settings::focus_option(ui, &copy);
+        if copy.clicked() {
             ui.output_mut(|o| o.copied_text = code.clone());
         }
     });

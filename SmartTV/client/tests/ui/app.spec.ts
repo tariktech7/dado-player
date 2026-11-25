@@ -1976,6 +1976,8 @@ test("remote moves through each player choice before reaching save", async ({pag
   const back = page.locator('.classic-header').getByRole('button', {name: '‹ Alle Einstellungen'});
   const choices = panel.locator('.settings-choices button');
   const save = panel.getByRole('button', {name: 'Änderungen speichern'});
+  await expect(choices.first()).toBeFocused();
+  await page.keyboard.press('ArrowUp');
   await expect(back).toBeFocused();
   const first = (await choices.first().boundingBox())!;
   const second = (await choices.nth(1).boundingBox())!;
@@ -2068,11 +2070,17 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
   else await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
   const overview = page.locator('.settings-overview');
   await expect(overview.getByRole('heading', {name:'Einstellungen'})).toBeVisible();
-  const overviewOffset = await overview.evaluate(element => {
+  const coverage = await overview.evaluate(element => {
     const box = element.getBoundingClientRect(), parent = element.parentElement!.getBoundingClientRect();
-    return Math.abs(box.top + box.height / 2 - parent.top - parent.height / 2);
+    return {
+      verticalOffset: Math.abs(box.top + box.height / 2 - parent.top - parent.height / 2),
+      width: box.width / parent.width,
+      height: box.height / parent.height,
+    };
   });
-  expect(overviewOffset).toBeLessThan(3);
+  expect(coverage.verticalOffset).toBeLessThan(3);
+  expect(coverage.width).toBeGreaterThan(.9);
+  expect(coverage.height).toBeGreaterThan(.8);
   const back = page.locator('.classic-header .classic-back');
   const backTop = (await back.boundingBox())!.y;
   const keys = await page.locator('.settings-sections button').evaluateAll(nodes =>
@@ -2082,6 +2090,7 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     await openSettingsSection(page, key);
     const panel = page.locator(`[data-settings-section="${key}"]`);
     await expect(panel.getByRole('heading', {level:2})).toBeVisible();
+    await expect(panel.locator('button:not([disabled]):not([tabindex="-1"]):visible, input:not([disabled]):visible, select:not([disabled]):visible').first()).toBeFocused();
     await expect(back).toHaveAccessibleName('‹ Alle Einstellungen');
     expect(Math.abs((await back.boundingBox())!.y - backTop)).toBeLessThan(2);
     await expect(panel.getByRole('button', {name:'‹ Alle Einstellungen'})).toHaveCount(0);
@@ -2117,13 +2126,18 @@ for (const classic of [false, true]) test(`menu positions and header controls in
   const header = page.locator('.classic-header');
   const searchButton = header.getByRole('button', {name:'Suche',exact:true});
   await expect(searchButton).toHaveAttribute('tabindex', '-1');
-  for (const [view, body] of [
-    ['live', '.channel-list'], ['vod', '.catalog-title-list'], ['series', '.catalog-title-list'],
-    ['favorites', '.personal-main'], ['history', '.personal-main'], ['settings', '.settings-overview'],
+  for (const [view, body, entry] of [
+    ['live', '.channel-list', '.category-list button'],
+    ['vod', '.catalog-title-list', '.category-list button'],
+    ['series', '.catalog-title-list', '.category-list button'],
+    ['favorites', '.personal-main', '.kind-tabs button'],
+    ['history', '.personal-main', '.kind-tabs button'],
+    ['settings', '.settings-overview', '.settings-sections button'],
   ]) {
     await shell.locator(`button[data-focus-key="${view}"]`).first().click();
     await expect(shell).toHaveAttribute('data-focus-scope', view);
     await expect(page.locator(body)).toBeVisible();
+    await expect(shell.locator(entry).first()).toBeFocused();
     await expect(header.getByRole('searchbox')).toHaveCount(1);
     const back = header.getByRole('button', {name:'‹ Zurück'});
     await back.hover();

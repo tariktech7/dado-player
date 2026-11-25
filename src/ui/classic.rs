@@ -165,10 +165,6 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                     },
                     header_height - 8.0,
                 );
-                if in_settings && app.settings_return_tile.take().is_some() {
-                    response.request_focus();
-                    focus::request_id(response.id);
-                }
                 if activate(ui, &response, app.shared_remote_navigation()) {
                     back(app, ui.ctx());
                 }
