@@ -1135,21 +1135,21 @@ function App() {
     document.addEventListener("keydown", key);
     window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
-    let pointerPoster: Element | null = null;
+    let pointerControl: Element | null = null;
     const pointerDown = (e: PointerEvent) => {
-      pointerPoster = (e.target as Element).closest(".catalog-poster");
+      pointerControl = (e.target as Element).closest("button,input,select,textarea,[tabindex]");
     };
-    const pointerUp = () => { pointerPoster = null; };
+    const pointerUp = () => { pointerControl = null; };
     document.addEventListener("pointerdown", pointerDown, true);
     document.addEventListener("pointerup", pointerUp, true);
     document.addEventListener("pointercancel", pointerUp, true);
     const focus = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
-      if (target !== pointerPoster && !restoringPosterFocus.current &&
+      if (target !== pointerControl && !restoringPosterFocus.current &&
           target.closest(".shell") && !target.closest(".catalog-details"))
         setNavCollapsed(!target.closest(".navigation"));
       rememberFocus(target);
-      if (!restoringPosterFocus.current) scrollFocused(target);
+      if (target !== pointerControl && !restoringPosterFocus.current) scrollFocused(target);
     };
     document.addEventListener("focusin", focus);
     document.addEventListener("visibilitychange", visibility);
