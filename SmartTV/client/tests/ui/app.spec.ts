@@ -2061,7 +2061,7 @@ test("turning off watch history hides continue and the saved progress prompts", 
   await expect(page.locator('.category-list').getByRole('button',{name:/Fortsetzen/})).toHaveCount(0);
 });
 
-test("all settings submenus keep their controls inside a shared content column", async ({page}) => {
+test("all settings submenus keep their controls inside a shared content column", async ({page}, testInfo) => {
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
@@ -2072,6 +2072,14 @@ test("all settings submenus keep their controls inside a shared content column",
     await openSettingsSection(page, key);
     const panel = page.locator(`[data-settings-section="${key}"]`);
     await expect(panel.getByRole('heading', {level:2})).toBeVisible();
+    const alignment = await panel.evaluate(element => {
+      const panel = element.getBoundingClientRect();
+      const page = element.closest('.settings-page')!.getBoundingClientRect();
+      return {x: Math.abs(panel.left + panel.width / 2 - page.left - page.width / 2),
+        y: Math.abs(panel.top + panel.height / 2 - page.top - page.height / 2)};
+    });
+    expect(alignment.x, key).toBeLessThan(2);
+    expect(alignment.y, key).toBeLessThan(2);
     const layout = await panel.locator('.settings-content').evaluate(content => {
       const box = content.getBoundingClientRect();
       const controls = [...content.querySelectorAll('button,input,select')]
@@ -2082,6 +2090,7 @@ test("all settings submenus keep their controls inside a shared content column",
     });
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
+    if (key === 'playback') await page.screenshot({path: testInfo.outputPath('settings-playback.png')});
     await panel.getByRole('button', {name:'‹ Alle Einstellungen'}).click();
   }
 });

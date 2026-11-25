@@ -11,11 +11,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let remote = app.shared_remote_navigation();
     if !super::desktop::active(ui.ctx()) {
         ui.horizontal(|ui| {
-            ui.add(
-                egui::TextEdit::singleline(&mut app.search_q)
-                    .hint_text("Kanal, Film oder Serie suchen…")
-                    .desired_width(380.0),
-            );
+            ui.add(super::text_field(
+                &mut app.search_q,
+                "Kanal, Film oder Serie suchen…",
+                None,
+                |edit| edit.desired_width(380.0),
+            ));
             if !app.search_q.is_empty() && ui.button("×").clicked() {
                 app.search_q.clear();
             }

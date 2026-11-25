@@ -32,6 +32,11 @@ private final class InlineEditor: NSObject, UITextFieldDelegate {
             input.autocorrectionType = .no
             input.spellCheckingType = .no
             input.font = .systemFont(ofSize: 16)
+            input.contentVerticalAlignment = .center
+            input.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
+            input.leftViewMode = .always
+            input.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
+            input.rightViewMode = .always
             input.returnKeyType = kind == 2 ? .done : .next
             input.addTarget(self, action: #selector(changed), for: .editingChanged)
             field = input

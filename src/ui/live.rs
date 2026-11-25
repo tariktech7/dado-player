@@ -377,14 +377,14 @@ pub fn show_tv(app: &mut App, ui: &mut Ui, content: Rect, title_row: Rect) {
         Rect::from_min_size(pos2(channels_x, content.top()), vec2(channel_w, header_h));
     let mut search_ui = ui.child_ui(search_rect, Layout::top_down(Align::Min));
     search_ui.spacing_mut().interact_size.y = header_h;
-    let text_h = search_ui.fonts(|fonts| fonts.row_height(&tokens::reg(16.0)));
-    let search_margin_y = ((header_h - text_h) * 0.5).max(0.0);
     let query = search_ui.put(
         search_rect,
-        egui::TextEdit::singleline(&mut app.live_q)
-            .font(tokens::reg(16.0))
-            .margin(vec2(6.0, search_margin_y))
-            .hint_text("Sender suchen"),
+        super::text_field(
+            &mut app.live_q,
+            "Sender suchen",
+            Some(tokens::reg(16.0)),
+            |edit| edit,
+        ),
     );
     focus::set_zone(2);
     if focus::clicked(&search_ui, &query) {
@@ -698,7 +698,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         30.0
                     },
                 ],
-                egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
+                super::text_field(&mut app.live_q, "Sender suchen", None, |edit| edit),
             );
             if app.shared_remote_navigation() && focus::clicked(ui, &query) {
                 query.request_focus();

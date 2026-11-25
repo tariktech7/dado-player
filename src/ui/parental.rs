@@ -305,7 +305,12 @@ fn management_panel(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-    ui.add(egui::TextEdit::singleline(&mut app.parental.query).hint_text("Inhalte suchen …"));
+    ui.add(super::text_field(
+        &mut app.parental.query,
+        "Inhalte suchen …",
+        None,
+        |edit| edit,
+    ));
     let q = app.parental.query.to_lowercase();
     let signature = format!(
         "{}:{}:{}:{}:{}:{:p}",

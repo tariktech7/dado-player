@@ -8,12 +8,13 @@ checks:
   * the run folder contains exactly one file (the EXE)
   * the app boots (first-frame marker / visible window)
   * video actually renders (IPTV_TEST_STREAM=1 -> animated test pattern)
-  * all 9 application-local files are extracted with correct sizes
+  * the application-local files are extracted and match the assembled build
   * closing the window exits the whole process tree with code 0
 
 No credentials or debug logs are involved.
 """
 import ctypes
+import hashlib
 import os
 import shutil
 import subprocess
@@ -39,6 +40,11 @@ EXPECT = {
     "msvcp140_2.dll": os.path.getsize(os.path.join(DIST, "msvcp140_2.dll")),
     "concrt140.dll": os.path.getsize(os.path.join(DIST, "concrt140.dll")),
 }
+
+
+def digest(path):
+    with open(path, "rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
 
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
@@ -228,6 +234,9 @@ def main():
         for n, exp, got in mism:
             print(f"  size mismatch {n}: expected {exp}, got {got}")
         fail("Groesse der extrahierten Dateien stimmt nicht")
+    stale = [name for name in EXPECT if digest(os.path.join(rt, name)) != digest(os.path.join(DIST, name))]
+    if stale:
+        fail(f"Portable-Paket enthält andere Dateien als der aktuelle Build: {stale}")
     print(f"extraction OK: {len(EXPECT)} files in {rt}")
     for name in ("msvcp_win.dll", "d3dcompiler_47.dll"):
         if os.path.exists(os.path.join(rt, name)):

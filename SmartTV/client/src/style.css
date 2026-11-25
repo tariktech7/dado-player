@@ -93,7 +93,7 @@ button,
 input,
 select {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--control-radius, 18px);
   background: var(--card);
   font-size: 28px;
   min-height: 54px;
@@ -142,6 +142,11 @@ input[type="checkbox"] {
 }
 input::placeholder {
   color: var(--muted);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea {
+  line-height: 1.25;
+  padding: 8px 16px;
 }
 .primary {
   background: #295885;
@@ -1724,7 +1729,8 @@ hr {
 }
 .settings-sections button svg { width: 38px; height: 38px; flex: none; color: var(--accent); }
 .settings-sections button:focus { outline-offset: -4px; background: var(--select); }
-.settings-options { min-width: 0; max-width: 880px; padding: 24px 28px; }
+.settings-page.has-setting { display: flex; flex-direction: column; min-height: 100%; padding: 24px 18px; }
+.settings-options { width: 100%; min-width: 0; max-width: var(--settings-panel-width); margin: auto; padding: 24px 28px; border-radius: var(--settings-panel-radius); }
 .settings-options .settings-back { margin-bottom: 20px; font-size: 21px; }
 .settings-choices { display: grid; gap: 20px; margin: 20px 0 30px; }
 .settings-choices button { min-height: 62px; display: flex; align-items: center; gap: 12px; }
@@ -1752,7 +1758,7 @@ hr {
 .settings-content > p, .settings-content > .field { margin: 0; }
 .settings-options .field > input, .settings-options .field > select { width: 100%; min-width: 0; }
 .settings-content > .glass { padding: 16px; }
-.settings-options h2 { margin-top: 0; }
+.settings-options h2 { margin-top: 0; font-weight: 600; }
 
 .player-top {
   min-height: var(--player-top-height);
@@ -1850,7 +1856,6 @@ hr {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 16px;
   padding: 0 18px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -1859,14 +1864,17 @@ hr {
 }
 .classic-header img { width: 32px; height: 32px; }
 .classic-header time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.header-search { display: flex; gap: 8px; margin-left: auto; min-width: 0; }
+.classic-header > * + * { margin-left: 16px; }
+.classic-header > .header-search { display: flex; align-items: center; margin-left: auto; min-width: 0; }
+.header-search > button { margin-right: 8px; }
 .header-search-field { width: 280px; min-width: 0; max-width: 25vw; }
+.classic-header .header-search-field, .classic-header .header-search button, .classic-header .refresh-library { height: 48px; min-height: 48px; }
 .shell:not(.classic-shell) { grid-template-rows: var(--classic-header-height) minmax(0, 1fr); }
 .shell:not(.classic-shell) > .navigation { grid-row: 1 / -1; }
 .shell > .modern-header { grid-column: 2 / -1; grid-row: 1; }
 .classic-header button { font-size: 20px; }
 .classic-header .classic-back { min-height: 0; height: 40px; padding: 0 14px; white-space: nowrap; }
-.classic-header .refresh-library { display: grid; place-items: center; width: 50px; height: 42px; padding: 0; }
+.classic-header .refresh-library { display: grid; place-items: center; width: 48px; padding: 0; }
 .classic-header .refresh-icon { display: block; width: 26px; height: 26px; }
 .classic-header .refresh-icon svg { width: 100%; height: 100%; }
 .shell.classic-shell main { grid-column: 1 / -1; padding: 0; min-height: 0; }

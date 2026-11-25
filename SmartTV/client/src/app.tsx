@@ -1665,7 +1665,7 @@ function App() {
           {update && <p role="status">{update}</p>}
           <p class="muted">{t('Mit GitHub-Lesezugriff prüft Dado Player automatisch alle sechs Stunden auf signierte Web-Updates.',
             'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
-          <p class="muted">{APP_VERSION} · Build {APP_BUILD} · D7</p>
+          <p class="muted">{APP_VERSION}{releaseInfo.channel === "beta" ? ` Beta ${releaseInfo.betaNumber}` : ""} · Build {APP_BUILD}</p>
         </div>;
         }
         case "license": return <>
@@ -1766,9 +1766,9 @@ function App() {
       }
     };
     return (
-      <div class="settings-page">
-        <h1>{t("Einstellungen", "Settings")}</h1>
-        {!active ? <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
+      <div class={`settings-page${active ? " has-setting" : ""}`}>
+        {!active ? <><h1>{t("Einstellungen", "Settings")}</h1>
+        <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
           {settingsSections.filter(section => !query.trim() || section[saved.settings.language].toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(section => (
             <button key={section.id} data-focus-key={section.id} onClick={() => {
               setSettingsDraft(null);
@@ -1780,7 +1780,7 @@ function App() {
               <span>{section[saved.settings.language]}</span>
             </button>
           ))}
-        </nav> : <section key={active.id} id="settings-options" class="glass settings-options"
+        </nav></> : <section key={active.id} id="settings-options" class="glass settings-options"
             data-focus-zone="settings-options" data-settings-section={active.id}
             data-license-status={active.id === "license" ? "" : undefined}>
           <button class="settings-back menu-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>

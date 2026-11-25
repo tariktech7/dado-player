@@ -54,6 +54,9 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
 - Windows, Android, iOS und Samsung sind ein gemeinsamer Release. UI-, Geometrie-,
   Bedienungs- und Player-Änderungen auf allen vier Builds umsetzen, prüfen und
   gemeinsam veröffentlichen, sofern Tarik eine Plattform ausdrücklich ausnimmt.
+  Die Windows-Abnahme mit der fertigen `Releases/Dado-Player.exe` wiederholen
+  und die betroffenen Ansichten tatsächlich öffnen. Den gemeinsamen Download
+  über den nummerierten Release-Tag verlinken.
 
 - Nach einem Samsung-Build für Tarik das signierte Paket auf dem Haupt-TV aus
   SmartTV/client/tizen.local.json installieren und die Installation prüfen.

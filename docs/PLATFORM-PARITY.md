@@ -1,4 +1,4 @@
-# Gemeinsamer Produktstand 0.8.0 Beta 2
+# Gemeinsamer Produktstand
 
 `release.json` ist die Versionsquelle für Windows, Android, iOS und Samsung. Die vier
 Buildnummern bleiben eigenständig monoton steigend. Größere Beta-Stände erhalten
@@ -53,6 +53,9 @@ von der Dado-Dauerlizenz und können selbst zeitlich oder auf Geräte beschränk
 - Android-Emulator mit Testanbieter für Tabs, Details, Scrollen, Eingabe und Rotation; echte Hardware separat ausweisen.
 - Echte iPhone-/TV-Wiedergabe, Overscan und Fernbedienung erst nach Gerätetest als bestätigt bezeichnen.
 - Alte Pakete archivieren. Windows aktuell ausschließlich Releases/Dado-Player.exe.
+- Die fertige Portable starten und die geänderten Ansichten mit derselben
+  Demo-Bibliothek wie auf den anderen Plattformen prüfen. Die Prüfroutine
+  vergleicht entpackte Windows-Dateien anhand ihrer SHA-256 mit dem Build.
 - Eine WGT niemals als USB-installierbar ausgeben. Dafür müssen von Samsung erzeugte TMG- und Lizenzdateien vorliegen.
 
 ## Öffentliche Verteilung
@@ -61,6 +64,24 @@ von der Dado-Dauerlizenz und können selbst zeitlich oder auf Geräte beschränk
 - Windows-Paket mit Herausgebersignatur prüfen und auf einem sauberen Windows-10-/11-Gerät starten. Unter Android die APK vom vorgesehenen öffentlichen Kanal über eine vorhandene Installation aktualisieren.
 - iOS vor öffentlicher Freigabe auf einem iPhone mit Live-TV, Film und Serienfolge prüfen. Die aktuelle IPA verwendet die Installation über AltStore/Sideloadly.
 - Das Samsung-Entwicklerpaket ist gerätegebunden. Für allgemein verfügbare Installationen wird ein von Samsung freigegebener Verteilweg benötigt.
+
+## Eingabefelder und Einstellungs-Untermenüs
+
+- Platzhalter und Eingabetext nutzen dieselbe optische Mitte, dieselbe
+  Schriftgröße und denselben Innenabstand. Bezeichnungen für Profil- und
+  Zugangsdaten stehen außerhalb der Felder. Passwortfelder behalten ihre
+  Maskierung und den eigenen Platz für die Sichtbarkeitstaste.
+- Die Kopfzeile hat eine Achse für Suche, Eingabefeld, Aktualisieren und Uhr.
+  Untermenüs bilden eine mittige Gruppe mit eigener Überschrift und
+  linksbündigen Optionen. Kurze Gruppen stehen mittig, lange bleiben scrollbar.
+- Bedienelemente verwenden einen kleineren Radius als Inhaltskarten.
+  Überschriften, Optionen, gespeicherte Auswahl und Fernbedienungsfokus
+  erhalten jeweils eine erkennbare Darstellung. Die gemeinsamen Abmessungen
+  liegen in `shared/shell-appearance.json`.
+
+[Apple HIG · Layout](https://developer.apple.com/design/human-interface-guidelines/layout),
+[Text fields](https://developer.apple.com/design/human-interface-guidelines/text-fields),
+[Typography](https://developer.apple.com/design/human-interface-guidelines/typography).
 
 ## Automatik und Experten (0.6.1)
 

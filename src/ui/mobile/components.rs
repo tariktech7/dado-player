@@ -1140,20 +1140,21 @@ pub fn field(
     // the reason users reported the icon as missing altogether.
     let eye_w = if kb == Kb::Password { TOUCH } else { 0.0 };
     let text_w = (ui.available_width() - eye_w).max(48.0);
-    let mut te = egui::TextEdit::singleline(text)
-        .id(ui.id().with(("mobile-text-field", label, hint)))
-        .frame(false)
-        .hint_text(hint)
-        .min_size(vec2(text_w, TOUCH))
-        .desired_width(f32::INFINITY);
-    if kb == Kb::Password {
-        te = te.password(!*show_password);
-    }
+    let id = ui.id().with(("mobile-text-field", label, hint));
+    let password = kb == Kb::Password && !*show_password;
     let rect = Rect::from_min_size(ui.next_widget_position(), vec2(text_w, TOUCH));
     ui.painter().rect_filled(rect, RADIUS_SM, surface(ui));
     ui.painter()
         .rect_stroke(rect, RADIUS_SM, Stroke::new(1.0_f32, hairline(ui)));
-    let resp = ui.put(rect, te.margin(vec2(12.0, 10.0)));
+    let resp = ui.put(
+        rect,
+        crate::ui::text_field(text, hint, None, |edit| {
+            edit.id(id)
+                .frame(false)
+                .password(password)
+                .desired_width(f32::INFINITY)
+        }),
+    );
     #[cfg(target_os = "ios")]
     {
         let id = resp.id.value();

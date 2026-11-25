@@ -24,6 +24,73 @@ use crate::app::App;
 use crate::theme;
 use egui::{Align2, Color32, FontId, Response, RichText, Rounding, Sense, Stroke, Ui, Vec2};
 
+pub(crate) const TEXT_FIELD_INSET: f32 = 12.0;
+
+pub(crate) fn text_field<'a>(
+    value: &'a mut String,
+    hint: &'a str,
+    font: Option<FontId>,
+    configure: impl FnOnce(egui::TextEdit<'a>) -> egui::TextEdit<'a> + 'a,
+) -> impl egui::Widget + 'a {
+    move |ui: &mut Ui| {
+        let font = font.unwrap_or_else(|| egui::TextStyle::Body.resolve(ui.style()));
+        let edit = egui::TextEdit::singleline(value)
+            .font(font.clone())
+            .margin(egui::Margin::symmetric(TEXT_FIELD_INSET, 4.0))
+            .vertical_align(egui::Align::Center);
+        let output = configure(edit).show(ui);
+        if !hint.is_empty() && output.galley.job.text.is_empty() {
+            let rect = output.response.rect;
+            let color = ui.visuals().weak_text_color();
+            let painter = ui.painter().with_clip_rect(output.text_clip_rect);
+            let galley = painter.layout_no_wrap(hint.into(), font, color);
+            let pos = egui::pos2(
+                rect.left() + TEXT_FIELD_INSET,
+                rect.center().y - galley.size().y / 2.0,
+            );
+            painter.galley(pos, galley, color);
+        }
+        output.response
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn field_hint_and_value_share_the_same_inset_and_vertical_center() {
+    fn position(text: &str, value: &str) -> (egui::Rect, egui::Rect) {
+        let ctx = egui::Context::default();
+        let mut value = value.to_owned();
+        let mut bounds = egui::Rect::NOTHING;
+        let output = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                bounds = ui
+                    .add_sized(
+                        [220.0, 60.0],
+                        super::ui::text_field(&mut value, "Testwort", None, |edit| edit),
+                    )
+                    .rect;
+            });
+        });
+        let ink = output
+            .shapes
+            .into_iter()
+            .find_map(|entry| match entry.shape {
+                egui::Shape::Text(shape) if shape.galley.job.text == text => {
+                    Some(egui::Rect::from_min_size(shape.pos, shape.galley.size()))
+                }
+                _ => None,
+            })
+            .expect("visible input text");
+        (bounds, ink)
+    }
+
+    for value in ["", "Testwort"] {
+        let (field, text) = position("Testwort", value);
+        assert!((text.left() - field.left() - TEXT_FIELD_INSET).abs() <= 1.0);
+        assert!((text.center().y - field.center().y).abs() <= 1.0);
+    }
+}
+
 /// Center an entire image without cropping or changing its aspect ratio.
 pub fn contain_rect(bounds: egui::Rect, image_size: Vec2) -> egui::Rect {
     if image_size.x <= 0.0 || image_size.y <= 0.0 || !image_size.is_finite() {

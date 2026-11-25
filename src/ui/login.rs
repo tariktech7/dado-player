@@ -305,20 +305,18 @@ fn field(
 ) {
     ui.add(egui::Label::new(RichText::new(label).size(11.0).weak()));
     let mut show_val = show.as_deref().copied().unwrap_or(false);
-    let mut te = egui::TextEdit::singleline(text)
-        .hint_text(hint)
-        .desired_width(f32::INFINITY);
-    if password {
-        te = te.password(!show_val);
-    }
+    let masked = password && !show_val;
+    let te = super::text_field(text, hint, None, |edit| {
+        edit.desired_width(f32::INFINITY).password(masked)
+    });
     if password {
         // Reserve space for the trailing eye toggle.
         let btn_w = 34.0;
         ui.horizontal(|ui| {
-            let te_w = (ui.available_width() - btn_w).max(40.0);
-            ui.add_sized([te_w, 20.0], te);
+            let te_w = (ui.available_width() - btn_w - 4.0).max(40.0);
+            ui.add_sized([te_w, 30.0], te);
             ui.add_space(4.0);
-            let (_, r) = ui.allocate_space(Vec2::new(btn_w, 20.0));
+            let (_, r) = ui.allocate_space(Vec2::new(btn_w, 30.0));
             let resp = ui.interact(r, ui.id().with(("eye_toggle", label)), Sense::click());
             let col = if show_val {
                 theme::accent_fill(ui)

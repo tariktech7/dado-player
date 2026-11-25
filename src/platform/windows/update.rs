@@ -89,11 +89,12 @@ pub fn show(ui: &mut egui::Ui) {
     ui.add_enabled_ui(!state.busy, |ui| {
         ui.collapsing("Zugang zum privaten GitHub-Release", |ui| {
             ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
-            ui.add(
-                egui::TextEdit::singleline(&mut state.token)
-                    .password(true)
-                    .hint_text("GitHub-Token mit Leserecht"),
-            );
+            ui.add(crate::ui::text_field(
+                &mut state.token,
+                "GitHub-Token mit Leserecht",
+                None,
+                |edit| edit.password(true),
+            ));
         });
     });
     if state.busy {

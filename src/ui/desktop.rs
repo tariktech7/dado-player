@@ -27,6 +27,9 @@ pub struct Appearance {
     pub classic_live_category_share: f32,
     pub classic_live_preview_share: f32,
     pub classic_header_height: f32,
+    pub control_radius: f32,
+    pub settings_panel_radius: f32,
+    pub settings_panel_width: f32,
     pub classic_dashboard_height: f32,
     pub classic_dashboard_icon_size: f32,
     pub classic_dashboard_title_size: f32,
@@ -154,18 +157,13 @@ pub(super) fn search_field(
     value: &mut String,
     hint: &str,
     remote: bool,
+    height: f32,
 ) -> egui::Response {
-    let mut edit = egui::TextEdit::singleline(value).hint_text(hint);
-    let height = if handheld() {
-        edit = edit
-            .font(FontId::proportional(15.0))
-            .margin(egui::Margin::symmetric(7.0, 7.0))
-            .vertical_align(Align::Center);
-        34.0
-    } else {
-        (56.0 * scale(ui.ctx())).max(26.0)
-    };
-    let response = ui.add_sized([ui.available_width().max(1.0), height], edit);
+    let font = handheld().then(|| FontId::proportional(15.0));
+    let response = ui.add_sized(
+        [ui.available_width().max(1.0), height],
+        super::text_field(value, hint, font, |edit| edit),
+    );
     if remote && ui::mobile::focus::clicked(ui, &response) {
         response.request_focus();
     }
@@ -487,6 +485,11 @@ fn style(ctx: &Context, s: f32) {
         };
         visuals.widgets.inactive.weak_bg_fill = fill;
         visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, edge);
+        let rounding = egui::Rounding::same((appearance().control_radius * s).max(10.0));
+        visuals.widgets.inactive.rounding = rounding;
+        visuals.widgets.hovered.rounding = rounding;
+        visuals.widgets.active.rounding = rounding;
+        visuals.widgets.open.rounding = rounding;
         for (kind, size) in [
             (egui::TextStyle::Body, 22.0),
             (egui::TextStyle::Button, 22.0),

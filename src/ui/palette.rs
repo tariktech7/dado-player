@@ -217,11 +217,12 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.set_width(w);
 
-                    ui.add(
-                        egui::TextEdit::singleline(&mut app.palette_q)
-                            .hint_text("Ansicht, Sender, Film oder Serie…")
-                            .desired_width(w),
-                    )
+                    ui.add(super::text_field(
+                        &mut app.palette_q,
+                        "Ansicht, Sender, Film oder Serie…",
+                        None,
+                        |edit| edit.desired_width(w),
+                    ))
                     .request_focus();
                     ui.add_space(6.0);
 

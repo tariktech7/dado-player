@@ -133,6 +133,7 @@ pub(super) fn back(app: &mut App, ctx: &egui::Context) {
 
 pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, classic: bool) {
     let header_height = header.height();
+    let control_height = (header_height * 0.82).max(28.0);
     if classic {
         focus::set_header_zone();
     }
@@ -182,7 +183,7 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                         };
                         let response = ui
                             .allocate_ui_with_layout(
-                                vec2(search_width, header_height),
+                                vec2(search_width, control_height),
                                 egui::Layout::top_down(egui::Align::Min),
                                 |ui| {
                                     desktop::search_field(
@@ -190,6 +191,7 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                                         query,
                                         language.text("Suchen", "Search"),
                                         remote,
+                                        control_height,
                                     )
                                 },
                             )
@@ -210,11 +212,11 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                             focus::request_id(response.id);
                         }
                     }
-                    let size = header_height * 0.77;
+                    let size = control_height;
                     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
                     ui.painter().rect_filled(
                         rect,
-                        9.0 * scale,
+                        (desktop::appearance().control_radius * scale).max(10.0),
                         ui.visuals().widgets.inactive.bg_fill,
                     );
                     if icon == Icon::Refresh {

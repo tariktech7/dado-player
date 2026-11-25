@@ -54,8 +54,7 @@ def digest(data):
     return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
-def deliveries(release):
-    folder = ROOT / "Releases"
+def deliveries(release, folder=ROOT / "Releases"):
     index = (folder / "AKTUELL.json").read_bytes()
     expected = {
         "Dado-Player.exe": f"windows-build-{release['windowsBuild']}",
@@ -88,11 +87,11 @@ def validate_asset(asset, data, label):
         raise ValueError(f"GitHub asset verification failed: {asset['name']}")
 
 
-def publish(release, notes):
+def publish(release, notes, folder=ROOT / "Releases"):
     tag = github_release_tag(release)
     if release["channel"] != "beta" or release["betaNumber"] < 2:
         raise ValueError("Only new numbered betas can be published here")
-    files = deliveries(release)
+    files = deliveries(release, folder)
     source = git("rev-parse", "HEAD")
     if git("ls-remote", "origin", "refs/heads/main").partition("\t")[0] != source:
         raise ValueError("Push the built source to origin/main before publishing")
@@ -153,6 +152,8 @@ def publish(release, notes):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("notes", type=Path)
+    parser.add_argument("--packages", type=Path, default=ROOT / "Releases",
+                        help="Folder containing the verified release index and all packages")
     args = parser.parse_args()
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
-    publish(release, args.notes.read_text(encoding="utf-8"))
+    publish(release, args.notes.read_text(encoding="utf-8"), args.packages)

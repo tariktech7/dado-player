@@ -4530,6 +4530,68 @@ mod tests {
     }
 
     #[test]
+    fn shared_catalogues_use_only_the_header_search_and_settings_show_saved_choices() {
+        use egui::epaint::Shape;
+
+        fn texts(shape: &Shape, out: &mut Vec<String>) {
+            match shape {
+                Shape::Text(text) => out.push(text.galley.job.text.clone()),
+                Shape::Vec(shapes) => shapes.iter().for_each(|shape| texts(shape, out)),
+                _ => {}
+            }
+        }
+
+        for layout in [
+            crate::types::InterfaceLayout::Classic,
+            crate::types::InterfaceLayout::Modern,
+        ] {
+            let mut app = App::test_app();
+            let profile = Profile::new("Portable fixture", ProfileKind::M3u);
+            app.active_profile = Some(profile.clone());
+            app.profiles = vec![profile];
+            app.settings.interface_layout = layout;
+            app.settings.clock_format = crate::types::ClockFormat::H24;
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            let mut render = |view, settings_section| {
+                app.view = view;
+                app.settings_section = settings_section;
+                let output = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1400.0, 800.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| crate::ui::desktop::show(&mut app, ctx),
+                );
+                let mut result = Vec::new();
+                for shape in output.shapes {
+                    texts(&shape.shape, &mut result);
+                }
+                result
+            };
+
+            for view in [View::Movies, View::Series] {
+                let visible = render(view, None);
+                assert_eq!(visible.iter().filter(|text| *text == "Suchen").count(), 1);
+                assert!(!visible.iter().any(|text| text == "Titel suchen"));
+            }
+
+            let sections: Vec<serde_json::Value> =
+                serde_json::from_str(include_str!("../shared/settings-sections.json")).unwrap();
+            let section = |id| sections.iter().position(|section| section["id"] == id);
+            let clock = render(View::Settings, section("clock"));
+            assert!(clock.iter().any(|text| text.starts_with("✓  24 h")));
+            let profiles = render(View::Settings, section("profiles"));
+            for label in ["Portable fixture", "Auswählen", "Profil hinzufügen"] {
+                assert!(profiles.iter().any(|text| text == label), "{label}");
+            }
+        }
+    }
+
+    #[test]
     fn mobile_home_keeps_channels_compact_and_favorites_separate_at_phone_sizes() {
         use egui::epaint::Shape;
         fn texts(shape: &Shape, out: &mut Vec<String>) {

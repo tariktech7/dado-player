@@ -171,7 +171,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let width = ui.available_width();
     let mut changed = false;
     let mut playback_changed = false;
-    ui.heading(t("Einstellungen", "Settings"));
+    if app.settings_section.is_none() {
+        ui.heading(t("Einstellungen", "Settings"));
+    }
     let draft = ui.id().with("settings-draft");
     egui::ScrollArea::vertical()
         .id_source(("settings-page", app.settings_section))
@@ -185,35 +187,61 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 } else {
                     focus::set_zone(1);
                 }
-                let back =
-                    super::desktop::back_button(ui, t("‹ Alle Einstellungen", "‹ All settings"));
-                if app.settings_return_tile.take().is_some() {
-                    back.request_focus();
-                    focus::request_id(back.id);
-                }
-                let go_back = if ordered {
-                    focus::clicked(ui, &back)
-                } else {
-                    activate(ui, &back)
-                };
-                if go_back {
-                    app.close_settings_section();
-                    return;
-                }
-                ui.heading(t(&section.de, &section.en));
                 let mobile = super::mobile::active(ui.ctx());
-                ui.push_id(draft.with(index), |ui| {
-                    ui.set_width(ui.available_width().min((920.0 * scale).max(360.0)));
-                    panel(
-                        app,
-                        ui,
-                        &section.id,
-                        draft.with(index).with("choice"),
-                        mobile,
-                        &mut changed,
-                        &mut playback_changed,
-                    );
+                let width = (ui.available_width() - 16.0)
+                    .min((super::desktop::appearance().settings_panel_width * scale).max(520.0))
+                    .max(1.0);
+                let inset = ((ui.available_width() - width) / 2.0).max(0.0);
+                let height_key = draft.with((index, "section-height"));
+                let height = ui
+                    .data(|data| data.get_temp::<f32>(height_key))
+                    .unwrap_or(320.0 * scale);
+                let top = ((ui.available_height() - height) / 2.0).max(12.0);
+                ui.add_space(top);
+                let row = ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.add_space(inset);
+                    ui.push_id(draft.with(index), |ui| {
+                        ui.vertical(|ui| {
+                            ui.set_width(width);
+                            let back = super::desktop::back_button(
+                                ui,
+                                t("‹ Alle Einstellungen", "‹ All settings"),
+                            );
+                            if app.settings_return_tile.take().is_some() {
+                                back.request_focus();
+                                focus::request_id(back.id);
+                            }
+                            let go_back = if ordered {
+                                focus::clicked(ui, &back)
+                            } else {
+                                activate(ui, &back)
+                            };
+                            if go_back {
+                                app.close_settings_section();
+                                return;
+                            }
+                            ui.add_space(8.0);
+                            ui.heading(t(&section.de, &section.en));
+                            ui.add_space(8.0);
+                            panel(
+                                app,
+                                ui,
+                                &section.id,
+                                draft.with(index).with("choice"),
+                                mobile,
+                                &mut changed,
+                                &mut playback_changed,
+                            );
+                        });
+                    });
                 });
+                let actual_height = row.response.rect.height();
+                if (height - actual_height).abs() > 1.0 {
+                    ui.data_mut(|data| data.insert_temp(height_key, actual_height));
+                    ui.ctx().request_repaint();
+                }
+                ui.add_space(12.0);
             } else {
                 let columns = if width < 580.0 { 2 } else { 3 };
                 let gap = (18.0 * scale).max(10.0);
@@ -540,8 +568,13 @@ fn panel(
     egui::Frame::none()
         .fill(ui.visuals().window_fill)
         .stroke(ui.visuals().window_stroke)
-        .rounding(14.0)
-        .inner_margin(egui::Margin::same(16.0))
+        .rounding(
+            (super::desktop::appearance().settings_panel_radius * super::desktop::scale(ui.ctx()))
+                .max(16.0),
+        )
+        .inner_margin(egui::Margin::same(
+            (24.0 * super::desktop::scale(ui.ctx())).max(16.0),
+        ))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = ui.spacing().item_spacing.y.max(10.0);
@@ -773,7 +806,12 @@ fn panel(
                 "updates" => {
                     ui.scope(|ui| {
                         ui.spacing_mut().item_spacing.y = 18.0;
-                        ui.label(format!("Dado Player {}", crate::release_info::VERSION));
+                        ui.label(format!("Dado Player {}", crate::release_info::RELEASE_NAME));
+                        #[cfg(target_os = "windows")]
+                        ui.label(format!(
+                            "Installierter Build {}",
+                            crate::release_info::WINDOWS_BUILD
+                        ));
                         #[cfg(target_os = "windows")]
                         crate::platform::windows::update::show(ui);
                         #[cfg(any(target_os = "ios", target_os = "android"))]
@@ -814,10 +852,12 @@ fn panel(
                             if before != app.settings.live_format {
                                 app.apply_live_format();
                             }
-                            ui.add(
-                                egui::TextEdit::singleline(&mut app.settings_q)
-                                    .hint_text(t("Option suchen …", "Find an option …")),
-                            );
+                            ui.add(super::text_field(
+                                &mut app.settings_q,
+                                t("Option suchen …", "Find an option …"),
+                                None,
+                                |edit| edit,
+                            ));
                             let query = app.settings_q.trim().to_lowercase();
                             expert(app, ui, &query, playback_changed);
                         }
@@ -882,7 +922,7 @@ fn language_field(ui: &mut Ui, label: &str, value: &mut String, language: AppLan
         } else {
             ui.label(custom_label);
             changed |= ui
-                .add(egui::TextEdit::singleline(value).hint_text("ISO 639"))
+                .add(super::text_field(value, "ISO 639", None, |edit| edit))
                 .changed();
         }
     }
@@ -1062,11 +1102,12 @@ fn expert(app: &mut App, ui: &mut Ui, q: &str, changed: &mut bool) {
                 .weak(),
         ));
         if ui
-            .add(
-                egui::TextEdit::singleline(&mut app.settings.user_agent)
-                    .hint_text("z.B. VLC/3.0.20 LibVLC/3.0.20")
-                    .desired_width(360.0),
-            )
+            .add(super::text_field(
+                &mut app.settings.user_agent,
+                "z.B. VLC/3.0.20 LibVLC/3.0.20",
+                None,
+                |edit| edit.desired_width(360.0),
+            ))
             .changed()
         {
             *changed = true;
