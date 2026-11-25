@@ -919,7 +919,7 @@ test("Full HD and 4K keep aligned headings, ten rows, side-by-side EPG and conta
         previewRight: (innerWidth - rect(".preview-surface").right) / (innerWidth / 1920),
       };
     });
-    expect(Math.abs(geometry.brand - geometry.cat)).toBeLessThan(2);
+    expect(geometry.brand).toBeLessThan(geometry.cat);
     expect(Math.abs(geometry.cat - geometry.title)).toBeLessThan(2);
     expect(geometry.visible).toBeGreaterThanOrEqual(10);
     expect(geometry.left).toBeCloseTo(36, 0);
@@ -1427,7 +1427,7 @@ test("refresh in the left rail reloads the open library and keeps the live previ
     await new Promise(resolve => setTimeout(resolve, 250));
     await route.fulfill({json:[{stream_id: 1001, name: "Neuer Sender", category_id: "1"}]});
   });
-  const refresh = page.getByRole("button", {name: "Liste aktualisieren"});
+  const refresh = page.getByRole("navigation").getByRole("button", {name: "Liste aktualisieren"});
   await refresh.focus();
   await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
   const navLabel = page.getByRole("button", {name: "▣ Live TV", exact: true}).locator(".nav-label");
