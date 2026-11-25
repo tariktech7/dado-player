@@ -154,6 +154,15 @@ export function moveFocus(
     if (!horizontal && sign > 0) return;
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
+  if (!horizontal && zone?.matches(".settings-options") && zone.querySelector(".settings-choices")) {
+    const controls = focusables(zone);
+    const next = controls[controls.indexOf(current) + sign];
+    if (next) {
+      next.focus({ preventScroll: true });
+      scrollFocused(next);
+    }
+    return;
+  }
   const homeRow = !horizontal && current.closest(".home-primary > section");
   if (homeRow) {
     for (let row = sign < 0 ? homeRow.previousElementSibling : homeRow.nextElementSibling;

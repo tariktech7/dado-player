@@ -84,6 +84,12 @@ fn sections() -> &'static [Section] {
     })
 }
 
+pub(crate) fn is_quick_choice_section(index: usize) -> bool {
+    sections()
+        .get(index)
+        .is_some_and(|section| matches!(section.id.as_str(), "clock" | "stream" | "player"))
+}
+
 fn activate(ui: &Ui, response: &egui::Response) -> bool {
     if super::mobile::active(ui.ctx()) {
         super::mobile::focus::clicked(ui, response)
@@ -159,14 +165,24 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .show(ui, |ui| {
             if let Some(index) = app.settings_section {
                 let section = &sections()[index];
-                focus::set_zone(1);
+                let quick_choice = is_quick_choice_section(index);
+                if quick_choice {
+                    focus::set_ordered_zone(1);
+                } else {
+                    focus::set_zone(1);
+                }
                 let back =
                     super::desktop::back_button(ui, t("‹ Alle Einstellungen", "‹ All settings"));
                 if app.settings_return_tile.take().is_some() {
                     back.request_focus();
                     focus::request_id(back.id);
                 }
-                if activate(ui, &back) {
+                let go_back = if quick_choice {
+                    focus::clicked(ui, &back)
+                } else {
+                    activate(ui, &back)
+                };
+                if go_back {
                     app.close_settings_section();
                     return;
                 }
@@ -323,13 +339,14 @@ fn quick_choice<T: Copy + PartialEq>(
         .unwrap_or(0);
     for (slot, (_, label)) in options.iter().enumerate() {
         let response = ui.selectable_label(slot == index, *label);
-        if activate(ui, &response) {
+        if super::mobile::focus::clicked(ui, &response) {
             index = slot;
             ui.ctx().data_mut(|data| data.insert_temp(key, index));
         }
     }
     ui.add_space(10.0);
-    if action(ui, save_label) {
+    let save = ui.button(save_label);
+    if super::mobile::focus::clicked(ui, &save) {
         ui.ctx().data_mut(|data| data.remove::<usize>(key));
         return options.get(index).map(|(value, _)| *value);
     }

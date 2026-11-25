@@ -1963,6 +1963,34 @@ test("settings tiles support spatial navigation and return to the originating ti
   await expect(player).toBeFocused();
 });
 
+test("remote moves through each player choice before reaching save", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto("/");
+  await page.locator('.classic-actions').getByRole('button', {name: 'Einstellungen'}).click();
+  const tile = page.locator('.settings-sections [data-focus-key="player"]');
+  await tile.focus();
+  await page.keyboard.press('Enter');
+
+  const panel = page.locator('[data-settings-section="player"]');
+  const back = panel.getByRole('button', {name: '‹ Alle Einstellungen'});
+  const choices = panel.locator('.settings-choices button');
+  const save = panel.getByRole('button', {name: 'Änderungen speichern'});
+  await expect(back).toBeFocused();
+  for (let index = 0; index < 3; index++) {
+    await page.keyboard.press('ArrowDown');
+    await expect(choices.nth(index)).toBeFocused();
+  }
+  await page.keyboard.press('ArrowDown');
+  await expect(save).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(choices.last()).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(choices.last()).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(tile).toBeFocused();
+});
+
 test("language and time format persist and the live guide uses the selected time format", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");

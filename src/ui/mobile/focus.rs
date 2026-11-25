@@ -37,6 +37,8 @@ struct State {
     frame_zones: Vec<Option<u8>>,
     header: bool,
     frame_header: bool,
+    ordered_zone: Option<u8>,
+    frame_ordered_zone: Option<u8>,
     ids: Vec<egui::Id>,
     frame_ids: Vec<egui::Id>,
     zone_memory: HashMap<(u64, u8), egui::Id>,
@@ -101,6 +103,7 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
         s.frame_ids.clear();
         s.frame_zones.clear();
         s.frame_header = false;
+        s.frame_ordered_zone = None;
         s.current_zone = None;
         if pointer_used {
             s.active = false;
@@ -204,6 +207,14 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
 pub fn set_zone(zone: u8) {
     STATE.with(|cell| cell.borrow_mut().current_zone = Some(zone));
 }
+pub fn set_ordered_zone(zone: u8) {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        s.current_zone = Some(zone);
+        s.frame_ordered_zone = Some(zone);
+    });
+}
+
 pub fn set_header_zone() {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
@@ -246,6 +257,13 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
     let cur = *rects.get(from)?;
     let horizontal = matches!(dir, Dir::Left | Dir::Right);
     let local = |i| s.zones.get(i) == Some(&Some(zone));
+    if !horizontal && s.ordered_zone == Some(zone) {
+        return if matches!(dir, Dir::Up) {
+            (0..from).rev().find(|i| local(*i))
+        } else {
+            (from + 1..rects.len()).find(|i| local(*i))
+        };
+    }
     if let Some(next) = find_next_where(rects, from, dir, local) {
         return Some(next);
     }
@@ -366,6 +384,7 @@ pub fn begin_modal(initial: usize) {
         s.modal_started = true;
         s.current_zone = None;
         s.frame_header = false;
+        s.frame_ordered_zone = None;
         if s.reset_modal_focus {
             s.idx = initial;
             s.desired_id = None;
@@ -500,6 +519,7 @@ pub fn end() {
         s.ids = std::mem::take(&mut s.frame_ids);
         s.zones = std::mem::take(&mut s.frame_zones);
         s.header = s.frame_header;
+        s.ordered_zone = s.frame_ordered_zone;
         s.current_zone = None;
         // Keep an unconsumed Ok press for ONE more frame if no control was
         // focused at all (e.g. the list shrank under the cursor). `idx` has just
@@ -647,6 +667,25 @@ mod tests {
         assert_eq!(zoned_next(&s, &rects, 5, Dir::Left), Some(4));
         assert_eq!(zoned_next(&s, &rects, 2, Dir::Up), Some(0));
         assert_eq!(zoned_next(&s, &rects, 0, Dir::Down), Some(2));
+    }
+
+    #[test]
+    fn ordered_choices_are_reached_before_the_save_button() {
+        let rects = [
+            rect(0.0, 0.0),
+            rect(160.0, 45.0),
+            rect(285.0, 85.0),
+            rect(0.0, 130.0),
+        ];
+        let s = State {
+            ordered_zone: Some(1),
+            zones: vec![Some(1); 4],
+            ..Default::default()
+        };
+        assert_eq!(zoned_next(&s, &rects, 0, Dir::Down), Some(1));
+        assert_eq!(zoned_next(&s, &rects, 1, Dir::Down), Some(2));
+        assert_eq!(zoned_next(&s, &rects, 2, Dir::Down), Some(3));
+        assert_eq!(zoned_next(&s, &rects, 3, Dir::Up), Some(2));
     }
 
     #[test]

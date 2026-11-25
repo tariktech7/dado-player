@@ -718,7 +718,10 @@ impl App {
             || self.tv
             || (self.active_profile.is_some()
                 && !self.palette_open
-                && (self.view != View::Settings || self.settings_section.is_none()))
+                && (self.view != View::Settings
+                    || self
+                        .settings_section
+                        .is_none_or(ui::settings::is_quick_choice_section)))
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
@@ -1193,7 +1196,9 @@ impl App {
             // The TV section is part of the fingerprint: switching headers
             // changes the whole control set, so focus must restart (and the
             // queued header index from tv_goto() then wins over that reset).
-            let screen: u64 = (self.view as u64) << 10
+            let setting_page = self.settings_section.map_or(0, |index| index as u64 + 1);
+            let screen: u64 = (setting_page << 20)
+                | (self.view as u64) << 10
                 | ((self.tv_nav as u64) & 0x7) << 7
                 | (self.tv_series.is_some() as u64) << 6
                 | (self.tv as u64) << 5
