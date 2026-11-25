@@ -2073,14 +2073,17 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
   const coverage = await overview.evaluate(element => {
     const box = element.getBoundingClientRect(), parent = element.parentElement!.getBoundingClientRect();
     return {
-      verticalOffset: Math.abs(box.top + box.height / 2 - parent.top - parent.height / 2),
+      topInset: box.top - parent.top,
+      firstPageFits: element.closest('main')!.scrollHeight <= element.closest('main')!.clientHeight + 1,
       width: box.width / parent.width,
       height: box.height / parent.height,
       lastTileFits: [...element.querySelectorAll("button")].every(tile =>
         tile.getBoundingClientRect().bottom <= element.closest("main")!.getBoundingClientRect().bottom),
     };
   });
-  expect(coverage.verticalOffset).toBeLessThan(3);
+  expect(coverage.topInset).toBeGreaterThanOrEqual(0);
+  expect(coverage.topInset).toBeLessThan(40);
+  expect(coverage.firstPageFits).toBe(true);
   expect(coverage.width).toBeGreaterThan(.9);
   expect(coverage.height).toBeGreaterThan(.8);
   expect(coverage.lastTileFits).toBe(true);
@@ -2538,11 +2541,19 @@ test('profiles have independent add, select and refresh actions', async ({page})
     const rowButton = panel.querySelector('li button')!;
     const add = panel.querySelector('.profile-add')!;
     const refresh = panel.querySelector('.connect-panel button')!;
-    return {sizes: [named, rowButton, add, refresh].map(node => getComputedStyle(node).fontSize),
-      delta: Math.abs(add.getBoundingClientRect().left - refresh.getBoundingClientRect().left)};
+    const boxes = [named.closest('li')!, add, refresh].map(node => node.getBoundingClientRect());
+    return {
+      sizes: [named, rowButton, add, refresh].map(node => getComputedStyle(node).fontSize),
+      edges: boxes.map(box => [box.left, box.right, box.height]),
+      gaps: boxes.slice(1).map((box, index) => box.top - boxes[index].bottom),
+    };
   });
   expect(new Set(typography.sizes).size).toBe(1);
-  expect(typography.delta).toBeLessThan(1);
+  for (const edge of typography.edges.slice(1)) {
+    edge.forEach((value, index) => expect(Math.abs(value - typography.edges[0][index])).toBeLessThan(1));
+  }
+  expect(typography.gaps[0]).toBeGreaterThanOrEqual(24);
+  expect(Math.abs(typography.gaps[0] - typography.gaps[1])).toBeLessThan(1);
   await page.getByRole('button',{name:'Profil hinzufügen',exact:true}).click();
   const dialog = page.getByRole('dialog',{name:'Profil hinzufügen'});
   for (const [label,value] of [['Profilname','Profil 2'],['Server-Adresse','https://provider.invalid'],['Benutzername','zweites'],['Passwort','demo']]) {

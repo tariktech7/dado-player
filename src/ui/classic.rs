@@ -352,10 +352,10 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
     let options_height = action_height + media_gap;
     let tile_height = (media_end - media_start - options_height)
         .clamp(1.0, appearance.classic_dashboard_height * scale);
-    let tiles_top =
-        media_start + ((media_end - media_start - tile_height - options_height) * 0.5).max(0.0);
+    let spare = (media_end - media_start - tile_height - options_height).max(0.0);
+    let tiles_top = media_start + spare * 0.24;
     let tiles_bottom = tiles_top + tile_height;
-    let actions_y = tiles_bottom + media_gap;
+    let actions_y = tiles_bottom + media_gap + spare * 0.52;
     let media_width = (right - left - media_gap * 2.0).max(3.0);
     let live_width = media_width * appearance.classic_dashboard_live_share;
     let other_width = (media_width - live_width) * 0.5;
@@ -401,18 +401,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
                 0.15
             },
         ) * (6.0 * scale);
-        let depth = (9.0 * scale).max(3.0);
-        painter.rect_filled(
-            rect.translate(vec2(0.0, depth * 1.7)),
-            radius,
-            Color32::from_black_alpha(45),
-        );
         let raised = rect.translate(vec2(0.0, -lift));
-        painter.rect_filled(
-            rect.translate(vec2(0.0, depth - lift * 0.4)),
-            radius,
-            bottom_color.gamma_multiply(0.58),
-        );
         painter.rect_filled(raised, radius, bottom_color);
         tile_surface(ui, raised, radius, top_color, bottom_color);
         let rect = raised;
@@ -449,11 +438,6 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             halo,
             Stroke::new((1.1 * scale).max(0.65), Color32::from_white_alpha(36)),
         );
-        painter.rect_filled(
-            plate.translate(vec2(0.0, depth * 0.65)),
-            plate_rounding,
-            Color32::from_black_alpha(47),
-        );
         tile_surface(
             ui,
             plate,
@@ -466,7 +450,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             plate_rounding,
             Stroke::new((1.8 * scale).max(0.8), Color32::from_white_alpha(92)),
         );
-        components::icon(ui, plate, icon, accent);
+        components::icon(ui, plate.shrink(icon_size * 0.11), icon, accent);
         let content = painter.with_clip_rect(rect.shrink(4.0));
         let title_pos = pos2(center.x, rect.top() + rect.height() * 0.74);
         content.text(
@@ -513,7 +497,8 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         ),
     ];
     let action_count = if app.settings.watch_history { 4.0 } else { 3.0 };
-    let width = ((right - left - gap * (action_count - 1.0)) / action_count).max(1.0);
+    let action_gap = media_gap * 0.75;
+    let width = ((right - left - action_gap * (action_count - 1.0)) / action_count).max(1.0);
     let mut open_profiles = false;
     for (index, (view, label, icon, profiles)) in actions
         .into_iter()
@@ -521,7 +506,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         .enumerate()
     {
         let rect = Rect::from_min_size(
-            pos2(left + index as f32 * (width + gap), actions_y),
+            pos2(left + index as f32 * (width + action_gap), actions_y),
             vec2(width, action_height),
         );
         let response = ui.interact(rect, ui.id().with(("shortcut", index)), Sense::click());

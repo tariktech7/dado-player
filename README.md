@@ -1,6 +1,6 @@
 # Dado Player
 
-Gemeinsamer Download für Windows, Android, iOS und Samsung Tizen: [**0.8.0 Beta 7**](https://github.com/tariktech7/dado-player/releases/tag/v0.8.0-beta.7).
+Gemeinsamer Download für Windows, Android, iOS und Samsung Tizen: [**0.8.0 Beta 8**](https://github.com/tariktech7/dado-player/releases/tag/v0.8.0-beta.8).
 Für die Windows-Portable die `Dado-Player.exe` aus diesem Release verwenden. Der allgemeine GitHub-Link „Latest“ führt zum zuletzt als stabil veröffentlichten Paket.
 Versionsquelle ist `release.json`; `python scripts/release_version.py` synchronisiert die Ziele,
 `--check` verhindert abweichende Metadaten. Funktionsvertrag und bewusste Plattformunterschiede:

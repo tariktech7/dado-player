@@ -389,21 +389,31 @@ pub fn show(
     rt: &tokio::runtime::Handle,
     profiles: &mut Vec<Profile>,
     tv: bool,
-    compact: bool,
+    profile_row_height: Option<f32>,
 ) {
     state.prepare(ui.ctx(), rt, profiles);
-    if clicked(
-        ui,
-        if state.busy {
-            "Profile werden aktualisiert …"
-        } else if compact {
-            "Profile aktualisieren"
+    let label = if state.busy {
+        "Profile werden aktualisiert …"
+    } else if profile_row_height.is_some() {
+        "Profilliste aktualisieren"
+    } else {
+        "Profile aktualisieren"
+    };
+    let refresh = if let Some(height) = profile_row_height {
+        let response = ui
+            .add_enabled_ui(!state.busy, |ui| {
+                ui.add_sized([ui.available_width(), height], egui::Button::new(label))
+            })
+            .inner;
+        if tv {
+            crate::ui::mobile::focus::clicked(ui, &response)
         } else {
-            "Profilliste aktualisieren"
-        },
-        !state.busy,
-        tv,
-    ) {
+            response.clicked()
+        }
+    } else {
+        clicked(ui, label, !state.busy, tv)
+    };
+    if refresh {
         state.start(&ui.ctx().clone(), rt, false, false);
     }
     if !state.message.is_empty() && state.message != "Geräteadresse bereit." {
@@ -425,7 +435,7 @@ pub fn show(
         } else if !state.busy {
             ui.small("Für die erste Geräteadresse online „Profile aktualisieren“ wählen.");
         }
-        if !compact && !state.saved.device_id.is_empty() {
+        if profile_row_height.is_some() && !state.saved.device_id.is_empty() {
             ui.small(format!("Geräte-ID: {}", state.saved.device_id));
         }
     }

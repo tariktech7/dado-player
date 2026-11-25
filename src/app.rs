@@ -401,7 +401,7 @@ fn parse_tracks(json: &str, cur_a: i64, cur_s: i64) -> Option<(Vec<Track>, Vec<T
 }
 
 impl App {
-    pub fn cloud_profiles_ui(&mut self, ui: &mut egui::Ui) {
+    pub fn cloud_profiles_ui(&mut self, ui: &mut egui::Ui, row_height: f32) {
         let remote = self.shared_remote_navigation();
         crate::connect::show(
             ui,
@@ -409,7 +409,7 @@ impl App {
             self.rt.handle(),
             &mut self.profiles,
             remote,
-            false,
+            Some(row_height),
         );
     }
     pub fn cloud_profiles_entry(&mut self, ui: &mut egui::Ui) -> bool {
@@ -419,7 +419,7 @@ impl App {
             self.rt.handle(),
             &mut self.profiles,
             self.tv,
-            true,
+            None,
         );
         self.connect.expanded()
     }
@@ -4526,6 +4526,55 @@ mod tests {
             assert!((video.width() - expected_width).abs() < 2.0, "{video:?}");
             assert!(screen.contains_rect(video));
             assert!(screen.bottom() - video.bottom() > height * 0.30);
+        }
+    }
+
+    #[test]
+    fn settings_overview_fits_all_tiles_inside_the_desktop_viewport() {
+        for layout in [
+            crate::types::InterfaceLayout::Classic,
+            crate::types::InterfaceLayout::Modern,
+        ] {
+            for (width, height) in [(1280.0, 720.0), (1400.0, 800.0), (1920.0, 1080.0)] {
+                let mut app = App::test_app();
+                app.active_profile = Some(Profile::new("Layout fixture", ProfileKind::M3u));
+                app.settings.interface_layout = layout;
+                app.view = View::Settings;
+                let ctx = egui::Context::default();
+                crate::fonts::install(&ctx);
+                let output = ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, height),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| crate::ui::desktop::show(&mut app, ctx),
+                );
+                let tiles: Vec<_> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Rect(tile)
+                            if tile.rect.width() > width * 0.2
+                                && tile.rect.width() < width * 0.36
+                                && tile.rect.height() > height * 0.10
+                                && tile.rect.height() < height * 0.3 =>
+                        {
+                            Some((tile.rect, shape.clip_rect))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(tiles.len(), if cfg!(windows) { 12 } else { 11 });
+                for (tile, clip) in tiles {
+                    assert!(
+                        clip.contains_rect(tile),
+                        "{layout:?} {width}x{height}: {tile:?} clipped by {clip:?}"
+                    );
+                }
+            }
         }
     }
 
