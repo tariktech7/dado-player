@@ -1679,7 +1679,8 @@ function App() {
           {update && <p role="status">{update}</p>}
           <p class="muted">{t('Mit GitHub-Lesezugriff prüft Dado Player automatisch alle sechs Stunden auf signierte Web-Updates.',
             'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
-          <p class="muted">{APP_VERSION}{releaseInfo.channel === "beta" ? ` Beta ${releaseInfo.betaNumber}` : ""} · Build {APP_BUILD}</p>
+          <p class="muted">{APP_VERSION}{releaseInfo.channel === "beta" && "betaNumber" in releaseInfo
+            ? ` Beta ${releaseInfo.betaNumber}` : ""} · Build {APP_BUILD}</p>
         </div>;
         }
         case "license": return <>

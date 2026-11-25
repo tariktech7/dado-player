@@ -4,6 +4,5 @@
   "iosBuild": 45,
   "windowsBuild": 19,
   "tizenBuild": 21,
-  "channel": "beta",
-  "betaNumber": 1
+  "channel": "stable"
 }

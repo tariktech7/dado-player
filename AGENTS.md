@@ -6,9 +6,11 @@ shared/product-policy.json; Sprachkürzel in shared/language-aliases.json. Platt
 Abnahmeumfang stehen in docs/PLATFORM-PARITY.md. Android/iOS behalten bis zur IAP-Einführung
 die ausdrücklich vereinbarte Ausnahme von der Windows-/TV-Kaufsperre.
 
-Größere Beta-Änderungen erhöhen `betaNumber` in release.json. Neue nummerierte Betas
-mit `python scripts/publish_beta.py <Release-Notizen>` als eigenes GitHub-Prerelease
-veröffentlichen. Vorhandene Beta-Releases und deren Assets erhalten.
+Jede neue Produktversion (zum Beispiel 0.8.1 oder 0.8.2) als reguläres GitHub-Release
+mit dem Tag v<VERSION> veröffentlichen. Dafür in release.json den Kanal auf stable setzen.
+Größere Beta-Änderungen erhöhen betaNumber und werden als eigene GitHub-Prereleases veröffentlicht.
+Beide Kanäle mit python scripts/publish_release.py <Release-Notizen> veröffentlichen.
+Vorhandene Releases und deren Assets erhalten.
 
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 
