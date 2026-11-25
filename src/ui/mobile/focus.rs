@@ -32,6 +32,7 @@ thread_local! {
 #[derive(Default)]
 struct State {
     desired_id: Option<egui::Id>,
+    entry_pending: bool,
     current_zone: Option<u8>,
     zones: Vec<Option<u8>>,
     frame_zones: Vec<Option<u8>>,
@@ -99,6 +100,7 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
         let identity_changed =
             screen != s.screen || modal != s.modal_last || s.queued_idx.is_some();
         s.spatial = spatial;
+        s.entry_pending = screen != s.screen && !modal;
         s.frame_rects.clear();
         s.frame_ids.clear();
         s.frame_zones.clear();
@@ -220,6 +222,17 @@ pub fn set_header_zone() {
         let mut s = cell.borrow_mut();
         s.current_zone = Some(0);
         s.frame_header = true;
+    });
+}
+
+pub fn prefer_entry(id: egui::Id) {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        if s.entry_pending {
+            s.entry_pending = false;
+            s.idx = s.seen;
+            s.desired_id = Some(id);
+        }
     });
 }
 

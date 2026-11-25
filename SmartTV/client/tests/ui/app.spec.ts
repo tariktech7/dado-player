@@ -1995,6 +1995,51 @@ test("remote moves through each player choice before reaching save", async ({pag
   await expect(tile).toBeFocused();
 });
 
+test("header search follows the current catalogue and opens it at the first category", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto("/");
+  await page.locator('.classic-primary [data-focus-key="live"]').click();
+  const header = page.locator('.classic-header');
+  const search = header.locator('.header-search-field');
+  await expect(page.locator('.categories .category-list button').first()).toBeFocused();
+  await expect(page.locator('input[type=search]')).toHaveCount(1);
+  const positions = await header.evaluate(el => ['.header-search-field','.refresh-library','time'].map(selector =>
+    el.querySelector(selector)!.getBoundingClientRect().left));
+  expect(positions).toEqual([...positions].sort((a,b) => a-b));
+  await search.focus();
+  await page.keyboard.press('Enter');
+  await search.fill('Demo Film');
+  await expect(page.locator('.channel')).toHaveCount(0);
+  await search.fill('');
+  await search.blur();
+  await header.getByRole('button', {name:'‹ Zurück'}).click();
+  await page.locator('.classic-primary [data-focus-key="series"]').click();
+  await expect(page.locator('.catalog-browser .category-list button').first()).toBeFocused();
+  await expect(page.locator('input[type=search]')).toHaveCount(1);
+  await header.getByRole('button', {name:'‹ Zurück'}).click();
+  await header.getByRole('button',{name:'Suche',exact:true}).click();
+  await expect(search).toBeFocused();
+  await page.keyboard.press('Enter');
+  await search.fill('Demo Film');
+  await expect(page.locator('.media-grid')).toContainText('Demo Film');
+});
+
+test("turning off watch history hides continue and the saved progress prompts", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto("/");
+  await page.locator('.classic-actions').getByRole('button',{name:'Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'playback');
+  const history = page.getByRole('checkbox',{name:'Fortsetzen und Wiedergabeverlauf'});
+  await expect(history).toBeChecked();
+  await history.click();
+  await expect(history).not.toBeChecked();
+  await page.locator('.classic-back').click();
+  await page.locator('.classic-back').click();
+  await expect(page.locator('.classic-actions').getByRole('button',{name:'Fortsetzen',exact:true})).toHaveCount(0);
+  await page.locator('.classic-primary [data-focus-key="vod"]').click();
+  await expect(page.locator('.category-list').getByRole('button',{name:/Fortsetzen/})).toHaveCount(0);
+});
+
 test("all settings submenus keep their controls inside a shared content column", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");

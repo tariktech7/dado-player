@@ -7,6 +7,7 @@ export const defaults: Settings = {
   interfaceLayout: "classic",
   appearanceVersion: 1,
   autoplayLast: policy.autoplayLast,
+  watchHistory: true,
   liveFormat: "default",
   player: "auto",
   expertMode: false,

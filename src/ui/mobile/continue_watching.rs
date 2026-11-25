@@ -10,7 +10,7 @@ use crate::app::App;
 
 pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
     crate::ui::continue_watching::category_tabs(app, ui);
-    if app.history.is_empty() {
+    if app.visible_history().is_empty() {
         components::empty_state(
             ui,
             Icon::Play,
@@ -27,7 +27,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         crate::app::ContinueTab::Series => "ep:",
     };
     let mut play = None;
-    let entries: Vec<_> = crate::types::resume_history(&app.history)
+    let entries: Vec<_> = crate::types::resume_history(app.visible_history())
         .filter(|h| h.key.starts_with(prefix))
         .cloned()
         .collect();

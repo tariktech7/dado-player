@@ -381,7 +381,7 @@ function App() {
     favorites = saved.favorites[pid] || EMPTY_ITEMS,
     history = useMemo(
       () =>
-        (saved.history[pid] || EMPTY_HISTORY).map((h) => {
+        (saved.settings.watchHistory ? saved.history[pid] || EMPTY_HISTORY : EMPTY_HISTORY).map((h) => {
           const source =
             h.item.kind === "episode"
               ? catalog.series.find((s) => s.id === h.item.seriesId)
@@ -392,7 +392,7 @@ function App() {
             ? { ...h, item: { ...h.item, logo: source.logo || h.item.logo } }
             : h;
         }),
-      [saved.history, pid, catalog],
+      [saved.history, pid, catalog, saved.settings.watchHistory],
     );
   const favoriteTarget = (i: Item) =>
     i.kind === "episode"
@@ -411,7 +411,7 @@ function App() {
     });
   const untrackedPlayback = useRef(false);
   const record = () => {
-    if (untrackedPlayback.current) return;
+    if (untrackedPlayback.current || !savedRef.current.settings.watchHistory) return;
     const p = playerRef.current,
       profile = savedRef.current.activeProfile;
     if (!p?.current || !profile) return;
@@ -540,7 +540,7 @@ function App() {
         activeProfile: p.id,
         signedOut: false,
       });
-      if (automatic && savedRef.current.settings.autoplayLast) {
+      if (automatic && savedRef.current.settings.watchHistory && savedRef.current.settings.autoplayLast) {
         const last = savedRef.current.history[p.id]?.[0];
         if (last) {
           const fresh =
@@ -766,7 +766,7 @@ function App() {
     }
   }
   const go = (next: View) => {
-    if (next === view) return;
+    if (next === view || (next === "history" && !saved.settings.watchHistory)) return;
     if (view === "settings") { setSettingsSection(null); setSettingsDraft(null); }
     const scroll = [
       ...document.querySelectorAll<HTMLElement>(
@@ -784,12 +784,18 @@ function App() {
     detailRequest.current++;
     const memory = memories.current[next];
     setView(next);
-    const previousCategory = memory?.category;
+    const previousCategory = memory?.category === "continue" && !saved.settings.watchHistory ? undefined : memory?.category;
     setCategory(previousCategory && (classic || !["recent", "continue"].includes(previousCategory)) ? previousCategory : "all");
     setQuery(memory?.query || "");
     setSelectedTitle(memory?.detail || null);
     setDetail(memory?.detail || null);
     setEpisodes(memory?.episodes || []);
+    if (next === "live" || next === "vod" || next === "series") {
+      requestAnimationFrame(() => {
+        const content = document.querySelector<HTMLElement>(`.shell[data-focus-scope="${next}"] .category-list button`);
+        content?.focus({preventScroll:true});
+      });
+    }
   };
   const importCloudProfiles = (profiles:Profile[]) => {
     const merged=mergeCloudProfiles(savedRef.current.profiles,profiles);
@@ -885,6 +891,11 @@ function App() {
   const goShortcut = (next: View) => {
     go(next);
     requestAnimationFrame(() => {
+      if (next === "live" || next === "vod" || next === "series") return;
+      if (next === "search") {
+        document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
+        return;
+      }
       if (next === "settings" && classic) {
         const first = document.querySelector<HTMLElement>(".settings-sections button, .settings-options button");
         if (first) { first.focus(); return; }
@@ -960,7 +971,7 @@ function App() {
           const category = document.querySelector<HTMLElement>(".live-shell .category-list button.selected")
             || document.querySelector<HTMLElement>(".live-shell .category-list button");
           category?.focus();
-        } else if (browsingCatalog) goShortcut("search");
+        } else if (browsingCatalog) document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
         else goShortcut("live");
       } else if (code === 405) {
         const key = document.activeElement?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
@@ -1201,9 +1212,9 @@ function App() {
       const normalizedQuery = query.toLocaleLowerCase();
       return catalog.live.filter(
         (i) =>
-          (category === "all" || category === "favorites"
+          (normalizedQuery.length > 0 || (category === "all" || category === "favorites"
             ? category !== "favorites" || liveFavorites?.has(itemKey(i))
-            : i.category === category) &&
+            : i.category === category)) &&
           i.name.toLocaleLowerCase().includes(normalizedQuery),
       );
     },
@@ -1524,6 +1535,10 @@ function App() {
 
         </>;
         case "playback": return <>
+          <Field label={t("Fortsetzen und Wiedergabeverlauf", "Continue watching and watch history")}>
+            <TVInput type="checkbox" checked={saved.settings.watchHistory}
+              onChange={(event) => setting("watchHistory", event.currentTarget.checked)} />
+          </Field>
           <Field label={t("Bildformat", "Aspect ratio")}>
             {choose(
               saved.settings.aspect,
@@ -1541,7 +1556,8 @@ function App() {
           <Field label={t("Letzten Titel beim Start abspielen", "Open the last channel at startup")}>
             <TVInput
               type="checkbox"
-              checked={saved.settings.autoplayLast}
+              disabled={!saved.settings.watchHistory}
+              checked={saved.settings.watchHistory && saved.settings.autoplayLast}
               onChange={(e) => setting("autoplayLast", e.currentTarget.checked)}
             />
           </Field>
@@ -1743,7 +1759,7 @@ function App() {
       <div class="settings-page">
         <h1>{t("Einstellungen", "Settings")}</h1>
         {!active ? <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
-          {settingsSections.map(section => (
+          {settingsSections.filter(section => !query.trim() || section[saved.settings.language].toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(section => (
             <button key={section.id} data-focus-key={section.id} onClick={() => {
               setSettingsDraft(null);
               setCacheCleared(false);
@@ -2021,19 +2037,33 @@ function App() {
             data-focus-scope={view}
             class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? `catalog-shell${selectedTitle ? " has-title-detail" : ""}` : ""}${externalTitle ? " has-title-detail external-title-detail" : ""}${full ? " behind-player" : ""}`}
           >
-            {classic ? <header data-focus-zone="navigation" class="classic-header">
-              {view !== "home" && <button class="menu-back classic-back" onClick={back}>{t("‹ Zurück", "‹ Back")}</button>}
-              <img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
-              <strong>Dado Player</strong>
-              {license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
-              <time>{clock(Date.now() / 1000, saved.settings.clockFormat)}</time>
-              <button aria-label={t("Suche", "Search")} title={t("Suche", "Search")} onClick={() => goShortcut("search")}>⌕</button>
+            <header class={classic ? "classic-header" : "classic-header modern-header"}
+              data-focus-zone={classic ? "navigation" : undefined}>
+              {classic && view !== "home" && <button class="menu-back classic-back" onClick={back}>{t("‹ Zurück", "‹ Back")}</button>}
+              {classic && <><img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
+              <strong>Dado Player</strong></>}
+              {classic && license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
+              <div class="header-search">
+                <button type="button" aria-label={t("Suche", "Search")} onClick={() => {
+                  if (view === "home") goShortcut("search");
+                  else document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
+                }}>⌕</button>
+                <TVInput class="header-search-field" type="search"
+                  aria-label={t("Suchen", "Search titles")} value={view === "home" ? "" : query}
+                  onInput={(e) => {
+                    const text = e.currentTarget.value;
+                    if (view === "home") goShortcut("search");
+                    setQuery(text);
+                  }} />
+              </div>
               <button class="refresh-library" title={t("Liste aktualisieren", "Refresh library")}
                 aria-label={t("Liste aktualisieren", "Refresh library")} aria-busy={refreshing}
                 data-refresh-status={refreshStatus} onClick={() => void refreshCatalog()}>
                 <span class="refresh-icon"><RailIcon kind="refresh" /><RailIcon kind="success" /><RailIcon kind="error" /></span>
               </button>
-            </header> : <aside
+              <time>{clock(Date.now() / 1000, saved.settings.clockFormat)}</time>
+            </header>
+            {!classic && <aside
               class="navigation"
               data-focus-zone="navigation"
               onPointerEnter={enterNav}
@@ -2050,7 +2080,7 @@ function App() {
               </div>
               {license.claims?.kind==='trial' && <small class="trial-badge-compact" title={license.text}>Trial · {license.text.match(/\d+/)?.[0]} T</small>}
               <nav>
-                {nav.map(([id, icon, de, en]) => (
+                {nav.filter(([id]) => saved.settings.watchHistory || id !== "history").map(([id, icon, de, en]) => (
                   <button
                     aria-label={`${icon} ${t(de, en)}`}
                     title={t(de, en)}
@@ -2131,14 +2161,6 @@ function App() {
                         : catalog.categories.live.find((c) => c.id === category)
                             ?.name || "Sender"}
                   </h1>
-                  <TVInput
-                    class="channel-search"
-                    type="search"
-                    placeholder={t("Sender suchen", "Find a channel")}
-                    aria-label="Sender suchen"
-                    value={query}
-                    onInput={(e) => setQuery(e.currentTarget.value)}
-                  />
                   <VirtualChannels
                     items={filteredLive}
                     row={channelRow}
@@ -2251,10 +2273,10 @@ function App() {
                         </button>)}
                       </div>
                       <div class="classic-actions" data-focus-zone="actions">
-                        <button data-focus-key="history" onClick={() => goShortcut("history")}>
+                        {saved.settings.watchHistory && <button data-focus-key="history" onClick={() => goShortcut("history")}>
                           <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z" /></svg>
                           {t("Fortsetzen", "Continue")}
-                        </button>
+                        </button>}
                         <button data-focus-key="favorites" onClick={() => goShortcut("favorites")}>
                           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 2 3 6.6 7 .9-5.2 5 1.3 7.1-6.1-3.5-6.1 3.5 1.3-7.1L2 9.5l7-.9z" /></svg>
                           {t("Favoriten", "Favorites")}
@@ -2310,6 +2332,7 @@ function App() {
                     <div class="history-list">
                       {!history.length && <p>Noch nichts angesehen.</p>}
                       {resumeRows
+                        .filter((h) => !query.trim() || h.item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
                         .filter((h) =>
                           historyKind === "series"
                             ? h.item.kind === "episode" ||
@@ -2376,6 +2399,7 @@ function App() {
                     </div>
                     <div class="media-grid">
                       {favorites
+                        .filter(i => !query.trim() || i.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
                         .filter((i) =>
                           favoriteKind === "series"
                             ? i.kind === "series" || i.kind === "episode"
@@ -2390,14 +2414,6 @@ function App() {
                 ) : view === "search" ? (
                   <>
                     <h1>Was möchtest du sehen?</h1>
-                    <TVInput
-                      class="global-search"
-                      type="search"
-                      aria-label="Bibliothek durchsuchen"
-                      placeholder="Sender, Film oder Serie suchen"
-                      value={query}
-                      onInput={(e) => setQuery(e.currentTarget.value)}
-                    />
                     {query.trim().length >= 2 ? (
                       <div class="media-grid">
                         {[...catalog.live, ...catalog.vod, ...catalog.series]
@@ -2432,7 +2448,6 @@ function App() {
                       setDetail(null);
                     }}
                     query={query}
-                    setQuery={setQuery}
                     selected={selectedTitle}
                     close={closeCatalogDetail}
                     select={(i) => {
@@ -2447,6 +2462,7 @@ function App() {
                     detail={detail}
                     episodes={episodes}
                     history={history}
+                    watchHistory={saved.settings.watchHistory}
                     toggle={toggleFavorite}
                     play={playTitle}
                     playDirect={playDirect}

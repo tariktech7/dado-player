@@ -131,16 +131,15 @@ pub(super) fn back(app: &mut App, ctx: &egui::Context) {
     }
 }
 
-pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Option<Rect> {
-    let a = desktop::appearance();
-    let gap = desktop::handheld_size(a.classic_gap * scale, 8.0);
-    let header_height = desktop::handheld_size(a.classic_header_height * scale, 40.0);
-    let header = Rect::from_min_size(canvas.min, vec2(canvas.width(), header_height));
-    focus::set_header_zone();
+pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, classic: bool) {
+    let header_height = header.height();
+    if classic {
+        focus::set_header_zone();
+    }
     desktop::column(ui, header, "classic-header", 0.0, |ui| {
         let language = app.settings.language;
         ui.horizontal_centered(|ui| {
-            if app.view != View::Home {
+            if classic && app.view != View::Home {
                 let response = desktop::compact_back_button(
                     ui,
                     language.text("‹ Zurück", "‹ Back"),
@@ -150,9 +149,11 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
                     back(app, ui.ctx());
                 }
             }
-            ui.heading("Dado Player");
-            #[cfg(windows)]
-            crate::licensing::trial_badge(ui, false);
+            if classic {
+                ui.heading("Dado Player");
+                #[cfg(windows)]
+                crate::licensing::trial_badge(ui, false);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     app.settings
@@ -166,6 +167,49 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
                     ),
                     (Icon::Search, language.text("Suche", "Search")),
                 ] {
+                    if icon == Icon::Search {
+                        let search_width = ui
+                            .available_width()
+                            .mul_add(0.55, 0.0)
+                            .clamp(85.0, 300.0 * scale.max(0.65));
+                        let remote = app.shared_remote_navigation();
+                        let query = match app.view {
+                            View::Live => &mut app.live_q,
+                            View::Movies => &mut app.catalog_queries[0],
+                            View::Series => &mut app.catalog_queries[1],
+                            View::Settings => &mut app.settings_q,
+                            _ => &mut app.search_q,
+                        };
+                        let response = ui
+                            .allocate_ui_with_layout(
+                                vec2(search_width, header_height),
+                                egui::Layout::top_down(egui::Align::Min),
+                                |ui| {
+                                    desktop::search_field(
+                                        ui,
+                                        query,
+                                        language.text("Suchen", "Search"),
+                                        remote,
+                                    )
+                                },
+                            )
+                            .inner;
+                        let request = ui.data_mut(|data| {
+                            let id = Id::new("header-search-request");
+                            let requested = data.get_temp::<bool>(id).unwrap_or(false);
+                            data.remove::<bool>(id);
+                            requested
+                        });
+                        if app.view == View::Home && response.changed() {
+                            app.navigate(View::Search);
+                            ui.data_mut(|data| {
+                                data.insert_temp(Id::new("header-search-request"), true)
+                            });
+                        } else if request {
+                            response.request_focus();
+                            focus::request_id(response.id);
+                        }
+                    }
                     let size = header_height * 0.77;
                     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
                     ui.painter().rect_filled(
@@ -195,7 +239,13 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
                         if icon == Icon::Refresh {
                             app.refresh_catalog();
                         } else {
-                            app.navigate(View::Search);
+                            if app.view == View::Home {
+                                app.navigate(View::Search);
+                            }
+                            ui.data_mut(|data| {
+                                data.insert_temp(Id::new("header-search-request"), true)
+                            });
+                            ui.ctx().request_repaint();
                         }
                     }
                     response.on_hover_text(label);
@@ -203,6 +253,14 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
             });
         });
     });
+}
+
+pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Option<Rect> {
+    let a = desktop::appearance();
+    let gap = desktop::handheld_size(a.classic_gap * scale, 8.0);
+    let header_height = desktop::handheld_size(a.classic_header_height * scale, 40.0);
+    let header = Rect::from_min_size(canvas.min, vec2(canvas.width(), header_height));
+    show_header(app, ui, header, scale, true);
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_secs(30));
     let body = Rect::from_min_max(pos2(canvas.left(), header.bottom() + gap), canvas.max);
@@ -415,9 +473,14 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             false,
         ),
     ];
-    let width = ((right - left - gap * 3.0) / 4.0).max(1.0);
+    let action_count = if app.settings.watch_history { 4.0 } else { 3.0 };
+    let width = ((right - left - gap * (action_count - 1.0)) / action_count).max(1.0);
     let mut open_profiles = false;
-    for (index, (view, label, icon, profiles)) in actions.into_iter().enumerate() {
+    for (index, (view, label, icon, profiles)) in actions
+        .into_iter()
+        .filter(|(view, _, _, _)| *view != View::Continue || app.settings.watch_history)
+        .enumerate()
+    {
         let rect = Rect::from_min_size(
             pos2(left + index as f32 * (width + gap), actions_y),
             vec2(width, action_height),

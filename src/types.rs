@@ -437,6 +437,8 @@ pub struct Settings {
     pub settings_mode: SettingsMode,
     #[serde(default = "default_auto_play_last")]
     pub auto_play_last: bool,
+    #[serde(default = "default_watch_history")]
+    pub watch_history: bool,
     #[serde(default)]
     pub default_profile: Option<String>,
     #[serde(default)]
@@ -497,6 +499,9 @@ fn default_cache() -> u64 {
 fn default_timeout() -> u64 {
     20
 }
+fn default_watch_history() -> bool {
+    true
+}
 fn default_auto_play_last() -> bool {
     crate::release_info::AUTOPLAY_LAST
 }
@@ -521,6 +526,7 @@ impl Default for Settings {
             interface_layout: InterfaceLayout::default(),
             settings_mode: SettingsMode::Easy,
             auto_play_last: default_auto_play_last(),
+            watch_history: true,
             default_profile: None,
             signed_out: false,
             hwdec: HwDec::AutoSafe,

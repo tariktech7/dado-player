@@ -65,6 +65,7 @@ export interface Settings {
   interfaceLayout: "modern" | "classic";
   appearanceVersion?: number;
   autoplayLast: boolean;
+  watchHistory: boolean;
   liveFormat: "default" | "m3u8" | "ts";
   player: "auto" | "avplay" | "html";
   expertMode: boolean;

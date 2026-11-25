@@ -710,7 +710,7 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
                 return true;
             }
             if matches!(app.view, View::Movies | View::Series) && app.catalog_detail().is_none() {
-                app.navigate(View::Search);
+                ctx.data_mut(|data| data.insert_temp(Id::new("header-search-request"), true));
                 ctx.request_repaint();
                 return true;
             }
@@ -906,7 +906,7 @@ pub fn show(app: &mut App, ctx: &Context) {
                 (visual - collapsed) / (expanded - collapsed),
                 is_collapsed,
             );
-            let body = Rect::from_min_max(
+            let mut body = Rect::from_min_max(
                 pos2(left + target + pad, screen.top() + pad),
                 pos2(
                     screen.right()
@@ -921,6 +921,11 @@ pub fn show(app: &mut App, ctx: &Context) {
                         .max(screen.top() + pad + 1.0),
                 ),
             );
+            let header_height = handheld_size(a.classic_header_height * s, 40.0);
+            let header = Rect::from_min_size(body.min, vec2(body.width(), header_height));
+            ui::mobile::focus::set_zone(1);
+            super::classic::show_header(app, ui, header, s, false);
+            body.min.y += header_height + 8.0 * s;
             if !app.parental.open
                 && handheld()
                 && handheld_content_scroll(ctx, body)
@@ -1191,7 +1196,8 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
             let language = app.settings.language;
             let refresh_label = language.text("Liste aktualisieren", "Refresh library");
             let spacing = nav.spacing().item_spacing.y;
-            let total_rows = (rows.len() + 1) as f32;
+            let show_history = app.settings.watch_history;
+            let total_rows = (rows.len() + usize::from(show_history)) as f32;
             let row_height = handheld_size(
                 (appearance().navigation_row_height * s - spacing)
                     .min(((list_rect.height() + spacing) / total_rows - spacing).max(23.0)),
@@ -1199,6 +1205,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
             );
             for (label, view, symbol) in rows
                 .into_iter()
+                .filter(|(_, view, _)| *view != View::Continue || show_history)
                 .map(|(label, view, icon)| (label, Some(view), icon))
                 .chain(std::iter::once((refresh_label, None, Icon::Refresh)))
             {

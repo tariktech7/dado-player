@@ -21,27 +21,29 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 
     category_tabs(app, ui);
     let favs = app.favorites.clone();
+    let query = app.search_q.trim().to_lowercase();
+    let matches = |name: &str| query.is_empty() || name.to_lowercase().contains(&query);
 
     // Collect favorites by type
     let chans: Vec<Channel> = app
         .library
         .channels
         .iter()
-        .filter(|c| favs.contains(&format!("live:{}", c.id)))
+        .filter(|c| favs.contains(&format!("live:{}", c.id)) && matches(&c.name))
         .cloned()
         .collect();
     let movies: Vec<VodMovie> = app
         .library
         .movies
         .iter()
-        .filter(|m| favs.contains(&format!("vod:{}", m.id)))
+        .filter(|m| favs.contains(&format!("vod:{}", m.id)) && matches(&m.name))
         .cloned()
         .collect();
     let series: Vec<Series> = app
         .library
         .series
         .iter()
-        .filter(|s| favs.contains(&format!("series:{}", s.id)))
+        .filter(|s| favs.contains(&format!("series:{}", s.id)) && matches(&s.name))
         .cloned()
         .collect();
 

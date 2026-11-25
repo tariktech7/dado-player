@@ -545,6 +545,9 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                     app.live_cat == id,
                     counts.is_some(),
                 );
+                if index == 0 {
+                    focus::prefer_entry(r.id);
+                }
                 if index == 0 || app.live_cat == id {
                     ui.data_mut(|data| {
                         data.insert_temp(egui::Id::new("live-category-shortcut"), r.id)
@@ -642,10 +645,13 @@ fn filtered_channels(app: &mut App, ui: &Ui) -> std::sync::Arc<Vec<usize>> {
             .channels
             .iter()
             .enumerate()
-            .filter(|(_, c)| match cat.as_str() {
-                "all" => true,
-                "favorites" => app.is_favorite(&format!("live:{}", c.id)),
-                id => c.category_id == id,
+            .filter(|(_, c)| {
+                !query.is_empty()
+                    || match cat.as_str() {
+                        "all" => true,
+                        "favorites" => app.is_favorite(&format!("live:{}", c.id)),
+                        id => c.category_id == id,
+                    }
             })
             .filter(|(_, c)| query.is_empty() || c.name.to_lowercase().contains(&query))
             .map(|(i, _)| i)
@@ -680,10 +686,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
             ui.heading(title);
         }
         ui.add_space(6.0);
-        if desktop {
-            let remote = app.shared_remote_navigation();
-            super::desktop::search_field(ui, &mut app.live_q, "Sender suchen", remote);
-        } else {
+        if !desktop {
             let query = ui.add_sized(
                 [
                     ui.available_width(),

@@ -168,7 +168,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 fn show_content(app: &mut App, ui: &mut Ui, inline_favorites: bool) {
     crate::ui::mobile::focus::set_zone(1);
     let series: Vec<_> = app
-        .history
+        .visible_history()
         .iter()
         .filter_map(|h| {
             h.key
@@ -280,7 +280,7 @@ fn filter_by_kind(
 }
 
 fn featured_item(app: &App) -> Option<PlayItem> {
-    app.history
+    app.visible_history()
         .iter()
         .filter_map(|h| {
             app.resolve_play(&h.key).or_else(|| {
@@ -429,7 +429,7 @@ fn empty_hero(app: &mut App, ui: &mut Ui) {
 }
 
 fn continue_items(app: &App) -> Vec<(String, String, String, String, PlayKind)> {
-    crate::types::resume_history(&app.history)
+    crate::types::resume_history(app.visible_history())
         .filter_map(|h| {
             if let Some(series_id) = h
                 .key

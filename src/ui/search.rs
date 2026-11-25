@@ -9,14 +9,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add(egui::Label::new(RichText::new("Suche").size(22.0).strong()));
     ui.add_space(6.0);
     let remote = app.shared_remote_navigation();
-    if super::desktop::active(ui.ctx()) {
-        super::desktop::search_field(
-            ui,
-            &mut app.search_q,
-            "Kanal, Film oder Serie suchen…",
-            remote,
-        );
-    } else {
+    if !super::desktop::active(ui.ctx()) {
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut app.search_q)

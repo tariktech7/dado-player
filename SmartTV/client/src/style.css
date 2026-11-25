@@ -1857,7 +1857,12 @@ hr {
   font-size: 24px;
 }
 .classic-header img { width: 32px; height: 32px; }
-.classic-header time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.classic-header time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.header-search { display: flex; gap: 8px; margin-left: auto; min-width: 0; }
+.header-search-field { width: 280px; min-width: 0; max-width: 25vw; }
+.shell:not(.classic-shell) { grid-template-rows: var(--classic-header-height) minmax(0, 1fr); }
+.shell:not(.classic-shell) > .navigation { grid-row: 1 / -1; }
+.shell > .modern-header { grid-column: 2 / -1; grid-row: 1; }
 .classic-header button { font-size: 20px; }
 .classic-header .classic-back { min-height: 0; height: 40px; padding: 0 14px; white-space: nowrap; }
 .classic-header .refresh-library { display: grid; place-items: center; width: 50px; height: 42px; padding: 0; }

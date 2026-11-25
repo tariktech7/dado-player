@@ -966,10 +966,11 @@ fn image_for_key(app: &App, key: &str) -> (String, String) {
 }
 
 fn continue_rails(app: &mut App) -> Vec<Rail> {
-    let entries: Vec<(String, String, String)> = crate::types::resume_history(&app.history)
-        .take(MAX_CARDS)
-        .map(|h| (h.key.clone(), h.title.clone(), h.sub.clone()))
-        .collect();
+    let entries: Vec<(String, String, String)> =
+        crate::types::resume_history(app.visible_history())
+            .take(MAX_CARDS)
+            .map(|h| (h.key.clone(), h.title.clone(), h.sub.clone()))
+            .collect();
     let cards: Vec<Card> = entries
         .iter()
         .map(|(k, t, s)| history_card(app, k, t, s))

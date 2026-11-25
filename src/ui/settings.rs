@@ -224,6 +224,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     .iter()
                     .enumerate()
                     .filter(|(_, section)| section.id != "license" || cfg!(windows))
+                    .filter(|(_, section)| {
+                        t(&section.de, &section.en)
+                            .to_lowercase()
+                            .contains(&app.settings_q.trim().to_lowercase())
+                    })
                     .collect();
                 focus::set_zone(1);
                 for row in tiles.chunks(columns) {
@@ -695,6 +700,25 @@ fn panel(
                     }
                 }
                 "playback" => {
+                    if switch(
+                        ui,
+                        t(
+                            "Fortsetzen und Wiedergabeverlauf",
+                            "Continue watching and watch history",
+                        ),
+                        &mut app.settings.watch_history,
+                    ) {
+                        if !app.settings.watch_history {
+                            app.clear_resume();
+                            if app.series_cat == "continue" {
+                                app.series_cat = "all".into();
+                            }
+                            if app.vod_cat == "continue" {
+                                app.vod_cat = "all".into();
+                            }
+                        }
+                        *changed = true;
+                    }
                     *changed |= switch(
                         ui,
                         t(

@@ -300,7 +300,6 @@ export function CatalogBrowser({
   category,
   setCategory,
   query,
-  setQuery,
   selected,
   select,
   close,
@@ -308,6 +307,7 @@ export function CatalogBrowser({
   detail,
   episodes,
   history,
+  watchHistory,
   toggle,
   play,
   playDirect,
@@ -322,7 +322,6 @@ export function CatalogBrowser({
   category: string;
   setCategory: (c: string) => void;
   query: string;
-  setQuery: (q: string) => void;
   selected: Item | null;
   select: (i: Item) => void;
   close: () => void;
@@ -330,6 +329,7 @@ export function CatalogBrowser({
   detail: Item | null;
   episodes: Item[];
   history: Watched[];
+  watchHistory: boolean;
   toggle: (i: Item) => void;
   play: (i: Item, pos: number) => void;
   allowEpisodePreviews: (entry: Item) => boolean;
@@ -351,7 +351,7 @@ export function CatalogBrowser({
     { id: "all", name: t("Alle Titel", "All titles") },
     ...(classic ? [
       { id: "recent", name: t("Neu hinzugefügt", "Recently added") },
-      { id: "continue", name: t("Fortsetzen", "Continue watching") },
+      ...(watchHistory ? [{ id: "continue", name: t("Fortsetzen", "Continue watching") }] : []),
     ] : []),
     ...categories,
   ];
@@ -360,7 +360,7 @@ export function CatalogBrowser({
     const q = query.trim().toLocaleLowerCase();
     const result = items.filter(
       (i) =>
-        (category === "all" || category === "recent" ||
+        (q.length > 0 || category === "all" || category === "recent" ||
           (category === "favorites"
             ? categoryFavorites?.has(itemKey(i))
             : category === "continue" ? continueIds?.has(i.id) : i.category === category)) &&
@@ -400,7 +400,6 @@ export function CatalogBrowser({
       <section class="categories" data-focus-zone="categories">
         <h1>{t("Kategorien", "Categories")}</h1>
         {classic && <div class="classic-catalog-tools">
-          <TVInput type="search" aria-label={t("Titel suchen", "Search titles")} placeholder={t("Titel suchen", "Search titles")} value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
           <button class="catalog-sort" onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
             {alphabetic ? t("Sortierung: A–Z", "Sort: A–Z") : t("Sortierung: Anbieter", "Sort: Provider")}
           </button>
@@ -425,13 +424,7 @@ export function CatalogBrowser({
           <h1>{classic ? choices.find((choice) => choice.id === category)?.name : kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
           {legend}
         </header>
-        {!classic && <div class="catalog-tools"><TVInput
-          type="search"
-          aria-label={t("Titel suchen", "Search titles")}
-          placeholder={t("Titel suchen", "Search titles")}
-          value={query}
-          onInput={(e) => setQuery(e.currentTarget.value)}
-        /><button class="catalog-sort" onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
+        {!classic && <div class="catalog-tools"><button class="catalog-sort" onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
           {alphabetic ? t("Sortierung: A–Z", "Sort: A–Z") : t("Sortierung: Anbieter", "Sort: Provider")}
         </button></div>}
         <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} classic={classic}

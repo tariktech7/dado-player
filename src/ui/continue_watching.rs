@@ -135,7 +135,7 @@ fn empty(ui: &mut Ui, text: &str) {
 /// Recently watched channels, in the same row style as the Live list.
 fn live_tab(app: &mut App, ui: &mut Ui) {
     let keys: Vec<(String, String)> = app
-        .history
+        .visible_history()
         .iter()
         .filter(|h| h.key.starts_with("live:"))
         .map(|h| (h.key.clone(), h.title.clone()))
@@ -215,7 +215,7 @@ fn live_tab(app: &mut App, ui: &mut Ui) {
 /// Movies as a poster grid – identical look to the "Filme" view.
 fn movies_tab(app: &mut App, ui: &mut Ui) {
     let keys: Vec<(String, String)> = app
-        .history
+        .visible_history()
         .iter()
         .filter(|h| h.key.starts_with("vod:"))
         .map(|h| (h.key.clone(), h.title.clone()))
@@ -285,10 +285,13 @@ fn movies_tab(app: &mut App, ui: &mut Ui) {
 
 /// Series as a poster grid; a click continues the last watched episode.
 fn series_tab(app: &mut App, ui: &mut Ui) {
-    let entries: Vec<(String, String, String)> = crate::types::resume_history(&app.history)
-        .filter(|h| h.key.starts_with("ep:"))
-        .map(|h| (h.key.clone(), h.title.clone(), h.sub.clone()))
-        .collect();
+    let query = app.search_q.trim().to_lowercase();
+    let entries: Vec<(String, String, String)> =
+        crate::types::resume_history(app.visible_history())
+            .filter(|h| h.key.starts_with("ep:"))
+            .filter(|h| query.is_empty() || h.title.to_lowercase().contains(&query))
+            .map(|h| (h.key.clone(), h.title.clone(), h.sub.clone()))
+            .collect();
     if entries.is_empty() {
         empty(ui, "Noch keine Serie gesehen.");
         return;

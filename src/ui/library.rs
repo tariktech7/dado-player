@@ -413,13 +413,6 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             super::desktop::column(ui, cr, "catalog-categories", offset, |ui| {
                 if classic {
                     let language = app.settings.language;
-                    let remote = app.shared_remote_navigation();
-                    super::desktop::search_field(
-                        ui,
-                        &mut app.catalog_queries[usize::from(series)],
-                        language.text("Titel suchen", "Search titles"),
-                        remote,
-                    );
                     let id = egui::Id::new(("classic-catalog-sort", series));
                     let alphabetic = ui
                         .ctx()
@@ -577,7 +570,7 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
         ("all", language.text("Alle", "All titles")),
         ("recent", language.text("Neu hinzugefügt", "Recently added")),
     ];
-    if super::classic::enabled(app) {
+    if super::classic::enabled(app) && app.settings.watch_history {
         special.push(("continue", language.text("Fortsetzen", "Continue watching")));
     }
     let count = cats.len() + special.len();
@@ -627,6 +620,9 @@ fn categories(app: &mut App, ui: &mut Ui, series: bool) {
                         Sense::hover(),
                     );
                     let r = ui.interact(rect, ui.id().with((&id, "category")), Sense::click());
+                    if index == 0 {
+                        focus::prefer_entry(r.id);
+                    }
                     if classic_counts.is_some() {
                         super::classic::list_surface(
                             ui,
@@ -727,7 +723,7 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
     };
     let query = app.catalog_queries[usize::from(series)].to_lowercase();
     let continued: std::collections::HashSet<u32> = if cat == "continue" {
-        crate::types::resume_history(&app.history)
+        crate::types::resume_history(app.visible_history())
             .filter_map(|record| {
                 let prefix = if series { "ep:" } else { "vod:" };
                 record
@@ -774,14 +770,16 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
         }
     }
     let keep = |id: u32, category: &str, name: &str| {
-        (match cat.as_str() {
-            "all" | "recent" => true,
-            "continue" => continued.contains(&id),
-            "favorites" => {
-                app.is_favorite(&format!("{}:{id}", if series { "series" } else { "vod" }))
-            }
-            v => v == category,
-        }) && (query.is_empty() || name.to_lowercase().contains(&query))
+        (query.len() > 0
+            || (match cat.as_str() {
+                "all" | "recent" => true,
+                "continue" => continued.contains(&id),
+                "favorites" => {
+                    app.is_favorite(&format!("{}:{id}", if series { "series" } else { "vod" }))
+                }
+                v => v == category,
+            }))
+            && (query.is_empty() || name.to_lowercase().contains(&query))
     };
     let mut rows: Vec<_> = if series {
         app.library
@@ -855,14 +853,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                 .size(18.0),
             );
         }
-        if desktop && !super::classic::enabled(app) {
-            super::desktop::search_field(
-                ui,
-                &mut app.catalog_queries[usize::from(series)],
-                app.settings.language.text("Titel suchen", "Search titles"),
-                tv,
-            );
-        } else if !desktop {
+        if !desktop {
             let mut reveal = false;
             components::field(
                 ui,

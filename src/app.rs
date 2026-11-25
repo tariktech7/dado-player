@@ -938,11 +938,19 @@ impl App {
             let key = pl.current_key.clone();
             pl.position = pos;
             pl.duration = dur;
-            if !self.untracked_playback && !key.is_empty() && dur > 0.0 {
+            if self.settings.watch_history
+                && !self.untracked_playback
+                && !key.is_empty()
+                && dur > 0.0
+            {
                 self.durations.insert(key.clone(), dur as u64);
             }
             pl.paused = paused;
-            if !self.untracked_playback && !key.is_empty() && pos > 1.0 {
+            if self.settings.watch_history
+                && !self.untracked_playback
+                && !key.is_empty()
+                && pos > 1.0
+            {
                 self.progress.insert(key, pos as u64);
             }
 
@@ -1778,6 +1786,9 @@ impl App {
     /// leave goes on the stack, so BACK retraces the path instead of dumping
     /// the user on "Live TV" no matter where they were.
     pub fn navigate(&mut self, view: View) {
+        if view == View::Continue && !self.settings.watch_history {
+            return;
+        }
         if view != View::Settings || self.view != View::Settings {
             self.adding_profile = false;
             self.settings_section = None;
@@ -2000,7 +2011,18 @@ impl App {
     // ---- playback ----
 
     /// Remember an item in the recently-watched list (newest first).
+    pub fn visible_history(&self) -> &[HistEntry] {
+        if self.settings.watch_history {
+            &self.history
+        } else {
+            &[]
+        }
+    }
+
     fn record_history(&mut self, item: &PlayItem) {
+        if !self.settings.watch_history {
+            return;
+        }
         let key = item.progress_key.clone();
         if key.is_empty() {
             return;
@@ -2563,7 +2585,7 @@ impl App {
         let episodes = self.series_episodes_for(sid)?;
         let prefix = format!("ep:{sid}:");
         let id = self
-            .history
+            .visible_history()
             .iter()
             .find(|h| h.key.starts_with(&prefix))
             .and_then(|h| h.key.rsplit(':').next()?.parse::<u32>().ok());
@@ -3200,7 +3222,7 @@ impl App {
         // re-applies it instead of assuming it is still installed.
         self.last_video_cutouts = None;
         if !self.untracked_playback {
-            if !key.is_empty() {
+            if self.settings.watch_history && !key.is_empty() {
                 self.progress.insert(key, pos as u64);
             }
             self.save_user_data();
@@ -3320,7 +3342,11 @@ impl App {
     }
 
     pub fn get_progress(&self, key: &str) -> u64 {
-        *self.progress.get(key).unwrap_or(&0)
+        if self.settings.watch_history {
+            self.progress.get(key).copied().unwrap_or_default()
+        } else {
+            0
+        }
     }
 
     pub(crate) fn resume_position(&self, key: &str) -> Option<u64> {
@@ -3374,13 +3400,17 @@ impl App {
             self.parental.restart = true;
             return;
         }
-        self.progress.remove(&item.progress_key);
+        if self.settings.watch_history {
+            self.progress.remove(&item.progress_key);
+        }
         self.save_user_data();
         self.play_authorized(item, false);
     }
 
     pub fn set_progress(&mut self, key: &str, secs: u64) {
-        self.progress.insert(key.to_string(), secs);
+        if self.settings.watch_history {
+            self.progress.insert(key.to_string(), secs);
+        }
     }
 
     // ---- epg / series ----
@@ -3627,6 +3657,9 @@ impl App {
 
     /// A continue action survives asynchronous episode loading.
     pub fn play_history_key(&mut self, key: &str) {
+        if !self.settings.watch_history {
+            return;
+        }
         if let Some(sid) = key
             .strip_prefix("ep:")
             .and_then(|s| s.split(':').next())
@@ -5239,6 +5272,24 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn disabling_watch_history_hides_progress_and_does_not_record_playback() {
+        let mut app = App::test_app();
+        app.load_demo();
+        let movie = app.library.movies[0].id;
+        let key = format!("vod:{movie}");
+        let item = app.resolve_play(&key).unwrap();
+        app.set_progress(&key, 100);
+        let original_count = app.history.len();
+        app.settings.watch_history = false;
+        assert!(app.visible_history().is_empty());
+        assert_eq!(app.get_progress(&key), 0);
+        app.record_history(&item);
+        app.set_progress(&key, 200);
+        assert_eq!(app.history.len(), original_count);
+        assert_eq!(app.progress.get(&key), Some(&100));
+    }
+
     #[test]
     fn color_shortcuts_use_focused_rows_and_do_not_repeat_favorites() {
         let mut app = App::test_app();
