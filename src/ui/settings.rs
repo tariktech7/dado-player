@@ -213,17 +213,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     draft.with(index),
                     300.0 * scale,
                     |ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.heading(
-                                egui::RichText::new(t(&section.de, &section.en))
-                                    .size((available.y * 0.055).clamp(23.0, 45.0)),
-                            );
-                        });
-                        ui.add_space((available.y * 0.022).clamp(12.0, 26.0));
                         panel(
                             app,
                             ui,
-                            &section.id,
+                            section,
+                            (available.y * 0.055).clamp(23.0, 45.0),
                             draft.with(index).with("choice"),
                             mobile,
                             &mut changed,
@@ -520,7 +514,6 @@ fn profiles(app: &mut App, ui: &mut Ui) {
         app.begin_profile_add();
     }
     if app.adding_profile {
-        ui.spacing_mut().item_spacing.y = 10.0;
         for (kind, title) in [
             (crate::types::ProfileKind::Xtream, "Xtream Codes"),
             (crate::types::ProfileKind::M3u, "M3U"),
@@ -614,7 +607,8 @@ fn profiles(app: &mut App, ui: &mut Ui) {
 fn panel(
     app: &mut App,
     ui: &mut Ui,
-    section: &str,
+    section: &Section,
+    heading_size: f32,
     draft: egui::Id,
     mobile: bool,
     changed: &mut bool,
@@ -623,6 +617,9 @@ fn panel(
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
     let save = t("Änderungen speichern", "Save changes");
+    let scale = super::desktop::scale(ui.ctx());
+    let inset = (32.0 * scale).max(16.0);
+    let spacing = (32.0 * scale).max(17.0);
     egui::Frame::none()
         .fill(ui.visuals().window_fill)
         .stroke(ui.visuals().window_stroke)
@@ -630,14 +627,15 @@ fn panel(
             (super::desktop::appearance().settings_panel_radius * super::desktop::scale(ui.ctx()))
                 .max(16.0),
         )
-        .inner_margin(egui::Margin::same(
-            (32.0 * super::desktop::scale(ui.ctx())).max(16.0),
-        ))
+        .inner_margin(egui::Margin::same(inset))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            let spacing = (super::desktop::scale(ui.ctx()) * 20.0).max(12.0);
-            ui.spacing_mut().item_spacing.y = ui.spacing().item_spacing.y.max(spacing);
-            match section {
+            ui.spacing_mut().item_spacing.y = spacing;
+            ui.vertical_centered(|ui| {
+                ui.heading(egui::RichText::new(t(&section.de, &section.en)).size(heading_size));
+            });
+            ui.add_space((inset + 10.0 - spacing).max(0.0));
+            match section.id.as_str() {
                 "clock" => {
                     if let Some(value) = quick_choice(
                         ui,
@@ -864,7 +862,6 @@ fn panel(
                 "parental" => super::parental::entry(app, ui),
                 "updates" => {
                     ui.scope(|ui| {
-                        ui.spacing_mut().item_spacing.y = 18.0;
                         ui.label(format!("Dado Player {}", crate::release_info::RELEASE_NAME));
                         #[cfg(target_os = "windows")]
                         ui.label(format!(

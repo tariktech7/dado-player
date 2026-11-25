@@ -97,7 +97,6 @@ fn hand_off(state: &mut State) {
 
 pub fn show(ui: &mut egui::Ui) {
     let mut s = state().lock().unwrap();
-    ui.heading("App-Updates");
     ui.label(format!("Installierter Build {}", PACKAGE.2));
     ui.add_enabled_ui(!s.busy, |ui| {
         let access = ui.collapsing("GitHub-Zugang für private Releases", |ui| {

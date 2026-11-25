@@ -2105,6 +2105,13 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     });
     expect(alignment.x, key).toBeLessThan(2);
     expect(alignment.y, key).toBeLessThan(2);
+    const spacing = await panel.evaluate(element => {
+      const panel = element.getBoundingClientRect();
+      const title = element.querySelector("h2")!.getBoundingClientRect();
+      const content = element.querySelector(".settings-content")!.getBoundingClientRect();
+      return {above: title.top - panel.top, below: content.top - title.bottom};
+    });
+    expect(spacing.below, key).toBeGreaterThan(spacing.above + 8);
     const layout = await panel.locator('.settings-content').evaluate(content => {
       const box = content.getBoundingClientRect();
       const controls = [...content.querySelectorAll('button,input,select')]
@@ -2115,7 +2122,13 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     });
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
-    if (key === 'playback') await page.screenshot({path: testInfo.outputPath('settings-playback.png')});
+    if (key === 'playback') {
+      const gaps = await panel.locator('.settings-content > .field').evaluateAll(fields =>
+        fields.slice(1).map((field, i) => field.getBoundingClientRect().top - fields[i].getBoundingClientRect().bottom));
+      expect(gaps).toHaveLength(2);
+      expect(Math.min(...gaps)).toBeGreaterThan(30);
+      await page.screenshot({path: testInfo.outputPath('settings-playback.png')});
+    }
     await page.locator('.classic-header').getByRole('button', {name:'‹ Alle Einstellungen'}).click();
   }
 });

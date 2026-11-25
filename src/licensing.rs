@@ -340,10 +340,6 @@ fn request(ctx: &Context, mode: RequestMode) {
     });
 }
 pub fn settings(ui: &mut Ui) {
-    ui.heading("Lizenz & Gerät");
-    if crate::ui::desktop::active(ui.ctx()) {
-        ui.add_space(12.0 * crate::ui::desktop::scale(ui.ctx()));
-    }
     license_controls(ui);
 }
 
