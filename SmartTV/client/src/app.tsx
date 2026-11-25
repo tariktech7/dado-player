@@ -60,18 +60,18 @@ installShellAppearance();
 
 type RefreshStatus = "idle" | "loading" | "success" | "error";
 
-function ShortcutLegend({t, player = false, onAction, marked}: {
+function ShortcutLegend({t, labels, onAction, marked}: {
   t: (de: string, en: string) => string;
-  player?: boolean;
+  labels?: readonly string[];
   onAction?: (key: string) => void;
   marked?: boolean;
 }) {
   return (
     <ul class="shortcut-legend" aria-label={t("Farbtasten", "Color buttons")}>
-      {appearance.remoteShortcuts.map(({key, color, de, en, playerDe, playerEn}) => {
-        const label = onAction && key === "F2" ? t("Senderliste", "Channel list")
+      {appearance.remoteShortcuts.map(({key, color, de, en}, index) => {
+        const label = labels?.[index] ?? (onAction && key === "F2" ? t("Senderliste", "Channel list")
           : onAction && key === "F4" ? t("Bildformat", "Aspect ratio")
-          : player && playerDe && playerEn ? t(playerDe, playerEn) : t(de, en);
+          : t(de, en));
         const dot = <span class="shortcut-dot" style={{backgroundColor: color}} aria-hidden="true" />;
         return <li key={key}>{onAction ? (
           <button type="button"
@@ -946,6 +946,7 @@ function App() {
     const editingText = (e.target as HTMLElement | null)?.matches(
       'input:not([type="checkbox"]):not([type="radio"]),textarea,[contenteditable="true"]',
     );
+    const browsingCatalog = !fullRef.current && !selectedTitle && (view === "vod" || view === "series");
     if (code >= 403 && code <= 406) {
       e.preventDefault();
       if (e.repeat) return;
@@ -955,6 +956,11 @@ function App() {
       } else if (code === 404) {
         if (livePlayer) leavePlayer(true, true);
         else if (view === "live" && fullRef.current) leavePlayer();
+        else if (view === "live") {
+          const category = document.querySelector<HTMLElement>(".live-shell .category-list button.selected")
+            || document.querySelector<HTMLElement>(".live-shell .category-list button");
+          category?.focus();
+        } else if (browsingCatalog) goShortcut("search");
         else goShortcut("live");
       } else if (code === 405) {
         const key = document.activeElement?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
@@ -973,6 +979,10 @@ function App() {
       } else if (fullRef.current) {
         showControls();
         setPlayerOptions(!playerOptionsRef.current);
+      } else if (browsingCatalog) {
+        document.querySelector<HTMLButtonElement>(".catalog-sort")?.click();
+      } else if (view === "live") {
+        if (previewRef.current?.kind === "live") openFullscreen();
       } else {
         goShortcut("settings");
       }
@@ -1429,8 +1439,13 @@ function App() {
     const active = settingsSections.find((section) => section.id === settingsSection);
     const quickChoice = (current: string, choices: [string, string][], commit: (value: string) => void) => <>
       <div class="settings-choices" role="group" aria-label={active?.[saved.settings.language]}>
-        {choices.map(([value, label]) => <button key={value} aria-pressed={(settingsDraft ?? current) === value}
-          onClick={() => setSettingsDraft(value)}>{label}</button>)}
+        {choices.map(([value, label]) => <button key={value}
+          data-current={value === current ? "" : undefined}
+          aria-pressed={(settingsDraft ?? current) === value}
+          onClick={() => setSettingsDraft(value)}>
+          <span class="settings-choice-check" aria-hidden="true">{value === current ? "✓" : ""}</span>
+          {label}
+        </button>)}
       </div>
       <button class="primary" onClick={() => { commit(settingsDraft ?? current); closeSettingsSection(); }}>
         {t("Änderungen speichern", "Save changes")}
@@ -1580,7 +1595,7 @@ function App() {
           <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
           <button onClick={manageParental}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
-        case "updates": return <>
+        case "updates": return <div class="settings-update-stack" data-settings-ordered>
           <Field label={t('GitHub-Lese-Token', 'Read-only GitHub token')}>
             <TVInput type="password" autocomplete="off" value={updateToken}
               onChange={(e) => {
@@ -1592,6 +1607,11 @@ function App() {
                 } catch { setUpdate(t('Speichern fehlgeschlagen.', 'Could not save the token.')); }
               }} />
           </Field>
+          <p class="settings-update-help muted">{t(
+            "Auf GitHub einen Fine-grained Token für tariktech7/dado-player erstellen. Unter Contents genügt Read-only.",
+            "Create a fine-grained GitHub token for tariktech7/dado-player. Set Contents to Read-only."
+          )}</p>
+          <div class="settings-update-actions">
           <button disabled={checkingUpdate} onClick={() => void checkUpdates(true)}>
             {t("GitHub-Update prüfen und installieren", "Check and install GitHub update")}
           </button>
@@ -1616,11 +1636,12 @@ function App() {
           >
             Integriertes Testvideo abspielen
           </button>
+          </div>
           {update && <p role="status">{update}</p>}
           <p class="muted">{t('Mit GitHub-Lesezugriff prüft Dado Player automatisch alle sechs Stunden auf signierte Web-Updates.',
             'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
           <p class="muted">{APP_VERSION} · Build {APP_BUILD} · D7</p>
-        </>;
+        </div>;
         case "license": return <>
           <p><strong>{license.text}</strong></p>
           <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
@@ -1738,7 +1759,7 @@ function App() {
             data-license-status={active.id === "license" ? "" : undefined}>
           <button class="settings-back menu-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>
           <h2>{active[saved.settings.language]}</h2>
-          {renderSection(active.id)}
+          <div class="settings-content">{renderSection(active.id)}</div>
         </section>}
       </div>
     );
@@ -2130,7 +2151,10 @@ function App() {
                 <aside class="preview-panel" data-focus-zone="details">
                   <header>
                     <h2>{t("Vorschau", "Preview")}</h2>
-                    {classic && !full && <ShortcutLegend t={t} />}
+                    {!full && <ShortcutLegend t={t} labels={[
+                      t("Elternsperre", "Parental lock"), t("Kategorien", "Categories"),
+                      t("Favorit", "Favorite"), t("Vollbild", "Fullscreen"),
+                    ]} />}
                     {preview && (
                       <button
                         class="icon-button"
@@ -2389,6 +2413,10 @@ function App() {
                   </>
                 ) : (
                   <CatalogBrowser
+                    legend={<ShortcutLegend t={t} labels={[
+                      t("Elternsperre", "Parental lock"), t("Suche", "Search"),
+                      t("Favorit", "Favorite"), t("Sortierung", "Sort"),
+                    ]} />}
                     key={view}
                     kind={view === "vod" ? "vod" : "series"}
                     t={t}
@@ -2440,7 +2468,6 @@ function App() {
               marked={isFavorite(externalTitle)} toggle={toggleFavorite} play={playTitle} playDirect={playDirect}
               previews={allowEpisodePreviews(externalTitle)} />}
           </div>
-          {!full && view !== "home" && !(classic && view === "live") && <ShortcutLegend t={t} />}
           {editing && modal(t("Profil hinzufügen", "Add profile"), profileForm(true))}
           {full && preview && (
             <div
@@ -2507,7 +2534,7 @@ function App() {
                   <Logo item={preview} />
                   <span class="on-air-copy"><strong>{preview.name}</strong>{now && <small>{now.title}</small>}</span>
                 </div>
-                <ShortcutLegend t={t} player marked={isFavorite(preview)} onAction={(key) => {
+                <ShortcutLegend t={t} marked={isFavorite(preview)} onAction={(key) => {
                   switch (key) {
                     case "F1": manageParental(); break;
                     case "F2": leavePlayer(true, true); break;

@@ -88,6 +88,7 @@ pub fn show(ui: &mut egui::Ui) {
     let mut state = state().lock().unwrap();
     ui.add_enabled_ui(!state.busy, |ui| {
         ui.collapsing("Zugang zum privaten GitHub-Release", |ui| {
+            ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
             ui.add(
                 egui::TextEdit::singleline(&mut state.token)
                     .password(true)

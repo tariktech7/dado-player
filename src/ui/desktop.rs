@@ -186,65 +186,50 @@ pub(super) fn search_field(
     response
 }
 
-pub(super) fn shortcut_legend(
-    painter: &egui::Painter,
-    screen: Rect,
-    scale: f32,
+pub(super) fn browse_shortcuts(
+    ui: &Ui,
+    header: Rect,
+    view: View,
     language: crate::types::AppLanguage,
-    text: Color32,
-    background: Option<Color32>,
-    show_key: bool,
-) -> Rect {
-    let s = scale.min(screen.width() / 520.0);
-    let labels = appearance().remote_shortcuts.each_ref().map(|shortcut| {
-        let label = if background.is_some() {
-            language.text(
-                shortcut.player_de.as_deref().unwrap_or(&shortcut.de),
-                shortcut.player_en.as_deref().unwrap_or(&shortcut.en),
-            )
+) {
+    let labels = match view {
+        View::Live => [
+            language.text("Elternsperre", "Parental lock"),
+            language.text("Kategorien", "Categories"),
+            language.text("Favorit", "Favorite"),
+            language.text("Vollbild", "Fullscreen"),
+        ],
+        _ => [
+            language.text("Elternsperre", "Parental lock"),
+            language.text("Suche", "Search"),
+            language.text("Favorit", "Favorite"),
+            language.text("Sortierung", "Sort"),
+        ],
+    };
+    let color = theme::muted(ui);
+    let scale = scale(ui.ctx()).min(header.width() / 460.0).max(0.65);
+    let painter = ui
+        .painter()
+        .with_clip_rect(header.intersect(ui.clip_rect()));
+    let mut x = header.right();
+    for (shortcut, label) in appearance().remote_shortcuts.iter().zip(labels).rev() {
+        let label = if cfg!(windows) {
+            format!("{} {label}", shortcut.key)
         } else {
-            language.text(&shortcut.de, &shortcut.en)
+            label.into()
         };
-        let galley = painter.layout_no_wrap(
-            if show_key {
-                format!("{}  {label}", shortcut.key)
-            } else {
-                label.into()
-            },
-            FontId::proportional(16.0 * s),
-            text,
-        );
-        (
-            galley,
-            Color32::from_hex(&shortcut.color).expect("bundled shortcut color"),
-        )
-    });
-    let gap = 18.0 * s;
-    let width = labels
-        .iter()
-        .map(|(label, _)| label.size().x + 14.0 * s)
-        .sum::<f32>()
-        + 3.0 * gap
-        + 24.0 * s;
-    let bounds = Rect::from_center_size(
-        pos2(screen.center().x, screen.bottom() - 17.0 * s),
-        vec2(width, 24.0 * s),
-    );
-    if let Some(fill) = background {
-        painter.rect_filled(bounds, 12.0 * s, fill);
-    }
-    let mut x = bounds.left() + 12.0 * s;
-    for (label, color) in labels {
-        painter.circle_filled(pos2(x + 4.0 * s, bounds.center().y), 4.0 * s, color);
-        let size = label.size();
+        let galley = painter.layout_no_wrap(label, FontId::proportional(16.0 * scale), color);
+        x -= galley.size().x;
         painter.galley(
-            pos2(x + 14.0 * s, bounds.center().y - size.y / 2.0),
-            label,
-            text,
+            pos2(x, header.center().y - galley.size().y * 0.5),
+            galley,
+            color,
         );
-        x += size.x + 14.0 * s + gap;
+        x -= 8.0 * scale;
+        let dot = Color32::from_hex(&shortcut.color).expect("bundled shortcut color");
+        painter.circle_filled(pos2(x, header.center().y), 3.5 * scale, dot);
+        x -= 15.0 * scale;
     }
-    bounds
 }
 
 fn ease(x: f32) -> f32 {
@@ -715,6 +700,20 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
             }
         }
         egui::Key::F2 => {
+            if app.view == View::Live {
+                if let Some(id) =
+                    ctx.data(|data| data.get_temp::<Id>(Id::new("live-category-shortcut")))
+                {
+                    ui::mobile::focus::queue_id(id);
+                    ctx.request_repaint();
+                }
+                return true;
+            }
+            if matches!(app.view, View::Movies | View::Series) && app.catalog_detail().is_none() {
+                app.navigate(View::Search);
+                ctx.request_repaint();
+                return true;
+            }
             if live_player {
                 app.open_live_list();
                 return true;
@@ -760,6 +759,19 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
                 super::player_desktop::cycle_live_aspect(app, ctx);
             } else if player {
                 super::player_desktop::toggle_aspect_shortcut(app, ctx);
+            } else if app.view == View::Live {
+                if app.preview.is_some() {
+                    app.promote_preview(true);
+                }
+            } else if matches!(app.view, View::Movies | View::Series)
+                && app.catalog_detail().is_none()
+            {
+                let id = Id::new(("classic-catalog-sort", app.view == View::Series));
+                ctx.data_mut(|data| {
+                    let before = data.get_temp::<bool>(id).unwrap_or(false);
+                    data.insert_temp(id, !before);
+                });
+                ctx.request_repaint();
             } else {
                 app.navigate(View::Settings);
                 focus_navigation(app);
@@ -867,12 +879,7 @@ pub fn show(app: &mut App, ctx: &Context) {
             ui.set_enabled(!app.parental.open);
             if classic {
                 let edge = handheld_size(22.0 * s, 8.0);
-                let mut canvas = screen.shrink(edge);
-                let footer_legend =
-                    (cfg!(windows) || app.tv) && !matches!(app.view, View::Live | View::Home);
-                if footer_legend {
-                    canvas.max.y -= 20.0 * s;
-                }
+                let canvas = screen.shrink(edge);
                 let preview = super::classic::show(app, ui, canvas, s);
                 ui.painter().set(
                     backdrop,
@@ -882,17 +889,6 @@ pub fn show(app: &mut App, ctx: &Context) {
                         preview.filter(|_| cfg!(target_os = "ios")),
                     ),
                 );
-                if footer_legend {
-                    shortcut_legend(
-                        ui.painter(),
-                        screen,
-                        s,
-                        app.settings.language,
-                        theme::muted(ui),
-                        None,
-                        cfg!(windows),
-                    );
-                }
                 return;
             }
             let nav = rail(visual);
@@ -958,17 +954,6 @@ pub fn show(app: &mut App, ctx: &Context) {
                 backdrop,
                 theme::ambient_shape(ui, background, preview.filter(|_| cfg!(target_os = "ios"))),
             );
-            if (cfg!(windows) || app.tv) && app.view != View::Home {
-                shortcut_legend(
-                    ui.painter(),
-                    screen,
-                    s,
-                    app.settings.language,
-                    theme::muted(ui),
-                    None,
-                    cfg!(windows),
-                );
-            }
         });
     if exit_prompt(ctx) {
         let mut dismiss = false;

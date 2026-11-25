@@ -291,6 +291,7 @@ function PosterGrid({
 }
 
 export function CatalogBrowser({
+  legend,
   kind,
   t,
   classic,
@@ -312,6 +313,7 @@ export function CatalogBrowser({
   playDirect,
   allowEpisodePreviews,
 }: {
+  legend: import("preact").ComponentChildren;
   kind: "series" | "vod";
   t: (de: string, en: string) => string;
   classic: boolean;
@@ -364,7 +366,7 @@ export function CatalogBrowser({
             : category === "continue" ? continueIds?.has(i.id) : i.category === category)) &&
         i.name.toLocaleLowerCase().includes(q),
     );
-    if (classic && alphabetic) result.sort((left, right) => left.name.localeCompare(right.name));
+    if (alphabetic) result.sort((left, right) => left.name.localeCompare(right.name));
     else if (category === "recent") result.sort((left, right) => (right.added || 0) - (left.added || 0));
     return result;
   }, [items, category, query, categoryFavorites, continueIds, classic, alphabetic]);
@@ -399,7 +401,7 @@ export function CatalogBrowser({
         <h1>{t("Kategorien", "Categories")}</h1>
         {classic && <div class="classic-catalog-tools">
           <TVInput type="search" aria-label={t("Titel suchen", "Search titles")} placeholder={t("Titel suchen", "Search titles")} value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
-          <button onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
+          <button class="catalog-sort" onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
             {alphabetic ? t("Sortierung: A–Z", "Sort: A–Z") : t("Sortierung: Anbieter", "Sort: Provider")}
           </button>
         </div>}
@@ -419,14 +421,19 @@ export function CatalogBrowser({
         </div>
       </section>
       <section class="catalog-titles" data-focus-zone="titles">
-        <h1>{classic ? choices.find((choice) => choice.id === category)?.name : kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
-        {!classic && <TVInput
+        <header class="catalog-heading">
+          <h1>{classic ? choices.find((choice) => choice.id === category)?.name : kind === "series" ? t("Serien", "Series") : t("Filme", "Movies")}</h1>
+          {legend}
+        </header>
+        {!classic && <div class="catalog-tools"><TVInput
           type="search"
           aria-label={t("Titel suchen", "Search titles")}
           placeholder={t("Titel suchen", "Search titles")}
           value={query}
           onInput={(e) => setQuery(e.currentTarget.value)}
-        />}
+        /><button class="catalog-sort" onClick={() => setAlphabetic(!alphabetic)} aria-pressed={alphabetic}>
+          {alphabetic ? t("Sortierung: A–Z", "Sort: A–Z") : t("Sortierung: Anbieter", "Sort: Provider")}
+        </button></div>}
         <PosterGrid items={filtered} selected={selected} select={activate} favoriteKeys={favoriteKeys} classic={classic}
           resetKey={JSON.stringify([category, query, alphabetic])}
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />

@@ -1727,19 +1727,30 @@ hr {
 .settings-options { min-width: 0; max-width: 880px; padding: 24px 28px; }
 .settings-options .settings-back { margin-bottom: 20px; font-size: 21px; }
 .settings-choices { display: grid; gap: 20px; margin: 20px 0 30px; }
-.settings-choices button { min-height: 62px; }
+.settings-choices button { min-height: 62px; display: flex; align-items: center; gap: 12px; }
+.settings-choices button[data-current] { background: var(--select); border-color: var(--accent); font-weight: 700; }
+.settings-choice-check { width: 1em; flex: none; color: var(--accent); text-align: center; }
 .settings-profiles, .settings-profile-list { display: grid; gap: 16px; }
-.settings-profiles { justify-items: start; }
+.settings-profiles { justify-items: start; font-size: 28px; }
+.settings-profiles button, .settings-profile-list strong { font-size: inherit; }
 .settings-profile-list { width: 100%; margin: 0; padding: 0; list-style: none; }
 .settings-profile-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; }
 .settings-profile-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-profile-list button:disabled { opacity: .45; }
-.settings-profiles .connect-panel { margin: 0; }
-.settings-choices button[aria-pressed="true"] { background: var(--select); border-color: var(--accent); }
+.settings-profiles .connect-panel { margin: 0; font-size: inherit; }
+.settings-profiles .connect-panel button { margin: 0; }
+.settings-update-stack { display: grid; gap: 18px; }
+.settings-update-stack > p { margin: 0; }
+.settings-update-help { max-width: 60ch; }
+.settings-update-actions { display: grid; justify-items: start; gap: 20px; }
+.settings-update-actions button { max-width: 100%; white-space: normal; }
+.settings-choices button[aria-pressed="true"] { border-color: var(--accent); }
 .settings-options .field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 46%); align-items: center; }
-.settings-options .field + .field { margin-top: 12px; }
+.settings-content { display: grid; gap: 16px; }
+.settings-content > button { justify-self: start; max-width: 100%; white-space: normal; }
+.settings-content > p, .settings-content > .field { margin: 0; }
 .settings-options .field > input, .settings-options .field > select { width: 100%; min-width: 0; }
-.settings-options > .glass { margin-top: 20px; padding: 16px; }
+.settings-content > .glass { padding: 16px; }
 .settings-options h2 { margin-top: 0; }
 
 .player-top {
@@ -2047,6 +2058,17 @@ hr {
   white-space: nowrap;
   pointer-events: none;
 }
+.catalog-heading { display: flex; align-items: center; gap: 12px; }
+.catalog-heading > h1 { flex: 1; margin: 0; }
+.catalog-tools { display: flex; gap: 12px; align-items: center; }
+.catalog-tools > input { flex: 1 1 0; min-width: 0; }
+.catalog-tools > button { font-size: 22px; }
+.preview-panel > header .shortcut-legend,
+.catalog-heading .shortcut-legend {
+  position: static; transform: none; justify-content: flex-end;
+  flex-wrap: wrap; gap: 6px 16px; padding: 0;
+}
+.preview-panel > header .shortcut-legend { margin-left: auto; }
 .shortcut-legend li { display: flex; align-items: center; gap: 6px; }
 .shortcut-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .fullscreen .shortcut-legend {

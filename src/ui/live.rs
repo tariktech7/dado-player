@@ -138,7 +138,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
     let language = app.settings.language;
     let header = super::desktop::heading(ui, language.text("Vorschau", "Preview"));
     let size = super::desktop::handheld_size((42.0 * s).max(20.0), 40.0);
-    if classic && (cfg!(windows) || app.tv) {
+    if cfg!(windows) || app.tv {
         let bounds = Rect::from_min_max(
             header.min + vec2(154.0 * s, 0.0),
             pos2(
@@ -147,16 +147,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
             ),
         );
         if bounds.is_positive() {
-            super::desktop::shortcut_legend(
-                &ui.painter()
-                    .with_clip_rect(bounds.intersect(ui.clip_rect())),
-                bounds,
-                s,
-                language,
-                theme::muted(ui),
-                None,
-                cfg!(windows),
-            );
+            super::desktop::browse_shortcuts(ui, bounds, crate::app::View::Live, language);
         }
     }
     if let Some(item) = &item {
@@ -554,6 +545,11 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                     app.live_cat == id,
                     counts.is_some(),
                 );
+                if index == 0 || app.live_cat == id {
+                    ui.data_mut(|data| {
+                        data.insert_temp(egui::Id::new("live-category-shortcut"), r.id)
+                    });
+                }
                 if ui.is_rect_visible(r.rect) {
                     let count = counts.as_ref().map(|counts| match id {
                         "all" => app.library.channels.len(),

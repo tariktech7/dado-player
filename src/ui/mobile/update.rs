@@ -101,6 +101,7 @@ pub fn show(ui: &mut egui::Ui) {
     ui.label(format!("Installierter Build {}", PACKAGE.2));
     ui.add_enabled_ui(!s.busy, |ui| {
         ui.collapsing("GitHub-Zugang für private Releases", |ui| {
+            ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
             let State { token, visible, .. } = &mut *s;
             let r = field(
                 ui,

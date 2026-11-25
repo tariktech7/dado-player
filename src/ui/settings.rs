@@ -106,6 +106,14 @@ fn action(ui: &mut Ui, label: &str) -> bool {
     activate(ui, &response)
 }
 
+fn choice_label(label: &str, current: bool) -> egui::RichText {
+    if current {
+        egui::RichText::new(format!("✓  {label}")).strong()
+    } else {
+        egui::RichText::new(label)
+    }
+}
+
 fn select<T: Copy + PartialEq>(
     ui: &mut Ui,
     label: &str,
@@ -124,14 +132,17 @@ fn select<T: Copy + PartialEq>(
             .width(ui.available_width().min(360.0))
             .show_ui(ui, |ui| {
                 for &(option, text) in options {
-                    changed |= ui.selectable_value(value, option, text).changed();
+                    changed |= ui
+                        .selectable_value(value, option, choice_label(text, *value == option))
+                        .changed();
                 }
             });
         return changed;
     }
     ui.horizontal_wrapped(|ui| {
         for &(option, text) in options {
-            let response = ui.selectable_label(*value == option, text);
+            let response =
+                ui.selectable_label(*value == option, choice_label(text, *value == option));
             if activate(ui, &response) && *value != option {
                 *value = option;
                 changed = true;
@@ -341,10 +352,10 @@ fn quick_choice<T: Copy + PartialEq>(
         .or_else(|| options.iter().position(|(value, _)| *value == current))
         .unwrap_or(0);
     ui.add_space(8.0);
-    for (slot, (_, label)) in options.iter().enumerate() {
+    for (slot, (value, label)) in options.iter().enumerate() {
         let response = ui.add_sized(
             [ui.available_width(), ui.spacing().interact_size.y.max(40.0)],
-            egui::SelectableLabel::new(slot == index, *label),
+            egui::SelectableLabel::new(slot == index, choice_label(label, *value == current)),
         );
         if super::mobile::focus::clicked(ui, &response) {
             index = slot;
@@ -384,8 +395,12 @@ fn profiles(app: &mut App, ui: &mut Ui) {
                                 .max(1.0);
                         ui.add_sized(
                             [name_width, height],
-                            egui::Label::new(egui::RichText::new(&profile.name).strong())
-                                .truncate(true),
+                            egui::Label::new(
+                                egui::RichText::new(&profile.name)
+                                    .text_style(egui::TextStyle::Button)
+                                    .strong(),
+                            )
+                            .truncate(true),
                         );
                         let response = ui
                             .add_enabled_ui(!active && !app.busy, |ui| {
@@ -732,12 +747,16 @@ fn panel(
                 "profiles" => profiles(app, ui),
                 "parental" => super::parental::entry(app, ui),
                 "updates" => {
-                    ui.label(format!("Dado Player {}", crate::release_info::VERSION));
-                    #[cfg(target_os = "windows")]
-                    crate::platform::windows::update::show(ui);
-                    #[cfg(any(target_os = "ios", target_os = "android"))]
-                    super::mobile::update::show(ui);
-                    crate::fonts::license(ui);
+                    ui.scope(|ui| {
+                        ui.spacing_mut().item_spacing.y = 18.0;
+                        ui.label(format!("Dado Player {}", crate::release_info::VERSION));
+                        #[cfg(target_os = "windows")]
+                        crate::platform::windows::update::show(ui);
+                        #[cfg(any(target_os = "ios", target_os = "android"))]
+                        super::mobile::update::show(ui);
+                        ui.add_space(10.0);
+                        crate::fonts::license(ui);
+                    });
                 }
                 "license" => {
                     #[cfg(target_os = "windows")]

@@ -594,6 +594,13 @@ pub fn request_id(id: egui::Id) {
     });
 }
 
+pub fn queue_id(id: egui::Id) {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        s.queued_idx = s.ids.iter().position(|candidate| *candidate == id);
+    });
+}
+
 pub fn request_index(i: usize) {
     STATE.with(|cell| cell.borrow_mut().queued_idx = Some(i));
 }

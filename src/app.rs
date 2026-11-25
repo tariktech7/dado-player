@@ -5299,7 +5299,14 @@ mod tests {
         keypress(&mut app, egui::Key::Escape, false);
         assert!(!app.nav_collapsed);
         keypress(&mut app, egui::Key::F4, false);
-        assert!(app.view == View::Settings);
+        assert!(app.view == View::Live);
+        app.navigate(View::Movies);
+        keypress(&mut app, egui::Key::F4, false);
+        assert!(app.view == View::Movies);
+        assert_eq!(
+            ctx.data(|data| data.get_temp::<bool>(egui::Id::new(("classic-catalog-sort", false)))),
+            Some(true)
+        );
         app.play(app.resolve_play(&format!("live:{channel}")).unwrap());
         app.settings.desktop_aspect = crate::types::DesktopAspect::Fit;
         for expected in [

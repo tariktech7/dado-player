@@ -751,11 +751,10 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
             .wrapping_mul(0x9E3779B97F4A7C15)
             .rotate_left(*id % 64)
     });
-    let alphabetic = super::classic::enabled(app)
-        && ui.ctx().data(|data| {
-            data.get_temp::<bool>(egui::Id::new(("classic-catalog-sort", series)))
-                .unwrap_or(false)
-        });
+    let alphabetic = ui.ctx().data(|data| {
+        data.get_temp::<bool>(egui::Id::new(("classic-catalog-sort", series)))
+            .unwrap_or(false)
+    });
     let sig = (
         app.catalog_generation(),
         if series {
@@ -828,7 +827,7 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     let tv = app.shared_remote_navigation();
     if !touch {
         if super::desktop::active(ui.ctx()) {
-            super::desktop::catalog_heading(
+            let header = super::desktop::catalog_heading(
                 ui,
                 if series {
                     app.settings.language.text("Serien", "Series")
@@ -836,6 +835,15 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
                     app.settings.language.text("Filme", "Movies")
                 },
             );
+            if cfg!(windows) || app.tv {
+                let legend = Rect::from_min_max(
+                    pos2(header.left() + 115.0 * scale, header.top()),
+                    header.max,
+                );
+                if legend.width() >= 230.0 {
+                    super::desktop::browse_shortcuts(ui, legend, app.view, app.settings.language);
+                }
+            }
         } else {
             ui.label(
                 RichText::new(if series {

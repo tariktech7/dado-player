@@ -998,17 +998,13 @@ test("colored remote keys act on the focused title or current player", async ({ 
   const legend = page.getByRole("list", { name: "Farbtasten" });
   await expect(legend).toHaveCount(0);
   await page.getByRole("button", { name: "▣ Live TV", exact: true }).click();
-  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Live TV", "Favorit", "Einstellungen"]);
-  const bottomGap = await legend.evaluate(el =>
-    document.querySelector("#app")!.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom,
-  );
-  expect(bottomGap).toBeGreaterThanOrEqual(0);
-  expect(bottomGap).toBeLessThan(10);
+  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Kategorien", "Favorit", "Vollbild"]);
+  await expect(page.locator(".preview-panel header .shortcut-legend")).toHaveCount(1);
   const color = (keyCode: number, repeat = false) => page.evaluate(({keyCode, repeat}) => {
     document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { keyCode, repeat, bubbles: true }));
   }, {keyCode, repeat});
   await color(404);
-  await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
+  await expect(page.locator(".categories button").first()).toBeFocused();
   const first = page.locator(".channel").first();
   await first.click();
   const second = page.locator('.channel[data-channel="2"]');
@@ -1031,8 +1027,13 @@ test("colored remote keys act on the focused title or current player", async ({ 
   await expect(second).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "▣ Live TV", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
+  await expect(legend.getByRole("listitem")).toHaveText(["Elternsperre", "Suche", "Favorit", "Sortierung"]);
+  await expect(page.locator(".catalog-heading .shortcut-legend")).toHaveCount(1);
   await color(406);
-  await expect(page.getByRole("button", { name: "⚙ Einstellungen", exact: true })).toBeFocused();
+  await expect(page.locator(".catalog-sort")).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", {name:"⚙ Einstellungen", exact:true}).click();
+  await expect(legend).toHaveCount(0);
   await color(403);
   await expect(page.locator('[data-parental]')).toContainText('PIN');
   await color(403);
@@ -1994,11 +1995,50 @@ test("remote moves through each player choice before reaching save", async ({pag
   await expect(tile).toBeFocused();
 });
 
+test("all settings submenus keep their controls inside a shared content column", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  const keys = await page.locator('.settings-sections button').evaluateAll(nodes =>
+    nodes.map(node => (node as HTMLElement).dataset.focusKey!));
+  expect(keys).toHaveLength(12);
+  for (const key of keys) {
+    await openSettingsSection(page, key);
+    const panel = page.locator(`[data-settings-section="${key}"]`);
+    await expect(panel.getByRole('heading', {level:2})).toBeVisible();
+    const layout = await panel.locator('.settings-content').evaluate(content => {
+      const box = content.getBoundingClientRect();
+      const controls = [...content.querySelectorAll('button,input,select')]
+        .map(element => element.getBoundingClientRect())
+        .filter(rect => rect.width > 0 && rect.height > 0);
+      return { count: controls.length, overflow: controls.some(rect =>
+        rect.left < box.left - 1 || rect.right > box.right + 1) };
+    });
+    expect(layout.count, key).toBeGreaterThan(0);
+    expect(layout.overflow, key).toBe(false);
+    await panel.getByRole('button', {name:'‹ Alle Einstellungen'}).click();
+  }
+});
+
+test("app updates separates actions and explains read-only GitHub access", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'updates');
+  const panel = page.locator('[data-settings-section="updates"]');
+  await expect(panel).toContainText('tariktech7/dado-player');
+  await expect(panel).toContainText('Read-only');
+  const check = (await panel.getByRole('button', {name:/Update prüfen und installieren/}).boundingBox())!;
+  const play = (await panel.getByRole('button', {name:/Testvideo abspielen/}).boundingBox())!;
+  expect(play.y - check.y - check.height).toBeGreaterThanOrEqual(12);
+});
+
 test("language and time format persist and the live guide uses the selected time format", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
   await openSettingsSection(page, "clock");
+  await expect(page.locator('.settings-choices button[data-current]')).toHaveText(/✓.*24 h/);
   await page.getByRole("button", {name: "12 h · 06:30 PM"}).click();
   await page.keyboard.press("Escape");
   await openSettingsSection(page, "clock");
@@ -2311,6 +2351,16 @@ test('profiles have independent add, select and refresh actions', async ({page})
   const rows = page.locator('.settings-profile-list li');
   await expect(rows).toHaveCount(1);
   await expect(rows.first().getByRole('button',{name:/Auswählen/})).toBeDisabled();
+  const typography = await page.locator('.settings-profiles').evaluate(panel => {
+    const named = panel.querySelector('li strong')!;
+    const rowButton = panel.querySelector('li button')!;
+    const add = panel.querySelector('.profile-add')!;
+    const refresh = panel.querySelector('.connect-panel button')!;
+    return {sizes: [named, rowButton, add, refresh].map(node => getComputedStyle(node).fontSize),
+      delta: Math.abs(add.getBoundingClientRect().left - refresh.getBoundingClientRect().left)};
+  });
+  expect(new Set(typography.sizes).size).toBe(1);
+  expect(typography.delta).toBeLessThan(1);
   await page.getByRole('button',{name:'Profil hinzufügen',exact:true}).click();
   const dialog = page.getByRole('dialog',{name:'Profil hinzufügen'});
   for (const [label,value] of [['Profilname','Profil 2'],['Server-Adresse','https://provider.invalid'],['Benutzername','zweites'],['Passwort','demo']]) {
