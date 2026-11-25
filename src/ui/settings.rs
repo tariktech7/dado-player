@@ -210,7 +210,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 centered_contents(
                     ui,
                     if section.id == "profiles" {
-                        available.x * 0.72
+                        let profile_width = if app.adding_profile {
+                            (790.0 * scale).clamp(580.0, 940.0)
+                        } else {
+                            (700.0 * scale).clamp(540.0, 840.0)
+                        };
+                        (available.x * 0.94).min(profile_width)
                     } else {
                         (available.x * 0.85)
                             .min(super::desktop::appearance().settings_panel_width * scale.max(0.8))
@@ -469,11 +474,16 @@ fn profiles(app: &mut App, ui: &mut Ui) {
     use super::mobile::focus;
     let t = app.settings.language;
     let scale = super::desktop::scale(ui.ctx());
-    let row_height = (66.0 * scale).max(48.0);
     if app.adding_profile {
         profile_form(app, ui, scale);
         return;
     }
+    let font_size = (27.0 * scale).clamp(20.0, 32.0);
+    ui.style_mut().text_styles.insert(
+        egui::TextStyle::Button,
+        super::mobile::tokens::reg(font_size),
+    );
+    let row_height = (77.0 * scale).clamp(58.0, 92.0);
     let padding = 6.0;
     let mut select = None;
     for (index, profile) in app.profiles.iter().enumerate() {
@@ -553,7 +563,8 @@ fn profile_button_pair(
     let width = ((ui.available_width() - gap) * 0.5).max(1.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
-        buttons.map(|button| ui.add_sized([width, height], button))
+        let rounding = ui.visuals().widgets.inactive.rounding;
+        buttons.map(|button| ui.add_sized([width, height], button.rounding(rounding)))
     })
     .inner
 }

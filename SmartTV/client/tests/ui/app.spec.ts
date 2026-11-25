@@ -2544,11 +2544,14 @@ test('profiles have independent add, select and refresh actions', async ({page},
     const boxes = [named.closest('li')!, add, refresh].map(node => node.getBoundingClientRect());
     return {
       sizes: [named, rowButton, add, refresh].map(node => getComputedStyle(node).fontSize),
+      maxPanelWidth: panel.closest('.settings-options')!.getBoundingClientRect().width / window.innerWidth,
       edges: boxes.map(box => [box.left, box.right, box.height]),
       gaps: boxes.slice(1).map((box, index) => box.top - boxes[index].bottom),
     };
   });
   expect(new Set(typography.sizes).size).toBe(1);
+  expect(parseFloat(typography.sizes[0])).toBeGreaterThanOrEqual(30);
+  expect(typography.maxPanelWidth).toBeLessThanOrEqual(.50);
   for (const edge of typography.edges.slice(1)) {
     edge.forEach((value, index) => expect(Math.abs(value - typography.edges[0][index])).toBeLessThan(1));
   }
