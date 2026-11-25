@@ -2128,7 +2128,30 @@ hr {
   #app .fullscreen.vod-player .player-controls { transition: none; }
 }
 
-.settings-options .field > input[type="checkbox"] { justify-self: start; margin-left: 0; }
+.settings-options .field > input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  justify-self: start;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--button-edge);
+  border-radius: 11px;
+  background: var(--card);
+}
+.settings-options .field > input[type="checkbox"]:checked { background: var(--accent); color: var(--bg); }
+.settings-options .field > input[type="checkbox"]:checked::after {
+  content: "";
+  width: 9px;
+  height: 16px;
+  margin-top: -3px;
+  border: solid currentColor;
+  border-width: 0 4px 4px 0;
+  transform: rotate(45deg);
+}
 .settings-options .field .tv-select { display: flex; margin-bottom: 0; }
 .settings-options .field > .select-control { max-width: none; }
 .settings-options .field > input:not([type="checkbox"]) { max-width: none; }

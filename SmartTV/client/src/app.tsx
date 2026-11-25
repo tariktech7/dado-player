@@ -1,4 +1,5 @@
 import { animateNavigation, animatePage } from "./navigation-motion";
+import { cancelScroll } from "./scroll-motion";
 import appearance from "./shell-appearance";
 import { render, ComponentChildren } from "preact";
 import {
@@ -271,7 +272,7 @@ function App() {
     updateNav();
   };
   const enterNav = (event: PointerEvent) => {
-    if (event.pointerType !== "mouse" || !navCollapsed.current) return;
+    if (event.pointerType !== "mouse" || !navCollapsed.current || restoringPosterFocus.current) return;
     stopNavCloseTimer();
     if (navHover.current) return;
     navHover.current = true;
@@ -810,25 +811,29 @@ function App() {
     const key = itemKey(selectedTitle);
     const origin = catalogOrigin.current;
     catalogOrigin.current = null;
+    restoringPosterFocus.current = true;
     detailRequest.current++;
     setSelectedTitle(null);
     setDetail(null);
     setEpisodes([]);
     requestAnimationFrame(() => {
       const shell = document.querySelector(`.shell[data-focus-scope="${view}"]`);
-      if (!shell) return;
+      if (!shell) {
+        restoringPosterFocus.current = false;
+        return;
+      }
       if (origin) {
         for (const [selector, top] of [
           [".catalog-title-list", origin.titleTop], [".category-list", origin.categoryTop],
         ] as const) {
           const pane = shell.querySelector<HTMLElement>(selector);
           if (!pane) continue;
+          cancelScroll(pane);
           pane.scrollTop = top;
           pane.dispatchEvent(new Event("scroll"));
         }
       }
       requestAnimationFrame(() => {
-        restoringPosterFocus.current = true;
         try {
           Array.from(shell.querySelectorAll<HTMLElement>(".catalog-poster"))
             .find((element) => element.dataset.focusKey === key)?.focus({preventScroll: true});
@@ -1192,6 +1197,7 @@ function App() {
   }, [saved.settings]);
   useEffect(() => {
     const id = setTimeout(() => {
+      if (restoringPosterFocus.current) return;
       const root =
         [...document.querySelectorAll(".modal")].pop() ||
         document.querySelector(".fullscreen") ||
@@ -2059,6 +2065,7 @@ function App() {
                   else document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
                 }}>⌕</button>
                 <TVInput class="header-search-field" type="search"
+                  placeholder={t("Suchen", "Search")}
                   aria-label={t("Suchen", "Search titles")} value={view === "home" ? "" : query}
                   onInput={(e) => {
                     const text = e.currentTarget.value;
