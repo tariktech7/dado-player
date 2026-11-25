@@ -1208,7 +1208,8 @@ impl App {
             // changes the whole control set, so focus must restart (and the
             // queued header index from tv_goto() then wins over that reset).
             let setting_page = self.settings_section.map_or(0, |index| index as u64 + 1);
-            let screen: u64 = (setting_page << 20)
+            let screen: u64 = ((self.adding_profile as u64) << 28)
+                | (setting_page << 20)
                 | (self.view as u64) << 10
                 | ((self.tv_nav as u64) & 0x7) << 7
                 | (self.tv_series.is_some() as u64) << 6
@@ -4574,6 +4575,58 @@ mod tests {
                         "{layout:?} {width}x{height}: {tile:?} clipped by {clip:?}"
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn profile_form_methods_and_actions_stay_side_by_side() {
+        let sections: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../shared/settings-sections.json")).unwrap();
+        let mut app = App::test_app();
+        app.active_profile = Some(Profile::new("Profile fixture", ProfileKind::M3u));
+        app.view = View::Settings;
+        app.settings_section = sections
+            .iter()
+            .position(|section| section["id"] == "profiles");
+        app.begin_profile_add();
+
+        for kind in [ProfileKind::Xtream, ProfileKind::M3u] {
+            app.login_kind = kind;
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 800.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| crate::ui::desktop::show(&mut app, ctx),
+            );
+            let label = |name| {
+                output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.job.text == name => {
+                            let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                            assert!(
+                                shape.clip_rect.contains_rect(rect),
+                                "{name}: {rect:?} is clipped"
+                            );
+                            Some(rect)
+                        }
+                        _ => None,
+                    })
+                    .expect(name)
+            };
+            for (left, right) in [("Xtream Codes", "M3U"), ("Profil speichern", "Abbrechen")] {
+                let left = label(left);
+                let right = label(right);
+                assert!((left.center().y - right.center().y).abs() <= 1.0);
+                assert!(right.left() - left.right() >= 14.0);
             }
         }
     }

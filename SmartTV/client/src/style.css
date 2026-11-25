@@ -761,6 +761,13 @@ hr {
   font-size: 20px;
   margin-top: 20px;
 }
+.profile-edit-form { display: grid; gap: clamp(14px, 2.1vh, 24px); }
+.profile-edit-form .field { margin: 0; }
+.profile-edit-form > p { margin: 0; }
+.profile-button-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(16px, 2vw, 30px); }
+.profile-button-pair button { min-width: 0; min-height: clamp(50px, 6vh, 72px); white-space: normal; font-size: 25px; }
+.profile-methods button[aria-pressed="true"] { background: var(--select); border-color: var(--accent); }
+.profile-login-actions { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 12px; }
 .profile-form > button {
   margin: 0 12px 12px 0;
 }

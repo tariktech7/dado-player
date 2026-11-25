@@ -2556,6 +2556,24 @@ test('profiles have independent add, select and refresh actions', async ({page})
   expect(Math.abs(typography.gaps[0] - typography.gaps[1])).toBeLessThan(1);
   await page.getByRole('button',{name:'Profil hinzufügen',exact:true}).click();
   const dialog = page.getByRole('dialog',{name:'Profil hinzufügen'});
+  for (const [left, right] of [['Xtream Codes', 'M3U'], ['Profil speichern', 'Abbrechen']]) {
+    const first = (await dialog.getByRole('button', {name:left, exact:true}).boundingBox())!;
+    const second = (await dialog.getByRole('button', {name:right, exact:true}).boundingBox())!;
+    expect(Math.abs(first.y - second.y)).toBeLessThan(1);
+    expect(Math.abs(first.width - second.width)).toBeLessThan(1);
+    expect(Math.abs(first.height - second.height)).toBeLessThan(1);
+    expect(second.x - first.x - first.width).toBeGreaterThanOrEqual(16);
+  }
+  const m3u = dialog.getByRole('button', {name:'M3U', exact:true});
+  await m3u.click();
+  await expect(m3u).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByLabel('M3U-Adresse', {exact:true})).toBeVisible();
+  await dialog.getByRole('button', {name:'Abbrechen', exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  const addProfile = page.getByRole('button', {name:'Profil hinzufügen', exact:true});
+  await expect(addProfile).toBeFocused();
+  await addProfile.click();
+  await expect(dialog.getByRole('button', {name:'Xtream Codes', exact:true})).toHaveAttribute('aria-pressed', 'true');
   for (const [label,value] of [['Profilname','Profil 2'],['Server-Adresse','https://provider.invalid'],['Benutzername','zweites'],['Passwort','demo']]) {
     const input = dialog.getByLabel(label,{exact:true});
     await input.focus();

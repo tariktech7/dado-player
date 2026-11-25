@@ -1818,7 +1818,7 @@ function App() {
   );
   const profileForm = (saveOnly = false) => (
     <form
-      class="profile-form"
+      class={saveOnly ? "profile-form profile-edit-form" : "profile-form"}
       onSubmit={(e) => {
         e.preventDefault();
         if (saveOnly) addProfile();
@@ -1831,6 +1831,12 @@ function App() {
           : "Willkommen bei Dado Player"}
       </h1>
       <p>Deine Sender. Dein Programm. Direkt auf deinem Samsung-TV.</p></>}
+      {saveOnly && <div class="profile-methods profile-button-pair" role="group" aria-label={t("Anmeldemethode", "Sign-in method")}>
+        {(["Xtream", "M3u"] as const).map(kind => (
+          <button key={kind} type="button" aria-pressed={form.kind === kind}
+            onClick={() => setForm({...form, kind})}>{kind === "Xtream" ? "Xtream Codes" : "M3U"}</button>
+        ))}
+      </div>}
       <Field label="Profilname">
         <TVInput
           value={form.name}
@@ -1838,7 +1844,7 @@ function App() {
           onInput={(e) => setForm({ ...form, name: e.currentTarget.value })}
         />
       </Field>
-      <Field label="Anmeldemethode">
+      {!saveOnly && <Field label="Anmeldemethode">
         {choose(
           form.kind,
           (v) => setForm({ ...form, kind: v as Profile["kind"] }),
@@ -1847,7 +1853,7 @@ function App() {
             ["M3u", "M3U-Wiedergabeliste"],
           ],
         )}
-      </Field>
+      </Field>}
       {form.kind === "Xtream" ? (
         <>
           <Field label="Server-Adresse">
@@ -1903,15 +1909,21 @@ function App() {
           </Field>
         </>
       )}
-      <button class="primary" type="submit" disabled={busy}>
-        {saveOnly ? t("Profil speichern", "Save profile") : busy ? "Verbinden …" : "Verbinden & speichern"}
-      </button>
       {saveOnly && message && <p role="alert">{message}</p>}
-      {(saveOnly || saved.profiles.length > 0) && (
-        <button type="button" onClick={() => {setEditing(false); if(saveOnly) setMessage("");}}>
-          Zurück zu Profilen
+      <div class={saveOnly ? "profile-form-actions profile-button-pair" : "profile-login-actions"}>
+        <button class="primary" type="submit" disabled={busy}>
+          {saveOnly ? t("Profil speichern", "Save profile") : busy ? "Verbinden …" : "Verbinden & speichern"}
         </button>
-      )}
+        {(saveOnly || saved.profiles.length > 0) && (
+          <button type="button" onClick={() => {
+            setEditing(false);
+            if (saveOnly) {
+              setMessage("");
+              requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-add")?.focus());
+            }
+          }}>{saveOnly ? t("Abbrechen", "Cancel") : "Zurück zu Profilen"}</button>
+        )}
+      </div>
       {!saveOnly && <><button
         type="button"
         onClick={() => {

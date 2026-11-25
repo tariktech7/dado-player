@@ -169,7 +169,9 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                 let in_settings = app.view == View::Settings && app.settings_section.is_some();
                 let response = desktop::compact_back_button(
                     ui,
-                    if in_settings {
+                    if in_settings && app.adding_profile {
+                        language.text("‹ Profile", "‹ Profiles")
+                    } else if in_settings {
                         language.text("‹ Alle Einstellungen", "‹ All settings")
                     } else {
                         language.text("‹ Zurück", "‹ Back")

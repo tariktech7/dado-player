@@ -185,16 +185,17 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let section_key = egui::Id::new("last-settings-section");
     let pending = egui::Id::new("settings-option-entry");
     ui.data_mut(|data| {
-        let previous = data.remove_temp::<usize>(section_key);
+        let previous = data.remove_temp::<(usize, bool)>(section_key);
         if let Some(index) = app.settings_section {
-            data.insert_temp(section_key, index);
-            if previous != Some(index) {
+            let page = (index, app.adding_profile);
+            data.insert_temp(section_key, page);
+            if previous != Some(page) {
                 data.insert_temp(pending, true);
             }
         }
     });
     egui::ScrollArea::vertical()
-        .id_source(("settings-page", app.settings_section))
+        .id_source(("settings-page", app.settings_section, app.adding_profile))
         .auto_shrink([false, false])
         .show(ui, |ui| {
             if let Some(index) = app.settings_section {
@@ -214,8 +215,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         (available.x * 0.85)
                             .min(super::desktop::appearance().settings_panel_width * scale.max(0.8))
                     },
-                    draft.with(index),
-                    Some(300.0 * scale),
+                    draft.with((index, app.adding_profile)),
+                    if app.adding_profile {
+                        None
+                    } else {
+                        Some(300.0 * scale)
+                    },
                     |ui| {
                         panel(
                             app,
@@ -461,10 +466,14 @@ fn quick_choice<T: Copy + PartialEq>(
 }
 
 fn profiles(app: &mut App, ui: &mut Ui) {
-    use super::mobile::{components::Kb, focus, login};
+    use super::mobile::focus;
     let t = app.settings.language;
     let scale = super::desktop::scale(ui.ctx());
     let row_height = (66.0 * scale).max(48.0);
+    if app.adding_profile {
+        profile_form(app, ui, scale);
+        return;
+    }
     let padding = 6.0;
     let mut select = None;
     for (index, profile) in app.profiles.iter().enumerate() {
@@ -529,94 +538,131 @@ fn profiles(app: &mut App, ui: &mut Ui) {
     if focus::clicked(ui, &add) {
         app.begin_profile_add();
     }
-    if app.adding_profile {
-        for (kind, title) in [
-            (crate::types::ProfileKind::Xtream, "Xtream Codes"),
-            (crate::types::ProfileKind::M3u, "M3U"),
-        ] {
-            let response = ui.selectable_label(app.login_kind == kind, title);
-            if focus::clicked(ui, &response) {
-                app.login_kind = kind;
-            }
-        }
-        let mut focused = None;
-        let mut show = false;
-        login::field(
-            ui,
-            t.text("Profilname", "Profile name"),
-            &mut app.f_name,
-            "",
-            Kb::Text,
-            &mut focused,
-            &mut show,
-        );
-        if app.login_kind == crate::types::ProfileKind::Xtream {
-            login::field(
-                ui,
-                t.text("Server-Adresse", "Server address"),
-                &mut app.f_host,
-                "https://…",
-                Kb::Url,
-                &mut focused,
-                &mut show,
-            );
-            login::field(
-                ui,
-                t.text("Benutzername", "Username"),
-                &mut app.f_user,
-                "",
-                Kb::Text,
-                &mut focused,
-                &mut show,
-            );
-            login::field(
-                ui,
-                t.text("Passwort", "Password"),
-                &mut app.f_pass,
-                "",
-                Kb::Password,
-                &mut focused,
-                &mut app.show_password,
-            );
-        } else {
-            login::field(
-                ui,
-                t.text("M3U-Adresse", "M3U address"),
-                &mut app.f_m3u_url,
-                "https://…",
-                Kb::Url,
-                &mut focused,
-                &mut show,
-            );
-            #[cfg(windows)]
-            login::field(
-                ui,
-                t.text("Oder lokale Playlistdatei", "Or local playlist file"),
-                &mut app.f_m3u_file,
-                "",
-                Kb::Text,
-                &mut focused,
-                &mut show,
-            );
-        }
-        ui.horizontal(|ui| {
-            let save = ui.button(t.text("Profil speichern", "Save profile"));
-            let cancel = ui.button(t.text("Abbrechen", "Cancel"));
-            if focus::clicked(ui, &save) {
-                app.save_added_profile();
-            }
-            if focus::clicked(ui, &cancel) {
-                app.close_settings_section();
-            }
-        });
-        if !app.adding_profile {
-            focus::request_id(add.id);
-            ui.ctx().request_repaint();
-        }
-    }
     app.cloud_profiles_ui(ui, row_height);
     if let Some(error) = &app.error {
         ui.label(error);
+    }
+}
+
+fn profile_button_pair(
+    ui: &mut Ui,
+    height: f32,
+    gap: f32,
+    buttons: [egui::Button<'_>; 2],
+) -> [egui::Response; 2] {
+    let width = ((ui.available_width() - gap) * 0.5).max(1.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        buttons.map(|button| ui.add_sized([width, height], button))
+    })
+    .inner
+}
+
+fn profile_form(app: &mut App, ui: &mut Ui, scale: f32) {
+    use super::mobile::{components::Kb, focus, login};
+    use crate::types::ProfileKind;
+
+    let t = app.settings.language;
+    let height = (54.0 * scale).max(42.0);
+    let gap = (22.0 * scale).max(14.0);
+    ui.spacing_mut().item_spacing.y = (18.0 * scale).max(10.0);
+    let methods = [
+        (ProfileKind::Xtream, "Xtream Codes"),
+        (ProfileKind::M3u, "M3U"),
+    ];
+    let method_buttons =
+        methods.map(|(kind, label)| egui::Button::new(label).selected(app.login_kind == kind));
+    for ((kind, _), response) in
+        methods
+            .into_iter()
+            .zip(profile_button_pair(ui, height, gap, method_buttons))
+    {
+        focus_option(ui, &response);
+        if focus::clicked(ui, &response) {
+            app.login_kind = kind;
+        }
+    }
+    let mut focused = None;
+    let mut show = false;
+    let mut field = |ui: &mut Ui, label, text: &mut String, hint, kb, show: &mut bool| {
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            login::field(ui, label, text, hint, kb, &mut focused, show);
+        });
+    };
+    field(
+        ui,
+        t.text("Profilname", "Profile name"),
+        &mut app.f_name,
+        "",
+        Kb::Text,
+        &mut show,
+    );
+    if app.login_kind == crate::types::ProfileKind::Xtream {
+        field(
+            ui,
+            t.text("Server-Adresse", "Server address"),
+            &mut app.f_host,
+            "https://…",
+            Kb::Url,
+            &mut show,
+        );
+        field(
+            ui,
+            t.text("Benutzername", "Username"),
+            &mut app.f_user,
+            "",
+            Kb::Text,
+            &mut show,
+        );
+        field(
+            ui,
+            t.text("Passwort", "Password"),
+            &mut app.f_pass,
+            "",
+            Kb::Password,
+            &mut app.show_password,
+        );
+    } else {
+        field(
+            ui,
+            t.text("M3U-Adresse", "M3U address"),
+            &mut app.f_m3u_url,
+            "https://…",
+            Kb::Url,
+            &mut show,
+        );
+        #[cfg(windows)]
+        field(
+            ui,
+            t.text("Oder lokale Playlistdatei", "Or local playlist file"),
+            &mut app.f_m3u_file,
+            "",
+            Kb::Text,
+            &mut show,
+        );
+    }
+
+    if let Some(error) = &app.error {
+        ui.label(error);
+    }
+    let [save, cancel] = profile_button_pair(
+        ui,
+        height,
+        gap,
+        [
+            egui::Button::new(t.text("Profil speichern", "Save profile")).selected(true),
+            egui::Button::new(t.text("Abbrechen", "Cancel")),
+        ],
+    );
+    if focus::clicked(ui, &save) {
+        app.save_added_profile();
+    }
+    if focus::clicked(ui, &cancel) {
+        app.close_settings_section();
+    }
+    if !app.adding_profile {
+        ui.ctx().request_repaint();
     }
 }
 
@@ -646,11 +692,18 @@ fn panel(
         .inner_margin(egui::Margin::same(inset))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.spacing_mut().item_spacing.y = spacing;
+            ui.spacing_mut().item_spacing = egui::vec2((18.0 * scale).max(12.0), spacing);
             ui.vertical_centered(|ui| {
-                ui.heading(egui::RichText::new(t(&section.de, &section.en)).size(heading_size));
+                let title = if app.adding_profile {
+                    t("Profil hinzufügen", "Add profile")
+                } else {
+                    t(&section.de, &section.en)
+                };
+                ui.heading(egui::RichText::new(title).size(heading_size));
             });
-            ui.add_space((inset + 10.0 - spacing).max(0.0));
+            if !app.adding_profile {
+                ui.add_space((inset + 10.0 - spacing).max(0.0));
+            }
             match section.id.as_str() {
                 "clock" => {
                     if let Some(value) = quick_choice(
