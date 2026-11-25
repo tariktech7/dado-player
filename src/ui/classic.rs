@@ -18,13 +18,17 @@ use std::{
 };
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct TileColor {
     top: String,
     bottom: String,
     accent: String,
+    icon_ink: String,
+    icon_light: String,
+    icon_shade: String,
 }
 
-fn tile_color(view: View) -> [Color32; 3] {
+fn tile_color(view: View) -> [Color32; 6] {
     static COLORS: OnceLock<HashMap<String, TileColor>> = OnceLock::new();
     let colors = COLORS.get_or_init(|| {
         serde_json::from_str(include_str!("../../shared/classic-tile-palette.json"))
@@ -36,8 +40,15 @@ fn tile_color(view: View) -> [Color32; 3] {
         _ => "series",
     };
     let color = &colors[key];
-    [&color.top, &color.bottom, &color.accent]
-        .map(|value| Color32::from_hex(value).expect("bundled tile color"))
+    [
+        &color.top,
+        &color.bottom,
+        &color.accent,
+        &color.icon_ink,
+        &color.icon_light,
+        &color.icon_shade,
+    ]
+    .map(|value| Color32::from_hex(value).expect("bundled tile color"))
 }
 
 fn tile_surface(ui: &Ui, rect: Rect, radius: f32, top: Color32, bottom: Color32) {
@@ -387,7 +398,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
     let mut next = None;
     for (view, label, icon, rect) in media {
         let response = ui.interact(rect, ui.id().with(view as u8), Sense::click());
-        let [top_color, bottom_color, accent] = tile_color(view);
+        let [top_color, bottom_color, accent, icon_ink, icon_light, icon_shade] = tile_color(view);
         let radius = (22.0 * scale).max(10.0);
         let painter = ui.painter();
         let focused = response.has_focus() || focus::focused_id() == Some(response.id);
@@ -438,19 +449,13 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             halo,
             Stroke::new((1.1 * scale).max(0.65), Color32::from_white_alpha(36)),
         );
-        tile_surface(
-            ui,
-            plate,
-            plate_rounding,
-            Color32::from_white_alpha(69),
-            Color32::from_white_alpha(18),
-        );
+        tile_surface(ui, plate, plate_rounding, icon_light, icon_shade);
         painter.rect_stroke(
             plate,
             plate_rounding,
             Stroke::new((1.8 * scale).max(0.8), Color32::from_white_alpha(92)),
         );
-        components::icon(ui, plate.shrink(icon_size * 0.11), icon, accent);
+        components::icon(ui, plate.shrink(icon_size * 0.11), icon, icon_ink);
         let content = painter.with_clip_rect(rect.shrink(4.0));
         let title_pos = pos2(center.x, rect.top() + rect.height() * 0.74);
         content.text(

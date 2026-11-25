@@ -1,5 +1,26 @@
 {
-  "live": { "top": "#2169BA", "bottom": "#10376F", "accent": "#B7E6FF" },
-  "vod": { "top": "#1D706A", "bottom": "#123F54", "accent": "#9FF2DD" },
-  "series": { "top": "#525CAF", "bottom": "#292D64", "accent": "#DCDEFF" }
+  "live": {
+    "top": "#2169BA",
+    "bottom": "#10376F",
+    "accent": "#B7E6FF",
+    "icon-ink": "#102d51",
+    "icon-light": "#f2f8ff",
+    "icon-shade": "#adc9ed"
+  },
+  "vod": {
+    "top": "#1D706A",
+    "bottom": "#123F54",
+    "accent": "#9FF2DD",
+    "icon-ink": "#123c38",
+    "icon-light": "#eefffa",
+    "icon-shade": "#a9d8cc"
+  },
+  "series": {
+    "top": "#525CAF",
+    "bottom": "#292D64",
+    "accent": "#DCDEFF",
+    "icon-ink": "#30224e",
+    "icon-light": "#faf5ff",
+    "icon-shade": "#cabde9"
+  }
 }
