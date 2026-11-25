@@ -1744,6 +1744,7 @@ hr {
 .settings-update-help { max-width: 60ch; }
 .settings-update-actions { display: grid; justify-items: start; gap: 20px; }
 .settings-update-actions button { max-width: 100%; white-space: normal; }
+.update-transfer-code { display: block; width: 260px; max-width: 100%; height: auto; image-rendering: pixelated; }
 .settings-choices button[aria-pressed="true"] { border-color: var(--accent); }
 .settings-options .field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 46%); align-items: center; }
 .settings-content { display: grid; gap: 16px; }

@@ -35,6 +35,7 @@ import {licenseClient} from './licensing';
 import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
 import { accessStorage, readSlot, saveSlot } from './update-format';
 import { stageUpdate } from './update-client';
+import { UpdateTokenTransfer } from './update-transfer';
 import packageInfo from "../package.json";
 const APP_VERSION = window.dadoTvBoot?.running.version || packageInfo.version;
 const APP_BUILD = window.dadoTvBoot?.running.build || releaseInfo.tizenBuild;
@@ -1611,16 +1612,24 @@ function App() {
           <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
           <button onClick={manageParental}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
-        case "updates": return <div class="settings-update-stack" data-settings-ordered>
+        case "updates": {
+          const storeUpdateToken = (value: string) => {
+            try {
+              if (value) localStorage.setItem(accessStorage, value);
+              else localStorage.removeItem(accessStorage);
+              setUpdateToken(value);
+              return true;
+            } catch {
+              setUpdate(t('Speichern fehlgeschlagen.', 'Could not save the token.'));
+              return false;
+            }
+          };
+          return <div class="settings-update-stack" data-settings-ordered>
+          <UpdateTokenTransfer t={t} onToken={storeUpdateToken} />
           <Field label={t('GitHub-Lese-Token', 'Read-only GitHub token')}>
             <TVInput type="password" autocomplete="off" value={updateToken}
               onChange={(e) => {
-                const value = e.currentTarget.value.trim();
-                try {
-                  if (value) localStorage.setItem(accessStorage, value);
-                  else localStorage.removeItem(accessStorage);
-                  setUpdateToken(value);
-                } catch { setUpdate(t('Speichern fehlgeschlagen.', 'Could not save the token.')); }
+                storeUpdateToken(e.currentTarget.value.trim());
               }} />
           </Field>
           <p class="settings-update-help muted">{t(
@@ -1658,6 +1667,7 @@ function App() {
             'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
           <p class="muted">{APP_VERSION} · Build {APP_BUILD} · D7</p>
         </div>;
+        }
         case "license": return <>
           <p><strong>{license.text}</strong></p>
           <p>Geräte-ID: <strong>{license.deviceId}</strong></p>

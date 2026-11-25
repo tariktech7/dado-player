@@ -17,7 +17,8 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "preact": "10.29.8"
+    "preact": "10.29.8",
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

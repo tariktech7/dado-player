@@ -1,5 +1,6 @@
 import {page,script,css,privacy} from './web.mjs';
 import {logoSvg} from '../shared/brand.mjs';
+import {transferUpdateToken,updateTransferPage,updateTransferScript} from './update-transfer.mjs';
 import {ApiError,fail,random,hash,keyed,equal,passwordHash,password,text,email,mac,profile,encrypt,decrypt,json,body,safeError} from './protocol.mjs';
 const SESSION='__Host-dado_connect',DAYS=86400;
 const token=request=>request.headers.get('Authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1]||fail('Geräteberechtigung fehlt.',401);
@@ -33,18 +34,27 @@ async function clearDeviceLinks(env,id,pairHash=null,pairExpires=null){
 const cookie=(value,age=30*DAYS)=>`${SESSION}=${value}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${age}`;
 export function createHandler({clock=()=>Math.floor(Date.now()/1000)}={}){return async function fetch(request,env){
  const url=new URL(request.url),path=url.pathname,now=clock(),isDevice=path.startsWith('/v1/device/');
+ const transfer=path.match(/^\/v1\/update-transfer\/(start|poll|send|close)$/)?.[1];
+ const crossOrigin=isDevice||(transfer&&transfer!=='send');
  let response;
  try{
   if(path==='/health')return json({ok:true,service:'dado-connect',protocol:1});
   if(path==='/logo.svg'&&request.method==='GET')return new Response(logoSvg,{headers:{'Content-Type':'image/svg+xml','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'}});
-  if(request.method==='OPTIONS'&&isDevice)return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'}});
+  if(request.method==='OPTIONS'&&crossOrigin)return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'}});
+  if(request.method==='GET'&&['/update-transfer','/update-transfer.js'].includes(path)){
+   const js=path.endsWith('.js');
+   return new Response(js?updateTransferScript:updateTransferPage,{headers:{'Content-Type':js?'text/javascript; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
+  }
   if(request.method==='GET'&&['/','/privacy','/portal.js','/style.css'].includes(path)){
    return new Response(path==='/'?page:path==='/privacy'?privacy:path==='/portal.js'?script:css,{headers:{'Content-Type':['/','/privacy'].includes(path)?'text/html; charset=utf-8':path==='/portal.js'?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'}});
   }
   if(!env.AUTH_PEPPER||!env.CRYPTO_KEY)fail('Dienst wird eingerichtet.',503);
-  if(!isDevice&&request.method==='POST'&&request.headers.get('Origin')!==url.origin)fail('Ungültiger Ursprung.',403);
+  if(!crossOrigin&&request.method==='POST'&&request.headers.get('Origin')!==url.origin)fail('Ungültiger Ursprung.',403);
   const ip=request.headers.get('CF-Connecting-IP')||'local';
-  if(path.startsWith('/api/auth/')&&request.method==='POST'){
+  if(transfer&&request.method==='POST'){
+   await limit(env,'update-transfer:'+transfer+':'+ip,now,transfer==='poll'?150:24,60);
+   response=await transferUpdateToken(request,env.DB,transfer,now);
+  }else if(path.startsWith('/api/auth/')&&request.method==='POST'){
    await limit(env,'auth:'+ip,now,20,900);
    const input=await body(request);
    if(path==='/api/auth/register'){
@@ -161,10 +171,10 @@ export function createHandler({clock=()=>Math.floor(Date.now()/1000)}={}){return
    }
   }else fail('Nicht gefunden.',404);
  }catch(error){response=safeError(error);}
- if(isDevice){response=new Response(response.body,response);response.headers.set('Access-Control-Allow-Origin','*');}
+ if(crossOrigin){response=new Response(response.body,response);response.headers.set('Access-Control-Allow-Origin','*');}
  return response;
 };}
 export async function cleanup(env,now=Math.floor(Date.now()/1000)){
- await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now),env.DB.prepare('UPDATE messages SET state=?,cipher=NULL WHERE state=? AND expires<=?').bind('expired','queued',now),env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(now-30*DAYS),env.DB.prepare('DELETE FROM audit WHERE at<?').bind(now-90*DAYS)]);
+ await env.DB.batch([env.DB.prepare('DELETE FROM update_transfers WHERE expires<=?').bind(now),env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM rate_limits WHERE expires<?').bind(now),env.DB.prepare('UPDATE messages SET state=?,cipher=NULL WHERE state=? AND expires<=?').bind('expired','queued',now),env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(now-30*DAYS),env.DB.prepare('DELETE FROM audit WHERE at<?').bind(now-90*DAYS)]);
 }
 export default {fetch:createHandler(),scheduled:(_event,env,ctx)=>ctx.waitUntil(cleanup(env))};

@@ -1995,6 +1995,27 @@ test("remote moves through each player choice before reaching save", async ({pag
   await expect(tile).toBeFocused();
 });
 
+test("the TV offers a scannable QR code and cancels the phone transfer", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  const calls: string[] = [];
+  await page.route('**/v1/update-transfer/*', async route => {
+    const action = new URL(route.request().url()).pathname.split('/').pop()!;
+    calls.push(action);
+    await route.fulfill({json: action === 'poll' ? {cipher:null} : {ok:true}});
+  });
+  await page.goto("/");
+  await page.locator('.classic-actions').getByRole('button',{name:'Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'updates');
+  await page.getByRole('button',{name:'Token per Handy übertragen'}).click();
+  const qr = page.getByRole('img', {name:'QR-Code zur Token-Übertragung'});
+  await expect(qr).toBeVisible();
+  await expect.poll(() => qr.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(200);
+  await expect.poll(() => calls).toContain('poll');
+  await page.getByRole('button',{name:'Übertragung abbrechen'}).click();
+  await expect(qr).toHaveCount(0);
+  await expect.poll(() => calls).toContain('close');
+});
+
 test("header search follows the current catalogue and opens it at the first category", async ({page}) => {
   await fixture(page, true, true, 'permanent', true);
   await page.goto("/");

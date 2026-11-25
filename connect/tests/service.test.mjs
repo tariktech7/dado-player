@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync,readdirSync} from 'node:fs';
-import {createHandler,cleanup} from '../worker.mjs';import {handleAdmin} from '../admin.mjs';import {random,profile,decrypt} from '../protocol.mjs';
+import {createHandler,cleanup} from '../worker.mjs';import {handleAdmin} from '../admin.mjs';import {random,profile,decrypt,hash,encrypt} from '../protocol.mjs';
 function database(){const db=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../migrations/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort())db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));const prepare=(sql,values=[])=>({sql,values,bind:(...v)=>prepare(sql,v),first:async()=>db.prepare(sql).get(...values)||null,all:async()=>({results:db.prepare(sql).all(...values)}),run:async()=>db.prepare(sql).run(...values)});return {prepare,batch:async ss=>{db.exec('BEGIN');try{const r=ss.map(s=>db.prepare(s.sql).run(...s.values));db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}},raw:db};}
 async function setup(){let now=1800000000;const env={DB:database(),AUTH_PEPPER:random(),CRYPTO_KEY:random()},handler=createHandler({clock:()=>now});let ip=0;
 const call=async(path,data,headers={})=>handler(new Request('https://connect.example'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://connect.example','Content-Type':'application/json','CF-Connecting-IP':String(++ip),...headers},...(data===undefined?{}:{body:JSON.stringify(data)})}),env);
@@ -8,6 +8,37 @@ const account=async(mail='father@example.invalid',approve=true)=>{assert.equal((
 const device=async()=>{const token=random(),headers={Authorization:'Bearer '+token};const registered=await call('/v1/device/register',{platform:'samsung',mac:'AA:BB:CC:DD:EE:01'},headers);const state=await registered.json();const pair=await (await call('/v1/device/pairing',{},headers)).json();return {headers,...state,...pair};};
 return {env,call,admin,account,device,advance:s=>now+=s,now:()=>now};}
 const demo={name:'Familienprofil',kind:'Xtream',host:'https://provider.invalid',username:'family',password:'private-provider-pass',epgUrl:''};
+test('token transfer isolates readers and writers, carries encrypted data once, and expires',async()=>{
+ const {call,env,advance,now}=await setup();
+ const readKey=await hash(random()),otherKey=await hash(random()),proof=await hash(random());
+ const writeHash=await hash(proof);
+ const endpoint='/v1/update-transfer/';
+ const open=await call(endpoint+'start',{readKey,writeHash},{Origin:'null'});
+ assert.equal(open.status,201);
+ assert.equal(open.headers.get('access-control-allow-origin'),'*');
+ const {id}=await open.json();
+ assert.deepEqual(await(await call(endpoint+'poll',{readKey})).json(),{cipher:null});
+ const secret=random(),value='synthetic-transfer-data';
+ const cipher=await encrypt(value,secret,id);
+ assert.equal((await call(endpoint+'send',{id,proof,cipher},{Origin:'https://other.example'})).status,403);
+ assert.equal((await call(endpoint+'send',{id,proof:otherKey,cipher})).status,410);
+ assert.equal((await call(endpoint+'send',{id,proof,cipher})).status,200);
+ assert.equal((await call(endpoint+'send',{id,proof,cipher})).status,410);
+ assert.equal((await call(endpoint+'poll',{readKey:otherKey})).status,410);
+ const row=env.DB.raw.prepare('SELECT * FROM update_transfers').get();
+ assert.equal(row.cipher,cipher);
+ assert.ok(!JSON.stringify(row).includes(value));
+ const delivery=await(await call(endpoint+'poll',{readKey})).json();
+ assert.equal(await decrypt(delivery.cipher,secret,id),value);
+ assert.equal((await call(endpoint+'close',{readKey})).status,200);
+ assert.equal((await call(endpoint+'poll',{readKey})).status,410);
+ assert.equal((await call(endpoint+'start',{readKey,writeHash})).status,201);
+ advance(300);
+ assert.equal((await call(endpoint+'send',{id,proof,cipher})).status,410);
+ assert.equal((await call(endpoint+'poll',{readKey})).status,410);
+ await cleanup(env,now());
+ assert.equal(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM update_transfers').get().n,0);
+});
 test('saved profiles are encrypted, account-scoped, editable, reusable after login and independently deletable',async()=>{const s=await setup(),a=await s.account(),b=await s.account('other@example.invalid'),d=await s.device();const created=await s.call('/api/profiles/save',{profile:demo},a.headers);assert.equal(created.status,201);const {id}=await created.json();const row=s.env.DB.raw.prepare('SELECT * FROM saved_profiles WHERE id=?').get(id);assert.ok(!row.cipher.includes(demo.password));const list=await(await s.call('/api/profiles',undefined,a.headers)).json();assert.equal(list.profiles[0].name,demo.name);assert.ok(!JSON.stringify(list).includes('cipher'));assert.ok(!JSON.stringify(list).includes(demo.password));assert.equal((await s.call('/api/profiles/load',{id},b.headers)).status,404);assert.equal((await s.call('/api/profiles/save',{id,profile:demo},b.headers)).status,404);assert.equal((await s.call('/api/profiles/delete',{id},b.headers)).status,404);await s.call('/api/auth/logout',{},a.headers);const login=await s.call('/api/auth/login',{email:'father@example.invalid',password:'a long test password 123!'});a.headers={Cookie:login.headers.get('set-cookie').split(';')[0]};assert.deepEqual((await(await s.call('/api/profiles/load',{id},a.headers)).json()).profile,profile(demo));await s.call('/api/profiles/save',{id,profile:{...demo,password:'changed-provider-pass'}},a.headers);await s.call('/api/pair',{address:d.address,code:d.pairingCode,label:'TV'},a.headers);assert.equal((await s.call('/api/messages',{id:crypto.randomUUID(),deviceId:d.deviceId,profileId:id},b.headers)).status,404);for(let i=0;i<2;i++)assert.equal((await s.call('/api/messages',{id:crypto.randomUUID(),deviceId:d.deviceId,profileId:id},a.headers)).status,201);const inbox=await(await s.call('/v1/device/pull',{},d.headers)).json();assert.equal(inbox.messages.length,2);assert.equal(inbox.messages[0].profile.password,'changed-provider-pass');await s.call('/v1/device/ack',{ids:inbox.messages.map(m=>m.id)},d.headers);assert.equal((await(await s.call('/api/profiles',undefined,a.headers)).json()).profiles.length,1);await s.call('/api/profiles/delete',{id},a.headers);assert.equal((await s.call('/api/profiles/load',{id},a.headers)).status,404);});
 test('saved-profile endpoints enforce approval and origin, including confidential reads',async()=>{const s=await setup(),a=await s.account(undefined,false);assert.equal((await s.call('/api/profiles',undefined,a.headers)).status,403);await s.admin('status',{id:a.id,status:'approved'});assert.equal((await s.call('/api/profiles/load',{id:crypto.randomUUID()},{...a.headers,Origin:'https://evil.invalid'})).status,403);assert.equal((await s.call('/api/profiles/save',{profile:demo},{...a.headers,Origin:'https://evil.invalid'})).status,403);});
 test('five-character password needs both digit and symbol for registration and reset',async()=>{const s=await setup();for(const password of ['ab1!','abcde','abc1d','abcd!','abc1 ','äöü1a']){assert.equal((await s.call('/api/auth/register',{email:'short@example.invalid',name:'Short',password})).status,400);}assert.equal((await s.call('/api/auth/register',{email:'short@example.invalid',name:'Short',password:'abc1!'})).status,201);const id=s.env.DB.raw.prepare('SELECT id FROM accounts').get().id;const r=await(await s.admin('reset',{id})).json();const token=new URLSearchParams(new URL(r.url).hash.slice(1)).get('reset');assert.equal((await s.call('/api/auth/reset',{token,password:'abc12'})).status,400);assert.equal((await s.call('/api/auth/reset',{token,password:'xyz2#'})).status,200);assert.equal((await s.call('/api/auth/login',{email:'short@example.invalid',password:'xyz2#'})).status,200);});

@@ -36,3 +36,11 @@ Die Gerätezuordnung wird im Portal getrennt; keine Kontoverwaltung im Endnutzer
 `node connect/scripts/smoke.mjs` prüft Produktion mit temporären Daten einschließlich Vorlagenverschlüsselung, erneutem Versand und Löschung und entfernt das Testkonto anschließend. Keine echten Konten werden automatisch genehmigt.
 
 Protokoll: /api/profiles (Metadaten), /api/profiles/save, load, delete; /api/messages nimmt alternativ profileId an. Geräte registrieren über /v1/device/register und rufen ausdrücklich mit pull/ack ab. Das alte pairing-Endpunktformat bleibt für ältere Apps kompatibel, sein Code ist keine Voraussetzung der MAC-Zuordnung mehr. Zugangsdaten nicht protokollieren.
+# GitHub-Lese-Token für die TV-Entwicklungsinstallation
+
+Der TV zeigt in den Update-Einstellungen einen einmaligen QR-Code an. Die Handyseite erhält den
+AES-GCM-Schlüssel über das URL-Fragment, entfernt es aus der Adresszeile und sendet ausschließlich
+den verschlüsselten Token an Dado Connect. Der TV authentifiziert den Abruf mit einem eigenen
+zufälligen Schlüssel. Nach lokalem Speichern oder Abbruch löscht der TV den Transfer beim Dienst.
+Nach fünf Minuten ist die Übertragung gesperrt. Die stündliche Bereinigung entfernt abgelaufene
+Übertragungen.

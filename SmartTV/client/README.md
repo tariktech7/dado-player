@@ -113,8 +113,11 @@ fehl, lädt der TV wieder die installierte Version. Profile, Favoriten und Lizen
 App-Speicher. In **Einstellungen → Updates** lässt sich die installierte Version wiederherstellen.
 
 Das GitHub-Repository ist privat. Als Zugriff dient ein GitHub Fine-grained Token für
-`tariktech7/dado-player` mit **Contents: Read-only**, einmalig als **GitHub-Lese-Token** in den
-Update-Einstellungen des TVs eingetragen. Der Token liegt im lokalen App-Speicher des TVs.
+`tariktech7/dado-player` mit **Contents: Read-only**. Unter **Einstellungen → App-Updates →
+Token per Handy übertragen** den QR-Code mit der Handykamera scannen, den Token einfügen und
+senden. Der QR-Code ist fünf Minuten gültig. Das Handy verschlüsselt den Token für den TV.
+Der Vermittlungsdienst hält kurzzeitig nur den verschlüsselten Inhalt und löscht ihn nach dem
+Speichern am TV. Eine manuelle Eingabe bleibt möglich. Der Token liegt im lokalen App-Speicher des TVs.
 Ohne Token gibt es keine automatische Abfrage. Der TV prüft jeweils nach dem Start und danach
 alle sechs Stunden. Änderungen am Paket, an Ressourcen, Berechtigungen oder am Startprogramm
 benötigen ein neues WGT. Dieser Updateweg ist für die Entwicklerinstallation vorgesehen.
