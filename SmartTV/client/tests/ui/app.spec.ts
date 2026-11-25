@@ -1976,6 +1976,9 @@ test("remote moves through each player choice before reaching save", async ({pag
   const choices = panel.locator('.settings-choices button');
   const save = panel.getByRole('button', {name: 'Änderungen speichern'});
   await expect(back).toBeFocused();
+  const first = (await choices.first().boundingBox())!;
+  const second = (await choices.nth(1).boundingBox())!;
+  expect(second.y - (first.y + first.height)).toBeGreaterThanOrEqual(12);
   for (let index = 0; index < 3; index++) {
     await page.keyboard.press('ArrowDown');
     await expect(choices.nth(index)).toBeFocused();
@@ -2300,6 +2303,33 @@ test('poster navigation does not measure hundreds of unrelated category buttons 
   expect(result.reads).toBeLessThan(200);
 });
 
+test('profiles have independent add, select and refresh actions', async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto('/');
+  await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'profiles');
+  const rows = page.locator('.settings-profile-list li');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first().getByRole('button',{name:/Auswählen/})).toBeDisabled();
+  await page.getByRole('button',{name:'Profil hinzufügen',exact:true}).click();
+  const dialog = page.getByRole('dialog',{name:'Profil hinzufügen'});
+  for (const [label,value] of [['Profilname','Profil 2'],['Server-Adresse','https://provider.invalid'],['Benutzername','zweites'],['Passwort','demo']]) {
+    const input = dialog.getByLabel(label,{exact:true});
+    await input.focus();
+    await page.keyboard.press('Enter');
+    await input.fill(value);
+  }
+  await dialog.getByRole('button',{name:'Profil speichern'}).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().getByRole('button',{name:/Auswählen/})).toBeDisabled();
+  await rows.last().getByRole('button',{name:'Auswählen · Profil 2'}).click();
+  await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  await openSettingsSection(page, 'profiles');
+  await expect(rows.last().getByRole('button',{name:'Auswählen · Profil 2'})).toBeDisabled();
+  await expect(rows.first().getByRole('button',{name:/Auswählen/})).toBeEnabled();
+});
+
 test('cloud inbox persists before ack and retry never duplicates profiles',async({page})=>{
  await fixture(page,true,true);let ack=0;const calls:string[]=[];
  const cloudId='11111111-1111-4111-8111-111111111111';
@@ -2315,10 +2345,11 @@ test('cloud inbox persists before ack and retry never duplicates profiles',async
  const panel=page.locator('.connect-panel');await expect.poll(()=>calls.filter(c=>c==='register').length).toBe(1);expect(calls).toEqual(['register']);
  await expect(page.getByText('Kopplungscode:',{exact:false})).toHaveCount(0);await expect(page.getByText('Verbunden mit:',{exact:false})).toHaveCount(0);
  await page.evaluate(()=>{const old=Storage.prototype.setItem;(window as any).__restoreStorage=()=>{Storage.prototype.setItem=old;};Storage.prototype.setItem=function(k,v){if(k==='dado.tv.v1')throw Error('fixture full storage');return old.call(this,k,v);};});
- await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Speicher voll');expect(ack).toBe(0);
+ await panel.getByRole('button',{name:'Profilliste aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Speicher voll');expect(ack).toBe(0);
  await page.evaluate(()=>(window as any).__restoreStorage());
- await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profile gespeichert');expect(ack).toBe(1);
- await panel.getByRole('button',{name:'Profile aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profile gespeichert');expect(ack).toBe(2);
+ await panel.getByRole('button',{name:'Profilliste aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profilliste aktualisiert');expect(ack).toBe(1);
+ await panel.getByRole('button',{name:'Profilliste aktualisieren',exact:true}).evaluate(e=>(e as HTMLElement).focus({preventScroll:true}));await page.keyboard.press('Enter');await expect(panel).toContainText('Profilliste aktualisiert');expect(ack).toBe(2);
+ await expect(page.locator('.settings-profile-list')).toContainText('Familienzugang');
  const count=await page.evaluate(()=>JSON.parse(localStorage.getItem('dado.tv.v1')!).profiles.filter((p:any)=>p.name==='Familienzugang').length);expect(count).toBe(1);
 });
 

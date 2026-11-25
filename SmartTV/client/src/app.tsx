@@ -474,25 +474,7 @@ function App() {
       setMessage((e as Error).message);
     }
   };
-  async function login(profile: Profile, automatic = false) {
-    const gen = ++generation.current;
-    setBusy(true);
-    setMessage("");
-    stop();
-    setCatalog(emptyCatalog());
-    memories.current = {};
-    resetFocusMemory();
-    detailCache.current.clear();
-    detailRequest.current++;
-    setNavCollapsed(false);
-    previousLive.current = null;
-    latestLive.current = null;
-    setSelectedTitle(null);
-    setEpg({});
-    epgPending.current.clear();
-    setDetail(null);
-    setEpisodes([]);
-    try {
+  const normalizedProfile = (profile: Profile) => {
       const p = { ...profile };
       if (p.kind === "Xtream") {
         p.host = hostUrl(p.host);
@@ -502,22 +484,59 @@ function App() {
         p.m3uUrl = httpUrl(p.m3uUrl);
         if (p.epgUrl) p.epgUrl = httpUrl(p.epgUrl);
       }
+      if (!p.name.trim()) throw new Error("Profilname fehlt.");
+      return {...p, name: p.name.trim()};
+  };
+  const storeProfile = (profiles: Profile[], profile: Profile) =>
+    profiles.some(item => item.id === profile.id)
+      ? profiles.map(item => item.id === profile.id ? profile : item)
+      : [...profiles, profile];
+  const addProfile = () => {
+    try {
+      const profile = normalizedProfile(form);
+      const next = {...savedRef.current, profiles: storeProfile(savedRef.current.profiles, profile)};
+      save(next);
+      savedRef.current = next;
+      setSaved(next);
+      setEditing(false);
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-add")?.focus());
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
+  async function login(profile: Profile, automatic = false) {
+    const gen = ++generation.current;
+    setBusy(true);
+    setMessage("");
+    stop();
+    try {
+      const p = normalizedProfile(profile);
       const provider = new Provider(p, savedRef.current.settings);
       const lib = await provider.catalog();
       if (gen !== generation.current) return;
       providerRef.current = provider;
+      memories.current = {};
+      resetFocusMemory();
+      detailCache.current.clear();
+      detailRequest.current++;
+      setNavCollapsed(false);
+      previousLive.current = null;
+      latestLive.current = null;
+      setSelectedTitle(null);
+      setEpg({});
+      epgPending.current.clear();
+      setDetail(null);
+      setEpisodes([]);
       setCatalog(lib);
       setSession(p);
       setEditing(false);
       setView("home");
+      setSettingsSection(null);
       setCategory("all");
       setQuery("");
       changed({
         ...savedRef.current,
-        profiles: [
-          ...savedRef.current.profiles.filter((v) => v.id !== p.id),
-          p,
-        ],
+        profiles: storeProfile(savedRef.current.profiles, p),
         activeProfile: p.id,
         signedOut: false,
       });
@@ -534,9 +553,10 @@ function App() {
     } catch (e) {
       if (gen === generation.current) {
         setMessage((e as Error).message);
-        setSession(null);
-        setForm(profile);
-        setEditing(!automatic);
+        if (!session) {
+          setForm(profile);
+          setEditing(!automatic);
+        }
       }
     } finally {
       if (gen === generation.current) setBusy(false);
@@ -771,16 +791,6 @@ function App() {
     setDetail(memory?.detail || null);
     setEpisodes(memory?.episodes || []);
   };
-  const logout = () => {
-    generation.current++;
-    stop();
-    providerRef.current = null;
-    setSession(null);
-    setCatalog(emptyCatalog());
-    setEpg({});
-    setEditing(false);
-    changed({ ...savedRef.current, signedOut: true });
-  };
   const importCloudProfiles = (profiles:Profile[]) => {
     const merged=mergeCloudProfiles(savedRef.current.profiles,profiles);
     const next={...savedRef.current,profiles:merged.profiles};
@@ -851,6 +861,7 @@ function App() {
     }
     if (editing) {
       setEditing(false);
+      if (session) requestAnimationFrame(() => document.querySelector<HTMLElement>(".profile-add")?.focus());
       return;
     }
     if (externalTitle) { closeExternalTitle(); return; }
@@ -1547,23 +1558,24 @@ function App() {
             Tonausgabe und Passthrough verwaltet der Fernseher.
           </p>
         </>;
-        case "profiles": return <>
-          <p>
-            {session?.name} · {session?.kind}
-            {session?.kind === "Xtream" && session.username ? ` · ${session.username}` : ""}
-          </p>
-          <button
-            onClick={() => {
-              setForm(emptyProfile());
-              setEditing(true);
-            }}
-          >
-            {t("Profil hinzufügen", "Add profile")}
-          </button>
-          <button onClick={logout}>{t("Profil wechseln", "Switch profile")}</button>
-
-          <ConnectPanel importProfiles={importCloudProfiles} />
-        </>;
+        case "profiles": return <div class="settings-profiles" data-settings-ordered>
+          <ul class="settings-profile-list">
+            {saved.profiles.map(profile => <li key={profile.id}>
+              <strong title={profile.name}>{profile.name}</strong>
+              <button type="button" disabled={busy || session?.id === profile.id}
+                aria-label={`${t("Auswählen", "Select")} · ${profile.name}`}
+                onClick={() => void login(profile)}>
+                {t("Auswählen", "Select")}
+              </button>
+            </li>)}
+          </ul>
+          <button class="profile-add" onClick={() => {
+            setMessage("");
+            setForm(emptyProfile());
+            setEditing(true);
+          }}>{t("Profil hinzufügen", "Add profile")}</button>
+          <ConnectPanel importProfiles={importCloudProfiles} profileList />
+        </div>;
         case "parental": return <>
           <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
           <button onClick={manageParental}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
@@ -1744,20 +1756,21 @@ function App() {
       </section>
     </div>
   );
-  const profileForm = () => (
+  const profileForm = (saveOnly = false) => (
     <form
       class="profile-form"
       onSubmit={(e) => {
         e.preventDefault();
-        void login(form);
+        if (saveOnly) addProfile();
+        else void login(form);
       }}
     >
-      <h1>
+      {!saveOnly && <><h1>
         {saved.profiles.length
           ? "Profil verbinden"
           : "Willkommen bei Dado Player"}
       </h1>
-      <p>Deine Sender. Dein Programm. Direkt auf deinem Samsung-TV.</p>
+      <p>Deine Sender. Dein Programm. Direkt auf deinem Samsung-TV.</p></>}
       <Field label="Profilname">
         <TVInput
           value={form.name}
@@ -1831,14 +1844,15 @@ function App() {
         </>
       )}
       <button class="primary" type="submit" disabled={busy}>
-        {busy ? "Verbinden …" : "Verbinden & speichern"}
+        {saveOnly ? t("Profil speichern", "Save profile") : busy ? "Verbinden …" : "Verbinden & speichern"}
       </button>
-      {saved.profiles.length > 0 && (
-        <button type="button" onClick={() => setEditing(false)}>
+      {saveOnly && message && <p role="alert">{message}</p>}
+      {(saveOnly || saved.profiles.length > 0) && (
+        <button type="button" onClick={() => {setEditing(false); if(saveOnly) setMessage("");}}>
           Zurück zu Profilen
         </button>
       )}
-      <button
+      {!saveOnly && <><button
         type="button"
         onClick={() => {
           setEditing(false);
@@ -1860,7 +1874,7 @@ function App() {
       <p class="muted">
         Zugangsdaten werden ausschließlich lokal im App-Speicher abgelegt. Keine
         Dado-Cloud.
-      </p>
+      </p></>}
     </form>
   );
   if (!license.allowed) return (
@@ -2427,7 +2441,7 @@ function App() {
               previews={allowEpisodePreviews(externalTitle)} />}
           </div>
           {!full && view !== "home" && !(classic && view === "live") && <ShortcutLegend t={t} />}
-          {editing && modal("Profil hinzufügen", profileForm())}
+          {editing && modal(t("Profil hinzufügen", "Add profile"), profileForm(true))}
           {full && preview && (
             <div
               class={`fullscreen ${preview.kind === "live" ? "live-player" : "vod-player"} ${status?.state === "error" ? "playback-failed" : ""} ${controlsVisible ? "" : "controls-hidden"}`}

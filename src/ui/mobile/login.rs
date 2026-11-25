@@ -472,7 +472,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout, blocked: bool, viewport: Rect) {
 }
 
 /// One field, reporting the rect of the field that just gained focus.
-pub(super) fn field(
+pub(crate) fn field(
     ui: &mut Ui,
     label: &str,
     text: &mut String,
@@ -487,6 +487,8 @@ pub(super) fn field(
     if r.has_focus() {
         crate::platform::set_text_focus(true);
         *focused = Some(r.rect);
+        #[cfg(windows)]
+        ui.data_mut(|data| data.insert_temp(egui::Id::new("desktop-search-editor"), r.id));
     }
     // Register with the remote focus engine; activating a field opens the IME
     // just like a tap, so a cold start with only a D-pad can still type.

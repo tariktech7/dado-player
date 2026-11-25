@@ -33,7 +33,7 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
 
 - Dado Connect: Vertrag in connect/README.md auf Rust und Web-TV synchron halten. Dauerhaft speichern vor Empfangsbestätigung, stabile Nachrichten-IDs, ausschließlich manuell abrufen. Keine Zugangsdaten protokollieren. Senderkontogenehmigung nicht mit Kauflizenz vermischen. Private Geräteadresse auf Mobile klar benennen.
 
-- Ab 0.7.2: MAC-Zuordnung ohne Kopplungscode, nur für genehmigte Sender und registrierte Geräte; fremde Zuordnungen nicht überschreiben. Endnutzer-UI nur Geräteangaben und Profile aktualisieren. Einmalige Registrierung ist kein Profil-Polling. Dauerhafte Vorlagen nur ausdrücklich speichern, verschlüsseln und kontogebunden prüfen; deren stabile importierte IDs dürfen nur den zugehörigen Cloud-Eintrag aktualisieren.
+- Ab 0.7.2: MAC-Zuordnung ohne Kopplungscode, nur für genehmigte Sender und registrierte Geräte; mehrere freigegebene Sender pro Gerät, Verknüpfungen und Warteschlangen je Sender getrennt. Endnutzer-UI nur Geräteangaben und Profile aktualisieren. Einmalige Registrierung ist kein Profil-Polling. Dauerhafte Vorlagen nur ausdrücklich speichern, verschlüsseln und kontogebunden prüfen; deren stabile importierte IDs dürfen nur den zugehörigen Cloud-Eintrag aktualisieren.
 
 - Windows breite Standardoberfläche: src/ui/desktop.rs (native Wiedergabe beibehalten).
   Windows und Samsung bei gemeinsamen UI-Änderungen zusammen bearbeiten und prüfen.

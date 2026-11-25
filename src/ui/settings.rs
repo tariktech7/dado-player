@@ -84,10 +84,13 @@ fn sections() -> &'static [Section] {
     })
 }
 
-pub(crate) fn is_quick_choice_section(index: usize) -> bool {
-    sections()
-        .get(index)
-        .is_some_and(|section| matches!(section.id.as_str(), "clock" | "stream" | "player"))
+pub(crate) fn uses_ordered_focus(index: usize) -> bool {
+    sections().get(index).is_some_and(|section| {
+        matches!(
+            section.id.as_str(),
+            "clock" | "stream" | "player" | "profiles"
+        )
+    })
 }
 
 fn activate(ui: &Ui, response: &egui::Response) -> bool {
@@ -165,8 +168,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .show(ui, |ui| {
             if let Some(index) = app.settings_section {
                 let section = &sections()[index];
-                let quick_choice = is_quick_choice_section(index);
-                if quick_choice {
+                let ordered = uses_ordered_focus(index);
+                if ordered {
                     focus::set_ordered_zone(1);
                 } else {
                     focus::set_zone(1);
@@ -177,7 +180,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     back.request_focus();
                     focus::request_id(back.id);
                 }
-                let go_back = if quick_choice {
+                let go_back = if ordered {
                     focus::clicked(ui, &back)
                 } else {
                     activate(ui, &back)
@@ -337,12 +340,17 @@ fn quick_choice<T: Copy + PartialEq>(
         .data(|data| data.get_temp::<usize>(key))
         .or_else(|| options.iter().position(|(value, _)| *value == current))
         .unwrap_or(0);
+    ui.add_space(8.0);
     for (slot, (_, label)) in options.iter().enumerate() {
-        let response = ui.selectable_label(slot == index, *label);
+        let response = ui.add_sized(
+            [ui.available_width(), ui.spacing().interact_size.y.max(40.0)],
+            egui::SelectableLabel::new(slot == index, *label),
+        );
         if super::mobile::focus::clicked(ui, &response) {
             index = slot;
             ui.ctx().data_mut(|data| data.insert_temp(key, index));
         }
+        ui.add_space(10.0);
     }
     ui.add_space(10.0);
     let save = ui.button(save_label);
@@ -351,6 +359,150 @@ fn quick_choice<T: Copy + PartialEq>(
         return options.get(index).map(|(value, _)| *value);
     }
     None
+}
+
+fn profiles(app: &mut App, ui: &mut Ui) {
+    use super::mobile::{components::Kb, focus, login};
+    let t = app.settings.language;
+    let mut select = None;
+    for (index, profile) in app.profiles.iter().enumerate() {
+        ui.push_id(&profile.id, |ui| {
+            let active = app
+                .active_profile
+                .as_ref()
+                .is_some_and(|p| p.id == profile.id);
+            egui::Frame::none()
+                .stroke(ui.visuals().widgets.inactive.bg_stroke)
+                .rounding(10.0)
+                .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let select_width = 108.0_f32.min(ui.available_width() * 0.45);
+                        let height = ui.spacing().interact_size.y;
+                        let name_width =
+                            (ui.available_width() - select_width - ui.spacing().item_spacing.x)
+                                .max(1.0);
+                        ui.add_sized(
+                            [name_width, height],
+                            egui::Label::new(egui::RichText::new(&profile.name).strong())
+                                .truncate(true),
+                        );
+                        let response = ui
+                            .add_enabled_ui(!active && !app.busy, |ui| {
+                                ui.add_sized(
+                                    [select_width, height],
+                                    egui::Button::new(t.text("Auswählen", "Select")),
+                                )
+                            })
+                            .inner;
+                        if focus::clicked(ui, &response) {
+                            select = Some(index);
+                        }
+                    });
+                });
+        });
+        ui.add_space(8.0);
+    }
+    if let Some(index) = select {
+        app.start_login(app.profiles[index].clone());
+    }
+    if app.busy {
+        ui.spinner();
+    }
+    let add = ui.button(t.text("Profil hinzufügen", "Add profile"));
+    if focus::clicked(ui, &add) {
+        app.begin_profile_add();
+    }
+    if app.adding_profile {
+        ui.spacing_mut().item_spacing.y = 10.0;
+        for (kind, title) in [
+            (crate::types::ProfileKind::Xtream, "Xtream Codes"),
+            (crate::types::ProfileKind::M3u, "M3U"),
+        ] {
+            let response = ui.selectable_label(app.login_kind == kind, title);
+            if focus::clicked(ui, &response) {
+                app.login_kind = kind;
+            }
+        }
+        let mut focused = None;
+        let mut show = false;
+        login::field(
+            ui,
+            t.text("Profilname", "Profile name"),
+            &mut app.f_name,
+            "",
+            Kb::Text,
+            &mut focused,
+            &mut show,
+        );
+        if app.login_kind == crate::types::ProfileKind::Xtream {
+            login::field(
+                ui,
+                t.text("Server-Adresse", "Server address"),
+                &mut app.f_host,
+                "https://…",
+                Kb::Url,
+                &mut focused,
+                &mut show,
+            );
+            login::field(
+                ui,
+                t.text("Benutzername", "Username"),
+                &mut app.f_user,
+                "",
+                Kb::Text,
+                &mut focused,
+                &mut show,
+            );
+            login::field(
+                ui,
+                t.text("Passwort", "Password"),
+                &mut app.f_pass,
+                "",
+                Kb::Password,
+                &mut focused,
+                &mut app.show_password,
+            );
+        } else {
+            login::field(
+                ui,
+                t.text("M3U-Adresse", "M3U address"),
+                &mut app.f_m3u_url,
+                "https://…",
+                Kb::Url,
+                &mut focused,
+                &mut show,
+            );
+            #[cfg(windows)]
+            login::field(
+                ui,
+                t.text("Oder lokale Playlistdatei", "Or local playlist file"),
+                &mut app.f_m3u_file,
+                "",
+                Kb::Text,
+                &mut focused,
+                &mut show,
+            );
+        }
+        ui.horizontal(|ui| {
+            let save = ui.button(t.text("Profil speichern", "Save profile"));
+            let cancel = ui.button(t.text("Abbrechen", "Cancel"));
+            if focus::clicked(ui, &save) {
+                app.save_added_profile();
+            }
+            if focus::clicked(ui, &cancel) {
+                app.close_settings_section();
+            }
+        });
+        if !app.adding_profile {
+            focus::request_id(add.id);
+            ui.ctx().request_repaint();
+        }
+    }
+    app.cloud_profiles_ui(ui);
+    if let Some(error) = &app.error {
+        ui.label(error);
+    }
 }
 
 fn panel(
@@ -372,6 +524,7 @@ fn panel(
         .inner_margin(egui::Margin::same(16.0))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = ui.spacing().item_spacing.y.max(10.0);
             match section {
                 "clock" => {
                     if let Some(value) = quick_choice(
@@ -576,22 +729,7 @@ fn panel(
                         ],
                     );
                 }
-                "profiles" => {
-                    if let Some(profile) = &app.active_profile {
-                        ui.strong(&profile.name);
-                        ui.label(match profile.kind {
-                            crate::types::ProfileKind::Xtream => "Xtream Codes",
-                            crate::types::ProfileKind::M3u => "M3U",
-                        });
-                        if profile.kind == crate::types::ProfileKind::Xtream {
-                            ui.label(&profile.username);
-                        }
-                    }
-                    app.cloud_profiles_ui(ui);
-                    if action(ui, t("Profil wechseln", "Switch profile")) {
-                        app.logout();
-                    }
-                }
+                "profiles" => profiles(app, ui),
                 "parental" => super::parental::entry(app, ui),
                 "updates" => {
                     ui.label(format!("Dado Player {}", crate::release_info::VERSION));

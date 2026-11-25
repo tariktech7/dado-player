@@ -266,6 +266,7 @@ pub struct App {
     pub continue_tab: ContinueTab,
     pub settings: Settings,
     pub settings_section: Option<usize>,
+    pub adding_profile: bool,
     pub settings_return_tile: Option<usize>,
 
     pub images: ImageState,
@@ -401,12 +402,13 @@ fn parse_tracks(json: &str, cur_a: i64, cur_s: i64) -> Option<(Vec<Track>, Vec<T
 
 impl App {
     pub fn cloud_profiles_ui(&mut self, ui: &mut egui::Ui) {
+        let remote = self.shared_remote_navigation();
         crate::connect::show(
             ui,
             &mut self.connect,
             self.rt.handle(),
             &mut self.profiles,
-            self.tv,
+            remote,
             false,
         );
     }
@@ -491,6 +493,7 @@ impl App {
             continue_tab: ContinueTab::Movies,
             settings: store::load_settings(),
             settings_section: None,
+            adding_profile: false,
             settings_return_tile: None,
             images: ImageState::default(),
             episode_frame_request: None,
@@ -721,7 +724,7 @@ impl App {
                 && (self.view != View::Settings
                     || self
                         .settings_section
-                        .is_none_or(ui::settings::is_quick_choice_section)))
+                        .is_none_or(ui::settings::uses_ordered_focus)))
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
@@ -1674,11 +1677,17 @@ impl App {
         app
     }
 
-    pub fn submit_form(&mut self) {
+    fn form_profile(&mut self) -> Option<Profile> {
         let name = if self.f_name.trim().is_empty() {
             match self.login_kind {
                 ProfileKind::Xtream => self.f_host.trim().to_string(),
-                ProfileKind::M3u => self.f_m3u_url.trim().to_string(),
+                ProfileKind::M3u => {
+                    if self.f_m3u_url.trim().is_empty() {
+                        format!("Profil {}", self.profiles.len() + 1)
+                    } else {
+                        self.f_m3u_url.trim().to_string()
+                    }
+                }
             }
         } else {
             self.f_name.trim().to_string()
@@ -1691,7 +1700,7 @@ impl App {
                     || self.f_pass.is_empty()
                 {
                     self.error = Some("Host, Benutzer und Passwort sind erforderlich.".to_string());
-                    return;
+                    return None;
                 }
                 p.host = self.f_host.trim().to_string();
                 p.username = self.f_user.trim().to_string();
@@ -1700,7 +1709,7 @@ impl App {
             ProfileKind::M3u => {
                 if self.f_m3u_url.trim().is_empty() && self.f_m3u_file.trim().is_empty() {
                     self.error = Some("M3U-URL oder Datei angeben.".to_string());
-                    return;
+                    return None;
                 }
                 p.m3u_url = self.f_m3u_url.trim().to_string();
                 p.m3u_file = self.f_m3u_file.trim().to_string();
@@ -1709,7 +1718,48 @@ impl App {
         if let Some(id) = self.editing_profile.as_ref() {
             p.id = id.clone();
         }
-        self.start_login(p);
+        Some(p)
+    }
+
+    pub fn submit_form(&mut self) {
+        if let Some(profile) = self.form_profile() {
+            self.start_login(profile);
+        }
+    }
+
+    pub(crate) fn begin_profile_add(&mut self) {
+        self.adding_profile = true;
+        self.editing_profile = None;
+        self.error = None;
+        self.login_kind = ProfileKind::Xtream;
+        self.show_password = false;
+        for field in [
+            &mut self.f_name,
+            &mut self.f_host,
+            &mut self.f_user,
+            &mut self.f_pass,
+            &mut self.f_m3u_url,
+            &mut self.f_m3u_file,
+        ] {
+            field.clear();
+        }
+    }
+
+    pub(crate) fn save_added_profile(&mut self) {
+        if let Some(mut profile) = self.form_profile() {
+            if self.f_name.trim().is_empty() {
+                profile.name = format!("Profil {}", self.profiles.len() + 1);
+            }
+            self.profiles.push(profile);
+            if store::save_profiles(&self.profiles).is_err() {
+                self.profiles.pop();
+                self.error = Some("Profil konnte nicht gespeichert werden.".into());
+                return;
+            }
+            self.adding_profile = false;
+            self.error = None;
+            self.f_pass.clear();
+        }
     }
 
     pub fn delete_profile(&mut self, id: &str) {
@@ -1729,6 +1779,7 @@ impl App {
     /// the user on "Live TV" no matter where they were.
     pub fn navigate(&mut self, view: View) {
         if view != View::Settings || self.view != View::Settings {
+            self.adding_profile = false;
             self.settings_section = None;
             self.settings_return_tile = None;
         }
@@ -1792,6 +1843,12 @@ impl App {
     pub(crate) fn close_settings_section(&mut self) -> bool {
         if self.view != View::Settings {
             return false;
+        }
+        if self.adding_profile {
+            self.adding_profile = false;
+            self.error = None;
+            self.f_pass.clear();
+            return true;
         }
         self.settings_return_tile = self.settings_section.take();
         self.settings_return_tile.is_some()

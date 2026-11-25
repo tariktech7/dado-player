@@ -15,7 +15,7 @@ Verwaltung: https://dado-admin.dado-licensing.workers.dev/admin/connect
 
 ## Sicherheit und Speicherung
 
-MAC-Adressen sind keine Geheimnisse. Die bewusst gewählte MAC-Zuordnung setzt Vertrauen in die manuell genehmigten Senderkonten voraus. Nur genehmigte Konten dürfen Geräte zuordnen und Profile senden. Bestehende fremde Zuordnungen bleiben gesperrt. Der Abruf von Profilen erfordert weiterhin den zufälligen Gerätetoken, niemals nur die MAC. Portaländerungen und vertrauliches Laden gespeicherter Vorlagen prüfen zusätzlich Origin.
+MAC-Adressen sind keine Geheimnisse. Die bewusst gewählte MAC-Zuordnung setzt Vertrauen in die manuell genehmigten Senderkonten voraus. Nur genehmigte Konten dürfen Geräte zuordnen und Profile senden. Mehrere freigegebene Senderkonten können dieselbe Geräteadresse unabhängig hinterlegen und Profile senden. Jedes Konto sieht seinen eigenen Gerätenamen und Versandverlauf. Trennt ein Sender sein Gerät im Portal, werden nur seine Verknüpfung und seine ausstehenden Sendungen entfernt. Der Abruf von Profilen erfordert weiterhin den zufälligen Gerätetoken, niemals nur die MAC. Portaländerungen und vertrauliches Laden gespeicherter Vorlagen prüfen zusätzlich Origin.
 
 Separater öffentlicher Worker dado-connect mit eigener EU-D1-Datenbank, getrennt von Lizenzdaten. Verwaltung in dado-admin unter bestehendem Cloudflare-Access-Schutz. Passwörter mit PBKDF2-SHA256, individuellem Salt und geheimem Pepper; gehashte Sitzungen und Secure/HttpOnly/SameSite-Strict-Cookie. Raten-, Körpergrößen- und Warteschlangenlimits bleiben aktiv.
 

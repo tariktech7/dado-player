@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {random} from '../protocol.mjs';
 const base='https://dado-connect.dado-licensing.workers.dev',root=fileURLToPath(new URL('../',import.meta.url)),wrangler=fileURLToPath(new URL('../../licensing/node_modules/wrangler/bin/wrangler.js',import.meta.url));
-const email='smoke-'+crypto.randomUUID()+'@example.invalid',password=random()+'1!',secret=random();let userId,deviceId;
+const email='smoke-'+crypto.randomUUID()+'@example.invalid', otherEmail='smoke-'+crypto.randomUUID()+'@example.invalid',password=random()+'1!',secret=random();let userId,deviceId;
 async function call(path,data,extra={}){const r=await fetch(base+path,{method:data===undefined?'GET':'POST',headers:{Origin:base,'Content-Type':'application/json',...extra},...(data===undefined?{}:{body:JSON.stringify(data)})});const value=await r.json();return {status:r.status,value,cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 function sql(command){const r=spawnSync(process.execPath,[wrangler,'d1','execute','dado-connect','--remote','--command',command,'--json'],{cwd:root,encoding:'utf8'});if(r.status!==0)throw Error('Controlled smoke DB operation failed');return JSON.parse(r.stdout)[0].results;}
 try{
@@ -28,10 +28,24 @@ try{
  assert.equal((await call('/api/profiles',undefined,cookie)).value.profiles.length,1);
  assert.equal((await call('/api/profiles/delete',{id:profileId},cookie)).status,200);
  console.log('Saved template encryption, authenticated load, resend identity and deletion OK');
+ const another=await call('/api/auth/register',{email:otherEmail,name:'Disposable second sender',password});
+ assert.equal(another.status,201,another.value.error);
+ const anotherLogin=await call('/api/auth/login',{email:otherEmail,password});
+ assert.equal(anotherLogin.status,200,anotherLogin.value.error);
+ const sender={Cookie:anotherLogin.cookie};
+ sql(`UPDATE accounts SET status='approved',approved_at=unixepoch() WHERE email='${otherEmail}'`);
+ assert.equal((await call('/api/pair',{address:register.value.address,label:'Second sender TV'},sender)).status,200);
+ const secondId=crypto.randomUUID(),firstId=crypto.randomUUID();
+ assert.equal((await call('/api/messages',{id:firstId,deviceId,profile},cookie)).status,201);
+ assert.equal((await call('/api/messages',{id:secondId,deviceId,profile},sender)).status,201);
+ const combined=await call('/v1/device/pull',{},auth);
+ assert.deepEqual(combined.value.messages.map(message=>message.id).sort(),[firstId,secondId].sort());
+ assert.equal((await call('/v1/device/ack',{ids:[firstId,secondId]},auth)).status,200);
+ console.log('Two approved senders delivered to the same device OK');
  const admin=await fetch('https://dado-admin.dado-licensing.workers.dev/admin/connect',{redirect:'manual'});assert.ok([302,303,403].includes(admin.status));console.log('Protected admin does not admit anonymous users OK');
  console.log('Production smoke passed. No real provider or customer data used.');
 }finally{
  if(deviceId)sql(`DELETE FROM devices WHERE id='${deviceId}'`);
- sql(`DELETE FROM accounts WHERE email='${email}'`);
+ sql(`DELETE FROM accounts WHERE email IN ('${email}','${otherEmail}')`);
  console.log('Disposable smoke account and device removed.');
 }

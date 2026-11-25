@@ -13,7 +13,7 @@ pub mod tv;
 mod continue_watching;
 mod favorites;
 mod live;
-mod login;
+pub(super) mod login;
 mod login_landscape;
 mod more;
 mod movies;

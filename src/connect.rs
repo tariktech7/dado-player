@@ -389,15 +389,17 @@ pub fn show(
     rt: &tokio::runtime::Handle,
     profiles: &mut Vec<Profile>,
     tv: bool,
-    _compact: bool,
+    compact: bool,
 ) {
     state.prepare(ui.ctx(), rt, profiles);
     if clicked(
         ui,
         if state.busy {
             "Profile werden aktualisiert …"
-        } else {
+        } else if compact {
             "Profile aktualisieren"
+        } else {
+            "Profilliste aktualisieren"
         },
         !state.busy,
         tv,
@@ -423,7 +425,7 @@ pub fn show(
         } else if !state.busy {
             ui.small("Für die erste Geräteadresse online „Profile aktualisieren“ wählen.");
         }
-        if !_compact && !state.saved.device_id.is_empty() {
+        if !compact && !state.saved.device_id.is_empty() {
             ui.small(format!("Geräte-ID: {}", state.saved.device_id));
         }
     }

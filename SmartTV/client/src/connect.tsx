@@ -42,7 +42,7 @@ export function prepareCloudDevice(force=false):Promise<Saved>{
  })();
  return registration;
 }
-export function ConnectPanel({importProfiles,compact=false}:{importProfiles:(profiles:Profile[])=>number;compact?:boolean}){
+export function ConnectPanel({importProfiles,compact=false,profileList=false}:{importProfiles:(profiles:Profile[])=>number;compact?:boolean;profileList?:boolean}){
  const [busy,setBusy]=useState(false),[message,setMessage]=useState('');
  async function refresh(){
   if(busy)return;setBusy(true);setMessage('');
@@ -52,10 +52,10 @@ export function ConnectPanel({importProfiles,compact=false}:{importProfiles:(pro
    const next={...state,...inbox};delete (next as any).messages;persist(next);
    if(!inbox.messages.length){setMessage('Keine neuen Profile vorhanden.');return;}
    importProfiles(inbox.messages.map(m=>cloudProfile(m.profile,m.id)));
-   try{await post(state.token,'ack',{ids:inbox.messages.map(m=>m.id)});setMessage('Profile gespeichert. In der Profilwahl auswählen.');}
+   try{await post(state.token,'ack',{ids:inbox.messages.map(m=>m.id)});setMessage(profileList?'Profilliste aktualisiert.':'Profile gespeichert. In der Profilwahl auswählen.');}
    catch{setMessage('Profile gespeichert. Bitte Aktualisieren erneut drücken.');}
   }catch(error){setMessage(error instanceof Error&&error.name!=='AbortError'?error.message:'Profile konnten nicht abgerufen werden. Verbindung prüfen.');}
   finally{setBusy(false);}
  }
- return <div class={compact?'profile-refresh':'connect-panel'}><button disabled={busy} onClick={()=>void refresh()}>{busy?'Profile werden aktualisiert …':'Profile aktualisieren'}</button>{message&&<p role="status">{message}</p>}</div>;
+ return <div class={compact?'profile-refresh':'connect-panel'}><button disabled={busy} onClick={()=>void refresh()}>{busy?'Profile werden aktualisiert …':profileList?'Profilliste aktualisieren':'Profile aktualisieren'}</button>{message&&<p role="status">{message}</p>}</div>;
 }
