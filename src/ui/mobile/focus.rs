@@ -35,6 +35,8 @@ struct State {
     current_zone: Option<u8>,
     zones: Vec<Option<u8>>,
     frame_zones: Vec<Option<u8>>,
+    header: bool,
+    frame_header: bool,
     ids: Vec<egui::Id>,
     frame_ids: Vec<egui::Id>,
     zone_memory: HashMap<(u64, u8), egui::Id>,
@@ -98,6 +100,7 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
         s.frame_rects.clear();
         s.frame_ids.clear();
         s.frame_zones.clear();
+        s.frame_header = false;
         s.current_zone = None;
         if pointer_used {
             s.active = false;
@@ -148,7 +151,10 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
                         _ => Dir::Right,
                     };
                     if spatial {
-                        if let Some(next) = zoned_next(&s, &rects, s.idx, dir) {
+                        if let Some(next) = (!identity_changed)
+                            .then(|| zoned_next(&s, &rects, s.idx, dir))
+                            .flatten()
+                        {
                             s.idx = next;
                             s.moved = true;
                         }
@@ -198,6 +204,33 @@ pub fn begin(keys: &[RemoteKey], screen: u64, pointer_used: bool, modal: bool, s
 pub fn set_zone(zone: u8) {
     STATE.with(|cell| cell.borrow_mut().current_zone = Some(zone));
 }
+pub fn set_header_zone() {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        s.current_zone = Some(0);
+        s.frame_header = true;
+    });
+}
+
+pub fn prefer_next_when_inactive() {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        if !s.active && !s.moved {
+            s.idx = s.seen;
+        }
+    });
+}
+
+#[cfg(windows)]
+pub fn adopt_id(id: egui::Id) {
+    STATE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        if let Some(index) = s.ids.iter().position(|candidate| *candidate == id) {
+            s.idx = index;
+        }
+    });
+}
+
 pub fn current_zone() -> Option<u8> {
     STATE.with(|cell| {
         let s = cell.borrow();
@@ -212,24 +245,31 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
     };
     let cur = *rects.get(from)?;
     let horizontal = matches!(dir, Dir::Left | Dir::Right);
-    let same: Vec<_> = rects
-        .iter()
-        .enumerate()
-        .filter(|(i, r)| {
-            s.zones.get(*i) == Some(&Some(zone))
-                && (!horizontal || overlap_y(cur, **r) > cur.height().min(r.height()) * 0.5)
-        })
-        .collect();
-    if let Some(local) = same.iter().position(|(i, _)| *i == from) {
-        let rs: Vec<_> = same.iter().map(|(_, r)| **r).collect();
-        if let Some(next) = find_next(&rs, local, dir) {
-            return Some(same[next].0);
+    let local = |i| s.zones.get(i) == Some(&Some(zone));
+    if let Some(next) = find_next_where(rects, from, dir, local) {
+        return Some(next);
+    }
+    if s.header {
+        if matches!(dir, Dir::Up) && zone != 0 {
+            return find_next_where(rects, from, dir, |i| s.zones.get(i) == Some(&Some(0)));
+        }
+        if matches!(dir, Dir::Down) && zone == 0 {
+            return find_next_where(rects, from, dir, |i| s.zones.get(i) != Some(&Some(0)));
+        }
+        if zone == 0 {
+            return None;
         }
     }
     if !horizontal {
         return None;
     }
-    let mut columns: Vec<_> = s.zones.iter().flatten().copied().collect();
+    let mut columns: Vec<_> = s
+        .zones
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|candidate| !s.header || *candidate != 0)
+        .collect();
     columns.sort_unstable();
     columns.dedup();
     let index = columns.iter().position(|z| *z == zone)?;
@@ -247,7 +287,16 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
             return Some(i);
         }
     }
-    s.zones.iter().position(|z| *z == Some(target))
+    rects
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| s.zones.get(*i) == Some(&Some(target)))
+        .min_by(|(_, a), (_, b)| {
+            (a.center().y - cur.center().y)
+                .abs()
+                .total_cmp(&(b.center().y - cur.center().y).abs())
+        })
+        .map(|(i, _)| i)
 }
 
 /// Find the best neighbour in `dir` from the currently focused rect.
@@ -258,11 +307,21 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
 /// (no overlap on the other axis) is penalised heavily. Ties go to the earlier
 /// registration, which keeps rails deterministic.
 fn find_next(rects: &[Rect], from: usize, dir: Dir) -> Option<usize> {
+    find_next_where(rects, from, dir, |_| true)
+}
+
+fn find_next_where(
+    rects: &[Rect],
+    from: usize,
+    dir: Dir,
+    includes: impl Fn(usize) -> bool,
+) -> Option<usize> {
     let cur = *rects.get(from)?;
+    let horizontal = matches!(dir, Dir::Left | Dir::Right);
     let c = cur.center();
     let mut best: Option<(f32, usize)> = None;
     for (i, r) in rects.iter().enumerate() {
-        if i == from {
+        if i == from || !includes(i) {
             continue;
         }
         let cc = r.center();
@@ -274,7 +333,7 @@ fn find_next(rects: &[Rect], from: usize, dir: Dir) -> Option<usize> {
         };
         // 1 pt tolerance: controls in the same row/column can differ by a
         // fraction of a point after scroll offsets are applied.
-        if major <= 1.0 {
+        if major <= 1.0 || (horizontal && overlap < cur.height().min(r.height()) * 0.5) {
             continue;
         }
         let beam_penalty = if overlap > 0.0 { 0.0 } else { minor * 2.0 };
@@ -305,6 +364,8 @@ pub fn begin_modal(initial: usize) {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
         s.modal_started = true;
+        s.current_zone = None;
+        s.frame_header = false;
         if s.reset_modal_focus {
             s.idx = initial;
             s.desired_id = None;
@@ -337,6 +398,9 @@ fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
         // on a disabled underlying control — this is what stops "Anmelden"
         // from submitting while the delete confirm is open.
         if s.modal && !s.modal_started {
+            return false;
+        }
+        if !resp.enabled() {
             return false;
         }
         let i = s.seen;
@@ -435,6 +499,7 @@ pub fn end() {
         s.rects = std::mem::take(&mut s.frame_rects);
         s.ids = std::mem::take(&mut s.frame_ids);
         s.zones = std::mem::take(&mut s.frame_zones);
+        s.header = s.frame_header;
         s.current_zone = None;
         // Keep an unconsumed Ok press for ONE more frame if no control was
         // focused at all (e.g. the list shrank under the cursor). `idx` has just
@@ -561,6 +626,29 @@ mod tests {
         assert_eq!(zoned_next(&s, &rects, 1, Dir::Right), Some(4));
         assert_eq!(zoned_next(&s, &rects, 2, Dir::Right), Some(3));
     }
+    #[test]
+    fn classic_header_is_only_reached_vertically_and_rows_do_not_wrap() {
+        let rects = [
+            rect(0.0, 0.0),
+            rect(400.0, 0.0),
+            rect(0.0, 70.0),
+            rect(100.0, 70.0),
+            rect(20.0, 130.0),
+            rect(120.0, 130.0),
+        ];
+        let s = State {
+            header: true,
+            zones: vec![Some(0), Some(0), Some(1), Some(1), Some(1), Some(1)],
+            ..Default::default()
+        };
+        assert_eq!(zoned_next(&s, &rects, 2, Dir::Left), None);
+        assert_eq!(zoned_next(&s, &rects, 3, Dir::Right), None);
+        assert_eq!(zoned_next(&s, &rects, 3, Dir::Down), Some(5));
+        assert_eq!(zoned_next(&s, &rects, 5, Dir::Left), Some(4));
+        assert_eq!(zoned_next(&s, &rects, 2, Dir::Up), Some(0));
+        assert_eq!(zoned_next(&s, &rects, 0, Dir::Down), Some(2));
+    }
+
     #[test]
     fn focus_survives_virtual_rows_changing_registration_order() {
         let wanted = egui::Id::new("wanted");

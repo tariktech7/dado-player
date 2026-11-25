@@ -24,7 +24,7 @@ import { Provider, hostUrl, httpUrl, liveExtension } from "./api";
 import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
-import { CatalogBrowser, EpisodePicker, resumeEpisode } from "./library";
+import { CatalogBrowser, TitleDetail, resumeEpisode } from "./library";
 import playbackLanguages from "../../../shared/playback-languages.json" with { type: "json" };
 import settingsSections from "../../../shared/settings-sections.json" with { type: "json" };
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
@@ -156,9 +156,9 @@ const emptyProfile = (): Profile => ({
   m3uUrl: "",
   epgUrl: "",
 });
-const time = (n: number) =>
+const time = (n: number, showHours = false) =>
   Number.isFinite(n)
-    ? `${Math.floor(n / 3600) ? Math.floor(n / 3600) + ":" : ""}${String(Math.floor((n % 3600) / 60)).padStart(2, "0")}:${String(Math.floor(n % 60)).padStart(2, "0")}`
+    ? `${showHours || n >= 3600 ? String(Math.floor(n / 3600)).padStart(showHours ? 2 : 1, "0") + ":" : ""}${String(Math.floor((n % 3600) / 60)).padStart(2, "0")}:${String(Math.floor(n % 60)).padStart(2, "0")}`
     : "00:00";
 const clock = (n: number, format: Settings["clockFormat"]) => {
   const date = new Date(n * 1000);
@@ -320,7 +320,8 @@ function App() {
     ),
     [exit, setExit] = useState(false),
     [tracks, setTracks] = useState(false),
-    [playerOptions, setPlayerOptions] = useState<"options" | "aspect" | null>(null),
+    [playerOptions, setPlayerOptions] = useState(false),
+    [aspectNotice, setAspectNotice] = useState<{value: Settings["aspect"]} | null>(null),
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
     [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -329,6 +330,7 @@ function App() {
   });
   const [updateReady, setUpdateReady] = useState<'manual' | 'automatic' | null>(null);
   const updateInProgress = useRef(false);
+  const aspectNoticeTimer = useRef<ReturnType<typeof setTimeout>>();
   const [, repaint] = useState(0),
     playerRef = useRef<Player | null>(null),
     providerRef = useRef<Provider | null>(null),
@@ -397,6 +399,7 @@ function App() {
       ? catalog.series.find((s) => s.id === i.seriesId) || i
       : i;
   const favoriteKeys = useMemo(() => new Set(favorites.map(itemKey)), [favorites]);
+  const allowEpisodePreviews = (item: Item) => !full && !parental.open && !resume && !parental.locked(pid, item);
   const isFavorite = (i: Item) => favoriteKeys.has(itemKey(favoriteTarget(i)));
   const toggleFavorite = (i: Item) =>
     changed({
@@ -406,7 +409,9 @@ function App() {
         [pid]: favorite(savedRef.current, pid, favoriteTarget(i)),
       },
     });
+  const untrackedPlayback = useRef(false);
   const record = () => {
+    if (untrackedPlayback.current) return;
     const p = playerRef.current,
       profile = savedRef.current.activeProfile;
     if (!p?.current || !profile) return;
@@ -426,6 +431,7 @@ function App() {
   };
   const playerOrigin = useRef<HTMLElement | null>(null);
   const playerReturn = useRef<Item | null>(null);
+  const returnFromRandom = useRef(false);
   const openFullscreen = () => {
     if (!fullRef.current) {
       const target = document.activeElement;
@@ -439,6 +445,7 @@ function App() {
     loadToken.current++;
     record();
     playerRef.current?.stop();
+    untrackedPlayback.current = false;
     previewRef.current = null;
     setPreview(null);
     setFull(false);
@@ -446,6 +453,7 @@ function App() {
   };
   const leavePlayer = (keepLivePreview = true, openLiveList = false) => {
     playerReturn.current = previewRef.current;
+    returnFromRandom.current = untrackedPlayback.current;
     if (keepLivePreview && (view === "live" || openLiveList) && previewRef.current?.kind === "live") {
       if (openLiveList) {
         if (view !== "live" || !filteredLive.some((item) => item.id === previewRef.current?.id)) {
@@ -592,7 +600,7 @@ function App() {
       if (gen === generation.current && cacheEpoch === epgCacheEpoch.current) epgPending.current.delete(key);
     }
   };
-  async function start(item: Item, fullscreen = false, position = 0) {
+  async function start(item: Item, fullscreen = false, position = 0, untracked = false) {
     const profileId=savedRef.current.activeProfile || '', generationAtRequest=generation.current;
     if(parental.locked(profileId,item)) stop();
     if(!await parental.request(profileId,item) || generationAtRequest!==generation.current) return;
@@ -609,12 +617,13 @@ function App() {
     if (
       previewRef.current &&
       itemKey(previewRef.current) === itemKey(item) &&
-      p.current
+      p.current && untrackedPlayback.current === untracked
     ) {
       openFullscreen();
       return;
     }
     record();
+    untrackedPlayback.current = untracked;
     if (item.kind === "live" && latestLive.current?.id !== item.id) {
       previousLive.current = latestLive.current;
       latestLive.current = item;
@@ -623,26 +632,29 @@ function App() {
     previewRef.current = item;
     if (fullscreen) openFullscreen();
     else setFull(false);
-    if (view !== "vod" && view !== "series") setDetail(null);
     setTracks(false);
     const token = ++loadToken.current;
     p.settings = { ...savedRef.current.settings };
     void getEpg(item);
-    await p.open(item, position);
+    await p.open(item, position >= policy.resumeMinimumSeconds ? position : 0);
     if (token !== loadToken.current) return;
     if (p.status.state === "playing") record();
   }
-  const playTitle = (item: Item) => {
-    const h = history.find((h) => itemKey(h.item) === itemKey(item));
-    if (
-      item.kind !== "live" &&
-      item.kind !== "series" &&
-      h &&
-      h.position > 10 &&
-      (!h.duration || h.position < h.duration - 30)
-    )
-      setResume({ item, position: h.position });
-    else void start(item, true);
+  function offerResume(item: Item, position?: number) {
+    if (item.kind !== "vod" && item.kind !== "episode") return false;
+    const watched = history.find((entry) => itemKey(entry.item) === itemKey(item));
+    const savedPosition = position ?? watched?.position ?? 0;
+    if (!Number.isFinite(savedPosition) || savedPosition < policy.resumeMinimumSeconds ||
+        (watched?.duration && watched.duration - savedPosition <= policy.resumeEndMarginSeconds)) {
+      return false;
+    }
+    setResume({ item, position: savedPosition });
+    return true;
+  }
+  const playDirect = (item: Item, position: number, untracked = false) =>
+    void start(item, true, position, untracked);
+  const playTitle = (item: Item, position?: number) => {
+    if (!offerResume(item, position)) void start(item, true);
   };
   async function continueWatching(item: Item, position: number) {
     const request = ++continueRequest.current, playing = loadToken.current;
@@ -664,7 +676,34 @@ function App() {
     }
     await start(item,true,position);
   }
-  async function openDetail(item: Item) {
+  const externalTitle = view !== "vod" && view !== "series" && (detail?.kind === "vod" || detail?.kind === "series") ? detail : null;
+  const externalTitlePanel = useRef<HTMLElement>(null);
+  const externalTitleOrigin = useRef<HTMLElement | null>(null);
+  const externalTitleKey = externalTitle ? itemKey(externalTitle) : null;
+  useLayoutEffect(() => {
+    const panel = externalTitlePanel.current;
+    if (!externalTitleKey || full || !panel || resume) return;
+    const active = document.activeElement;
+    if (active && panel.contains(active) && active !== panel.querySelector(".menu-back")) return;
+    const control = panel.querySelector<HTMLElement>("button.primary:not(:disabled)") ||
+      panel.querySelector<HTMLElement>(".menu-back");
+    control?.focus({preventScroll: true});
+  }, [externalTitleKey, episodes, full, resume]);
+  const closeExternalTitle = () => {
+    const origin = externalTitleOrigin.current;
+    externalTitleOrigin.current = null;
+    detailRequest.current++;
+    setDetail(null);
+    setEpisodes([]);
+    requestAnimationFrame(() => {
+      if (origin?.isConnected) origin.focus({preventScroll: true});
+    });
+  };
+  async function openDetail(item: Item, promptForResume = false) {
+    if (view !== "vod" && view !== "series") {
+      const focus = document.activeElement;
+      externalTitleOrigin.current = focus instanceof HTMLElement ? focus : null;
+    }
     const token = ++detailRequest.current,
       gen = generation.current,
       key = itemKey(item),
@@ -672,7 +711,17 @@ function App() {
     detailRef.current = item;
     setDetail(cached?.item || item);
     setEpisodes(cached ? [...cached.episodes] : []);
-    if (cached) return;
+    function offerSeriesResume(rows: Item[]) {
+      if (promptForResume && item.kind === "series") {
+        const target = resumeEpisode(rows, history);
+        if (target) offerResume(target.item, target.position);
+      }
+    }
+    if (promptForResume && item.kind === "vod") offerResume(item);
+    if (cached) {
+      offerSeriesResume(cached.episodes);
+      return;
+    }
     try {
       const rows =
         item.kind === "series"
@@ -690,6 +739,7 @@ function App() {
       if (token === detailRequest.current) {
         setDetail(value.item);
         setEpisodes(rows);
+        offerSeriesResume(rows);
       }
     } catch (e) {
       if (token === detailRequest.current) setMessage((e as Error).message);
@@ -779,7 +829,7 @@ function App() {
       return;
     }
     if (playerOptionsRef.current) {
-      setPlayerOptions(null);
+      setPlayerOptions(false);
       document.querySelector<HTMLElement>(".player-options-toggle")?.focus();
       return;
     }
@@ -789,10 +839,6 @@ function App() {
     }
     if (exitRef.current) {
       setExit(false);
-      return;
-    }
-    if (detailRef.current && view !== "vod" && view !== "series") {
-      setDetail(null);
       return;
     }
     if (fullRef.current && !document.querySelector(".modal")) {
@@ -807,6 +853,7 @@ function App() {
       setEditing(false);
       return;
     }
+    if (externalTitle) { closeExternalTitle(); return; }
     if (view === "settings" && closeSettingsSection()) return;
     if (closeCatalogDetail()) return;
     if (classic) {
@@ -842,12 +889,20 @@ function App() {
     const next = index < 0 ? (delta < 0 ? list.length - 1 : 0) : (index + delta + list.length) % list.length;
     void start(list[next], fullRef.current);
   };
+  const applyPlayerAspect = (value: Settings["aspect"]) => {
+    const changed = savedRef.current.settings.aspect !== value;
+    setting("aspect", value);
+    playerRef.current?.setAspect(value);
+    if (changed) {
+      clearTimeout(aspectNoticeTimer.current);
+      setAspectNotice({value});
+      aspectNoticeTimer.current = setTimeout(() => setAspectNotice(null), 1000);
+    }
+    showControls();
+  };
   const cycleLiveAspect = () => {
     const aspect = savedRef.current.settings.aspect;
-    const next = aspect === "fill" ? "fit" : aspect === "fit" ? "stretch" : "fill";
-    setting("aspect", next);
-    playerRef.current?.setAspect(next);
-    showControls();
+    applyPlayerAspect(aspect === "fill" ? "fit" : aspect === "fit" ? "stretch" : "fill");
   };
   keyHandler.current = (e: KeyboardEvent) => {
     const code = e.keyCode;
@@ -906,17 +961,18 @@ function App() {
         cycleLiveAspect();
       } else if (fullRef.current) {
         showControls();
-        setPlayerOptions(playerOptionsRef.current ? null : "options");
+        setPlayerOptions(!playerOptionsRef.current);
       } else {
         goShortcut("settings");
       }
       return;
     }
-    if (livePlayer && isInfoKey(e) && !tracksRef.current && !parental.open && !document.querySelector(".modal")) {
+    if (livePlayer && isInfoKey(e) && !tracksRef.current && !playerOptionsRef.current && !parental.open && !document.querySelector(".modal")) {
       e.preventDefault();
       if (!e.repeat) {
         showControls();
-        setPlayerOptions(playerOptionsRef.current ? null : "options");
+        playerRef.current?.refreshTracks();
+        setTracks(true);
       }
       return;
     }
@@ -1139,6 +1195,8 @@ function App() {
     if (full || !playerReturn.current) return;
     const item = playerReturn.current;
     const origin = playerOrigin.current;
+    const random = returnFromRandom.current;
+    returnFromRandom.current = false;
     playerReturn.current = null;
     playerOrigin.current = null;
     if (returnChannel >= 0) return;
@@ -1146,7 +1204,8 @@ function App() {
     const series = item.seriesId ? `series:${item.seriesId}` : null;
     const targets = [...document.querySelectorAll<HTMLElement>(".shell [data-focus-key]")]
       .filter((element) => getComputedStyle(element).visibility === "visible");
-    const target = targets.find(el => el.dataset.focusKey === key) ||
+    const target = (random && origin?.isConnected ? origin : null) ||
+      targets.find(el => el.dataset.focusKey === key) ||
       targets.find(el => el.dataset.focusKey === series) ||
       (origin?.isConnected ? origin : null);
     target?.focus({ preventScroll: true });
@@ -1154,14 +1213,17 @@ function App() {
   const p = playerRef.current,
     status = p?.status;
   useLayoutEffect(() => {
-    if (classic && view === "home" && session && !full && !document.activeElement?.closest(".classic-dashboard")) {
+    if (classic && view === "home" && session && !full && !externalTitle && !document.activeElement?.closest(".classic-dashboard")) {
       document.querySelector<HTMLElement>(".classic-primary button")?.focus({preventScroll: true});
     }
   }, [classic, view, session, full]);
+  useEffect(() => () => clearTimeout(aspectNoticeTimer.current), []);
   useEffect(() => {
     showControls();
     if (!full) {
-      setPlayerOptions(null);
+      clearTimeout(aspectNoticeTimer.current);
+      setAspectNotice(null);
+      setPlayerOptions(false);
       return;
     }
     const timer = setInterval(() => {
@@ -1259,7 +1321,7 @@ function App() {
             )
           : item.kind === "live"
             ? void start(item, true)
-            : void openDetail(item)
+            : item.kind === "episode" ? playTitle(item) : void openDetail(item, true)
       }
     >
       <Logo item={item} large />
@@ -1922,10 +1984,10 @@ function App() {
         <>
           <div
             data-focus-scope={view}
-            class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? `catalog-shell${selectedTitle ? " has-title-detail" : ""}` : ""}${full ? " behind-player" : ""}`}
+            class={`shell ${classic ? "classic-shell" : navCollapsed.current && !navHover.current ? "nav-collapsed" : ""} ${view === "live" ? "live-shell with-preview" : ""} ${view === "vod" || view === "series" ? `catalog-shell${selectedTitle ? " has-title-detail" : ""}` : ""}${externalTitle ? " has-title-detail external-title-detail" : ""}${full ? " behind-player" : ""}`}
           >
             {classic ? <header data-focus-zone="navigation" class="classic-header">
-              {view !== "home" && <button class="menu-back" onClick={() => goShortcut("home")}>{t("‹ Übersicht", "‹ Dashboard")}</button>}
+              {view !== "home" && <button class="menu-back classic-back" onClick={back}>{t("‹ Zurück", "‹ Back")}</button>}
               <img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
               <strong>Dado Player</strong>
               {license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
@@ -2337,14 +2399,16 @@ function App() {
                         categoryTop: document.querySelector(".catalog-browser .category-list")?.scrollTop || 0,
                       };
                       setSelectedTitle(i);
-                      void openDetail(i);
+                      void openDetail(i, true);
                     }}
                     favorites={favorites}
                     detail={detail}
                     episodes={episodes}
                     history={history}
                     toggle={toggleFavorite}
-                    play={(i, pos) => void start(i, true, pos)}
+                    play={playTitle}
+                    playDirect={playDirect}
+                    allowEpisodePreviews={allowEpisodePreviews}
                   />
                 )}
                 {catalog.issues.length > 0 && (
@@ -2357,6 +2421,10 @@ function App() {
                 )}
               </main>
             )}
+            {externalTitle && <TitleDetail item={externalTitle} t={t} panel={externalTitlePanel}
+              close={closeExternalTitle} episodes={episodes} history={history}
+              marked={isFavorite(externalTitle)} toggle={toggleFavorite} play={playTitle} playDirect={playDirect}
+              previews={allowEpisodePreviews(externalTitle)} />}
           </div>
           {!full && view !== "home" && !(classic && view === "live") && <ShortcutLegend t={t} />}
           {editing && modal("Profil hinzufügen", profileForm())}
@@ -2368,6 +2436,10 @@ function App() {
               onClick={showControls}
             >
               <div ref={surface} class="full-surface" />
+              {aspectNotice && <div class="player-aspect-notice" role="status">
+                {aspectNotice.value === "fill" ? t("Automatisch", "Automatic")
+                  : aspectNotice.value === "fit" ? t("Einpassen", "Fit") : t("Strecken", "Stretch")}
+              </div>}
               {preview.kind === "live" && <button class="live-back" onClick={() => leavePlayer(true, true)}>
                 {t("← Zurück", "← Back")}
               </button>}
@@ -2400,18 +2472,7 @@ function App() {
                   {p.subtitle}
                 </div>
               )}
-              {playerOptions === "options" && (
-                <div class="player-options glass" aria-label={t("Player-Optionen", "Player options")}>
-                  <button onClick={() => {
-                    setPlayerOptions(null);
-                    p?.refreshTracks();
-                    setTracks(true);
-                  }}>{preview.kind === "live" ? t("Ton & Untertitel", "Audio & subtitles") : "Audio"}</button>
-                  <button onClick={() => setPlayerOptions("aspect")}>{t("Bildformat", "Aspect ratio")}</button>
-                  <button onClick={() => leavePlayer(false)}>{t("Beenden", "Stop")}</button>
-                </div>
-              )}
-              {playerOptions === "aspect" && (
+              {playerOptions && (
                 <div class="player-options glass" aria-label={t("Bildformat", "Aspect ratio")}>
                   {([
                     ["fill", t("Automatisch", "Automatic")],
@@ -2419,9 +2480,8 @@ function App() {
                     ["stretch", t("Strecken", "Stretch")],
                   ] as const).map(([value, label]) => (
                     <button key={value} aria-pressed={saved.settings.aspect === value} onClick={() => {
-                      setting("aspect", value);
-                      p?.setAspect(value);
-                      setPlayerOptions(null);
+                      applyPlayerAspect(value);
+                      setPlayerOptions(false);
                       document.querySelector<HTMLElement>(".player-options-toggle")?.focus();
                     }}>{label}</button>
                   ))}
@@ -2457,61 +2517,25 @@ function App() {
                 </div>
                 <div class="transport">
                   <button onClick={() => { p?.refreshTracks(); setTracks(true); }}>Audio</button>
-                  <button class="player-options-toggle" aria-expanded={!!playerOptions}
-                    aria-label={t("Optionen", "Options")}
-                    onClick={() => setPlayerOptions(playerOptions ? null : "options")}>
-                    <RailIcon kind="settings" />
+                  <button class="player-options-toggle" aria-expanded={playerOptions}
+                    onClick={() => setPlayerOptions(!playerOptions)}>
+                    {t("Bildformat", "Aspect ratio")}
                   </button>
                   {following?.source === itemKey(preview) && <button onClick={() => {
                     const position = history.find((entry) => itemKey(entry.item) === itemKey(following.item))?.position || 0;
-                    void start(following.item, true, position);
+                    void start(following.item, true, untrackedPlayback.current ? 0 : position, untrackedPlayback.current);
                   }}>{t("Nächste Folge", "Next episode")}</button>}
                 </div>
                 </div>
               </>}
             </div>
           )}
-          {detail &&
-            view !== "vod" &&
-            view !== "series" &&
-            modal(
-              detail.name,
-              <>
-                <div class="detail-body">
-                  <Logo item={detail} large />
-                  <div>
-                    <p>
-                      {detail.description ||
-                        "Informationen werden vom Anbieter bereitgestellt."}
-                    </p>
-                    <button onClick={() => toggleFavorite(detail)}>
-                      {isFavorite(detail)
-                        ? "★ Aus Favoriten entfernen"
-                        : "☆ Merken"}
-                    </button>
-                    {detail.kind !== "series" && (
-                      <button class="primary" onClick={() => playTitle(detail)}>
-                        Abspielen
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {detail.kind === "series" && (
-                  <EpisodePicker
-                    episodes={episodes}
-                    history={history}
-                    play={(i, pos) => void start(i, true, pos)}
-                  />
-                )}
-                <button onClick={() => setDetail(null)}>Zurück</button>
-              </>,
-            )}
           {resume &&
             modal(
-              "Weiterschauen?",
+              t("Wiedergabe fortsetzen?", "Resume playback?"),
               <>
                 <p>
-                  {resume.item.name} · Bei {time(resume.position)}
+                  {resume.item.name} · {t("Zuletzt gesehen bei", "Last watched at")} {time(resume.position, true)}
                 </p>
                 <button
                   class="primary"
@@ -2521,7 +2545,7 @@ function App() {
                     void start(r.item, true, r.position);
                   }}
                 >
-                  Fortsetzen
+                  {t("Fortsetzen", "Resume")}
                 </button>
                 <button
                   onClick={() => {
@@ -2530,9 +2554,9 @@ function App() {
                     void start(r.item, true, 0);
                   }}
                 >
-                  Von vorne
+                  {t("Von vorne anfangen", "Start from beginning")}
                 </button>
-                <button onClick={() => setResume(null)}>Abbrechen</button>
+                <button onClick={() => setResume(null)}>{t("Abbrechen", "Cancel")}</button>
               </>,
             )}
           {tracks &&
@@ -2611,8 +2635,9 @@ function App() {
   async function startRetry() {
     const item = previewRef.current;
     if (!item) return;
+    const untracked = untrackedPlayback.current;
     stop();
-    await start(item, true);
+    await start(item, true, 0, untracked);
   }
 }
 

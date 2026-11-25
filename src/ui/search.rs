@@ -8,12 +8,13 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     ui.add(egui::Label::new(RichText::new("Suche").size(22.0).strong()));
     ui.add_space(6.0);
+    let remote = app.shared_remote_navigation();
     if super::desktop::active(ui.ctx()) {
         super::desktop::search_field(
             ui,
             &mut app.search_q,
             "Kanal, Film oder Serie suchen…",
-            app.tv,
+            remote,
         );
     } else {
         ui.horizontal(|ui| {
@@ -138,7 +139,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         }
                     });
 
-                    if resp.clicked() {
+                    if if remote {
+                        super::mobile::focus::clicked(ui, &resp)
+                    } else {
+                        resp.clicked()
+                    } {
                         play = Some(PlayItem {
                             title: c.name.clone(),
                             url: c.stream_url.clone(),
@@ -196,7 +201,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         }
                     });
 
-                    if resp.clicked() {
+                    if if remote {
+                        super::mobile::focus::clicked(ui, &resp)
+                    } else {
+                        resp.clicked()
+                    } {
                         play = Some(PlayItem {
                             title: m.name.clone(),
                             url: m.stream_url.clone(),
@@ -253,7 +262,11 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         }
                     });
 
-                    if resp.clicked() {
+                    if if remote {
+                        super::mobile::focus::clicked(ui, &resp)
+                    } else {
+                        resp.clicked()
+                    } {
                         open_series = Some(s.id);
                     }
                     ui.add_space(2.0);
@@ -262,7 +275,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         });
 
     if let Some(item) = play {
-        app.play(item);
+        app.play_selected(item);
     }
     if let Some(id) = open_series {
         app.open_series(id);

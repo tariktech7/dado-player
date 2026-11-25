@@ -209,6 +209,7 @@ export class Provider {
         seriesId: item.id,
         category: item.category,
         logo: safeImage(e.info?.movie_image) || item.logo,
+        preview: safeImage(e.info?.movie_image),
         url: this.stream("series", e.id, e.container_extension || "mp4"),
         description: String(e.info?.plot || ""),
       }))

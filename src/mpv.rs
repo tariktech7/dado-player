@@ -68,6 +68,8 @@ pub struct Mpv {
     _lib: Option<Library>,
     ctx: *mut c_void,
     f: Fns,
+    #[cfg(target_os = "android")]
+    owns_android_renderer: bool,
 }
 
 /// TLS policy for provider streams.
@@ -135,6 +137,7 @@ impl Mpv {
                 _lib: Some(lib),
                 ctx,
                 f,
+                owns_android_renderer: true,
             };
 
             // No `wid`, no `gpu-context`: the render API supplies the GL
@@ -642,7 +645,7 @@ impl Drop for Mpv {
             // alive: this player is a process-lifetime singleton (nothing sets
             // `App::player` back to `None`), so the handle would only be
             // destroyed at exit anyway.
-            if crate::platform::android::render::is_attached() {
+            if self.owns_android_renderer && crate::platform::android::render::is_attached() {
                 crate::platform::android::render::detach();
                 // The mpv handle outlives this struct, so libmpv must stay
                 // mapped. Leaking one `dlopen` reference is the price; the
@@ -736,3 +739,7 @@ fn open_library(path: impl AsRef<std::ffi::OsStr>) -> Result<Library, libloading
 fn open_library(path: impl AsRef<std::ffi::OsStr>) -> Result<Library, libloading::Error> {
     unsafe { Library::new(path) }
 }
+
+#[cfg(any(target_os = "windows", target_os = "android"))]
+#[path = "episode_frame.rs"]
+pub(crate) mod episode_frame;

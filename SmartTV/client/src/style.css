@@ -1439,6 +1439,7 @@ hr {
 .shell.has-title-detail { position: relative; }
 .shell.has-title-detail > .navigation,
 .shell.has-title-detail > .classic-header,
+.shell.external-title-detail > main,
 .shell.has-title-detail .catalog-browser > .categories,
 .shell.has-title-detail .catalog-browser > .catalog-titles {
   visibility: hidden;
@@ -1477,7 +1478,7 @@ hr {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 70%;
+  width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center 38%;
@@ -1493,30 +1494,49 @@ hr {
   pointer-events: none;
   background:
     linear-gradient(to top, #03090f 5%, #03090fcc 22%, transparent 68%),
-    linear-gradient(to right, #0c1b2c 30%, transparent 76%);
+    linear-gradient(to right, #07121de8, #07121dac 52%, transparent 85%);
 }
 .movie-detail .catalog-detail-header,
-.movie-controls { position: relative; z-index: 2; }
-.movie-controls {
-  margin: auto 0 26px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 36px;
-}
-.movie-main { min-width: 0; flex: 1; display: flex; align-items: flex-end; flex-wrap: wrap; gap: 20px 30px; }
-.movie-main h2 {
-  margin: 0;
-  max-width: 1250px;
-  font-size: 64px;
-  line-height: 1.02;
+.movie-controls,
+.title-copy,
+.series-controls { position: relative; z-index: 2; }
+.movie-controls, .series-controls { margin-top: auto; min-width: 0; }
+.title-copy { width: 65%; max-width: 960px; flex: 0 1 auto; overflow: hidden; margin-bottom: 22px; }
+.title-copy h2 {
+  margin: 0 0 18px;
+  font-size: 60px;
+  line-height: 1.06;
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
-.movie-actions { display: flex; gap: 14px; align-items: center; }
+.title-copy p {
+  font-size: 29px;
+  line-height: 1.36;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 9;
+  overflow: hidden;
+}
+.series-detail .title-copy p { -webkit-line-clamp: 4; }
+.movie-actions { display: flex; gap: 18px; align-items: center; }
+.movie-detail .movie-play {
+  min-width: 280px;
+  min-height: 96px;
+  padding: 16px 36px;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.12;
+  text-align: center;
+  border-color: #9ac9f3;
+  border-radius: 18px;
+  box-shadow: inset 0 1px #ffffff35, 0 5px 12px #0008;
+}
+.movie-detail .movie-play:hover { border-color: #d3eaff; }
+.movie-detail .movie-play:focus { outline-color: #d3eaff; }
 .movie-detail button.read-more,
 .movie-detail button.favorite-toggle {
   color: #f5f8fe;
@@ -1552,67 +1572,101 @@ hr {
   background: transparent;
   flex-shrink: 0;
 }
-.series-episodes {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-.series-play {
-  min-height: 46px;
-  font-size: 18px;
-  padding: 8px;
-  margin: 8px 0;
-  flex-shrink: 0;
-}
-.season-buttons {
+.series-episodes { display: flex; flex-direction: column; min-width: 0; }
+.series-controls { flex: 0 0 auto; }
+.series-actions { margin-bottom: 20px; flex-wrap: wrap; }
+.series-detail .series-play { min-width: 228px; }
+.series-detail .series-actions > button { min-height: 62px; font-size: 26px; }
+.movie-detail .favorite-toggle { min-width: 72px; min-height: 62px; font-size: 34px; }
+.movie-detail button.favorite-toggle[aria-pressed="true"] { color: #ff879d; }
+.series-episodes h3 { margin: 0 0 5px; font-size: 27px; }
+.series-episodes .series-rail {
   position: relative;
+  display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
-  flex-shrink: 0;
-  gap: 8px;
-  margin: 8px 0 12px;
-  padding: 4px;
+  scrollbar-width: none;
+  width: 100%;
+  gap: 16px;
+  margin: 0 0 8px;
+  padding: 7px;
 }
-.season-buttons button {
-  flex: 0 0 auto;
-  min-height: 42px;
-  font-size: 17px;
-  padding: 6px 12px;
-  white-space: nowrap;
-}
-.series-episodes .episode-list {
-  position: relative;
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
-  padding: 4px;
-}
+.series-rail::-webkit-scrollbar { display: none; }
+.series-rail button { flex: 0 0 auto; white-space: nowrap; }
+.series-episodes .season-buttons button { min-width: 178px; min-height: 50px; font-size: 20px; }
 .series-episodes .episode-list button {
-  min-height: 46px;
-  margin: 0 0 6px;
-  padding: 8px 12px;
-  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 260px;
+  margin: 0;
+  padding: 4px;
+  gap: 5px;
+  overflow: hidden;
 }
-.episode-list [aria-current="true"] {
-  border-color: var(--accent);
-  background: var(--select);
+.episode-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 137px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0c1b2c;
 }
-.episode-list button span {
-  font-size: 15px;
-  color: var(--muted);
-}
+.episode-art img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.episode-art progress { position: absolute; left: 4%; right: 4%; bottom: 5px; width: 92%; height: 5px; }
+.episode-list button strong { font-size: 19px; padding: 2px 7px; text-align: left; }
+.episode-list [aria-current="true"] { border-color: var(--accent); background: var(--select); }
 
 /* Fatal decoder errors must never reveal the still-mounted home screen. */
 .fullscreen.playback-failed { background: #000 !important; z-index: 25; }
 /* Parental controls remain above the video plane and retain TV focus scope. */
-.parental-scrim { z-index: 1000; }
-.parental-modal { max-height: 90vh; overflow-y: auto; width: min(760px, 90vw); }
-.parental-keypad { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); max-width: 360px; gap: 8px; margin: 16px 0; }
-.parental-keypad button { margin: 0; }
+.parental-scrim { z-index: 1000; background: rgba(0, 0, 0, .54); }
+.parental-modal {
+  width: 760px;
+  max-width: 100%;
+  max-height: 92%;
+  overflow-y: auto;
+  border-radius: 22px;
+  border: 1px solid var(--button-edge);
+  box-shadow: 0 14px 54px #0008;
+}
+.parental-modal h1 { margin: 0 0 12px; }
+.parental-pin { width: 620px; text-align: center; }
+.parental-pin p { margin: 8px 0; }
+.parental-pin [role="status"]:empty { display: none; }
+.parental-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(70px, 1fr));
+  max-width: 360px;
+  gap: 8px;
+  margin: 16px auto 24px;
+}
+.parental-keypad button { margin: 0; min-height: 62px; text-align: center; }
+.parental-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .parental-items { display: flex; flex-direction: column; }
 .parental-modal output { font-size: 32px; letter-spacing: 12px; }
+
+.player-aspect-notice {
+  position: absolute;
+  top: 14%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  pointer-events: none;
+  padding: 10px 26px;
+  min-width: 180px;
+  text-align: center;
+  font-size: 27px;
+  font-weight: 600;
+  color: var(--player-text-color);
+  border: 1px solid var(--player-border-color);
+  border-radius: 12px;
+  background: rgba(12, 27, 44, .94);
+  box-shadow: 0 5px 15px #0005;
+}
 
 /* Each column owns its text even while the navigation compositor is moving. */
 .navigation { overflow: hidden; }
@@ -1721,13 +1775,6 @@ hr {
   z-index: 34;
 }
 .transport { gap: 8px; }
-#app .fullscreen .transport .player-options-toggle {
-  display: inline-grid;
-  place-items: center;
-  min-width: 36px;
-  padding: 0 7px;
-}
-.transport .player-options-toggle svg { width: 24px; height: 24px; }
 .timeline { gap: 12px; margin-top: 8px; font-size: 20px; }
 #app .fullscreen .player-top small, #app .fullscreen .timeline { color: var(--player-muted-color); }
 #app .fullscreen .player-top button, #app .fullscreen .player-controls button, #app .fullscreen .player-options button {
@@ -1792,6 +1839,7 @@ hr {
 .classic-header img { width: 32px; height: 32px; }
 .classic-header time { margin-left: auto; font-variant-numeric: tabular-nums; }
 .classic-header button { font-size: 20px; }
+.classic-header .classic-back { min-height: 0; height: 40px; padding: 0 14px; white-space: nowrap; }
 .classic-header .refresh-library { display: grid; place-items: center; width: 50px; height: 42px; padding: 0; }
 .classic-header .refresh-icon { display: block; width: 26px; height: 26px; }
 .classic-header .refresh-icon svg { width: 100%; height: 100%; }

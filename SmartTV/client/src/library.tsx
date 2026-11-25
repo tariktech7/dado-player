@@ -1,5 +1,5 @@
+import type { ComponentChildren, RefObject } from "preact";
 import {
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -8,6 +8,7 @@ import {
 import { createPortal } from "preact/compat";
 import { Item, Category, Watched, itemKey } from "./types";
 import { TVInput } from "./input";
+import { useEpisodeFrames } from "./episode-frames";
 import { FavoriteMark } from "./favorite-mark";
 import appearance from "./shell-appearance";
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
@@ -36,98 +37,88 @@ export function resumeEpisode(episodes: Item[], history: Watched[]) {
   return { item: ordered[index], position: watched?.position || 0 };
 }
 
-export function EpisodePicker({
-  episodes,
-  history,
-  play,
-}: {
+export function EpisodePicker({episodes, history, play, playDirect, t, actions, previews, seriesCover}: {
   episodes: Item[];
   history: Watched[];
-  play: (i: Item, pos: number) => void;
+  play: (item: Item, position: number) => void;
+  playDirect: (item: Item, position: number, untracked?: boolean) => void;
+  t: (de: string, en: string) => string;
+  actions?: ComponentChildren;
+  previews: boolean;
+  seriesCover: string;
 }) {
-  const ordered = useMemo(
-    () =>
-      [...episodes].sort(
-        (a, b) =>
-          (a.season || 1) - (b.season || 1) ||
-          (a.episode || 1) - (b.episode || 1),
-      ),
-    [episodes],
-  );
-  const seasons = useMemo(
-    () => [...new Set(ordered.map((e) => e.season || 1))],
-    [ordered],
-  );
-  const target = useMemo(
-    () => resumeEpisode(ordered, history),
-    [ordered, history],
-  );
-  const [season, setSeason] = useState(target?.item.season || 1);
-  const tabs = useRef<HTMLDivElement>(null),
-    list = useRef<HTMLDivElement>(null);
-  useLayoutEffect(
-    () => setSeason(target?.item.season || seasons[0] || 1),
-    [episodes, target?.item.id],
-  );
+  const ordered = useMemo(() => [...episodes].sort((a, b) =>
+    (a.season ?? 1) - (b.season ?? 1) || (a.episode ?? 1) - (b.episode ?? 1) || a.id.localeCompare(b.id)
+  ), [episodes]);
+  const seasons = useMemo(() => [...new Set(ordered.map(e => e.season ?? 1))], [ordered]);
+  const target = useMemo(() => resumeEpisode(ordered, history), [ordered, history]);
+  const [chosenSeason, setChosenSeason] = useState<number | null>(null);
+  const season = chosenSeason ?? target?.item.season ?? seasons[0] ?? 1;
+  const tabs = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => ordered.filter(e => (e.season ?? 1) === season), [ordered, season]);
+  const frames = useEpisodeFrames(rows, list, previews);
+  const watched = useMemo(() => new Map(history.map(h => [itemKey(h.item), h])), [history]);
+
   useLayoutEffect(() => {
-    const selected = tabs.current?.querySelector<HTMLElement>(".selected");
-    if (selected && tabs.current)
-      tabs.current.scrollLeft = Math.max(0, selected.offsetLeft - 12);
-    const episode = list.current?.querySelector<HTMLElement>(
-      '[aria-current="true"]',
-    );
-    if (list.current)
-      list.current.scrollTop = episode ? Math.max(0, episode.offsetTop - 6) : 0;
-  }, [season, episodes]);
+    const rail = tabs.current;
+    const selected = rail?.querySelector<HTMLElement>(".selected");
+    if (!rail || !selected) return;
+    if (selected.offsetLeft < rail.scrollLeft) rail.scrollLeft = selected.offsetLeft - 4;
+    if (selected.offsetLeft + selected.offsetWidth > rail.scrollLeft + rail.clientWidth)
+      rail.scrollLeft = selected.offsetLeft + selected.offsetWidth - rail.clientWidth + 4;
+  }, [season, seasons]);
+  useLayoutEffect(() => {
+    const rail = list.current;
+    if (!rail) return;
+    const current = rail.querySelector<HTMLElement>('[aria-current="true"]');
+    rail.scrollLeft = current ? Math.max(0, current.offsetLeft + current.offsetWidth - rail.clientWidth + 8) : 0;
+  }, [rows, target?.item.id]);
+
   return (
     <div class="series-episodes">
-      {target && (
-        <button
-          class="primary series-play"
-          onClick={() => play(target.item, target.position)}
-        >
-          ▶ {target.position > 1 ? "Fortsetzen" : "Abspielen"} · S
-          {target.item.season || 1} F{target.item.episode || 1}
+      <div class="movie-actions series-actions">
+        <button class="primary movie-play series-play" disabled={!target}
+          onClick={() => { if (target) { frames.stop(); playDirect(target.item, target.position); } }}>
+          ▶ {t("Abspielen", "Play")}
         </button>
-      )}
-      <div ref={tabs} class="season-buttons" aria-label="Staffeln">
-        {seasons.map((s) => (
-          <button
-            key={s}
-            data-focus-key={`season:${s}`}
-            class={s === season ? "selected" : ""}
-            onClick={() => setSeason(s)}
-          >
-            Staffel {s}
-          </button>
-        ))}
+        <button class="series-random" disabled={!ordered.length} onClick={() => {
+          const episode = ordered[Math.floor(Math.random() * ordered.length)];
+          if (episode) { frames.stop(); playDirect(episode, 0, true); }
+        }}>{t("Zufällige Folge", "Random episode")}</button>
+        {actions}
       </div>
-      <div ref={list} class="episode-list">
-        {ordered
-          .filter((e) => (e.season || 1) === season)
-          .map((e) => (
-            <button
-              key={e.id}
-              data-focus-key={itemKey(e)}
-              aria-current={target?.item.id === e.id ? "true" : undefined}
-              onClick={() =>
-                play(
-                  e,
-                  history.find((h) => itemKey(h.item) === itemKey(e))
-                    ?.position || 0,
-                )
-              }
-            >
-              <strong>Folge {e.episode || 1}</strong>
-              <span>
-                {target?.item.id === e.id && target.position > 1
-                  ? "Fortsetzen ▷"
-                  : "▷"}
-              </span>
+      {ordered.length ? <>
+        <h3>{t("Staffeln", "Seasons")}</h3>
+        <div ref={tabs} class="season-buttons series-rail" role="group" aria-label={t("Staffeln", "Seasons")}>
+          {seasons.map(s => (
+            <button key={s} data-focus-key={`season:${s}`} class={s === season ? "selected" : ""}
+              aria-pressed={s === season} onClick={() => setChosenSeason(s)}>
+              {t("Staffel", "Season")} {s}
             </button>
           ))}
-      </div>
-      {!episodes.length && <p>Folgen werden geladen …</p>}
+        </div>
+        <div ref={list} class="episode-list series-rail" role="group" aria-label={t("Folgen", "Episodes")}>
+          {rows.map((e, index) => {
+            const saved = watched.get(itemKey(e));
+            const image = previews ? frames.image(e.id) || (e.preview !== seriesCover ? e.preview : "") : "";
+            const active = target && itemKey(target.item) === itemKey(e);
+            const progress = saved && saved.duration > 0
+              ? Math.max(0, Math.min(1, saved.position / saved.duration)) : 0;
+            return (
+              <button key={e.id} data-episode-index={index} data-focus-key={itemKey(e)} aria-current={active ? "true" : undefined}
+                onClick={() => { frames.stop(); play(e, saved?.position || 0); }}>
+                <span class="episode-art" aria-hidden="true">
+                  <span>▷</span>
+                  {image && <img src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} />}
+                  {progress > 0 && <progress value={progress} max={1} />}
+                </span>
+                <strong>{t("Folge", "Episode")} {e.episode ?? 1}</strong>
+              </button>
+            );
+          })}
+        </div>
+      </> : <p role="status">{t("Folgen werden geladen …", "Loading episodes…")}</p>}
     </div>
   );
 }
@@ -318,6 +309,8 @@ export function CatalogBrowser({
   history,
   toggle,
   play,
+  playDirect,
+  allowEpisodePreviews,
 }: {
   kind: "series" | "vod";
   t: (de: string, en: string) => string;
@@ -337,6 +330,8 @@ export function CatalogBrowser({
   history: Watched[];
   toggle: (i: Item) => void;
   play: (i: Item, pos: number) => void;
+  allowEpisodePreviews: (entry: Item) => boolean;
+  playDirect: (item: Item, position: number, untracked?: boolean) => void;
 }) {
   const favoriteKeys = useMemo(() => new Set(favorites.map(itemKey)), [favorites]);
   const categoryFavorites = category === "favorites" ? favoriteKeys : null;
@@ -374,11 +369,6 @@ export function CatalogBrowser({
     return result;
   }, [items, category, query, categoryFavorites, continueIds, classic, alphabetic]);
   const item = detail?.id === selected?.id ? detail : selected;
-  const position = item?.kind === "vod" ? history.find((h) => itemKey(h.item) === itemKey(item))?.position || 0 : 0;
-  const favorite = (entry: Item) => <button class="favorite-toggle" aria-pressed={favoriteKeys.has(itemKey(entry))} onClick={() => toggle(entry)}>
-    <FavoriteMark marked={favoriteKeys.has(itemKey(entry))} />
-    {favoriteKeys.has(itemKey(entry)) ? t("Favorit", "Favorite") : t("Merken", "Save")}
-  </button>;
   const preview = useRef<HTMLElement>(null);
   const [activation, setActivation] = useState(0);
   const activated = useRef<{key: string; origin: Element | null; waiting: HTMLElement | null} | null>(null);
@@ -394,7 +384,7 @@ export function CatalogBrowser({
       activated.current = null;
       return;
     }
-    const primary = preview.current?.querySelector<HTMLButtonElement>(".series-play,button.primary");
+    const primary = preview.current?.querySelector<HTMLButtonElement>("button.primary:not(:disabled)");
     if (primary) {
       primary.focus({preventScroll: true});
       activated.current = null;
@@ -441,39 +431,59 @@ export function CatalogBrowser({
           resetKey={JSON.stringify([category, query, alphabetic])}
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
-      {item && <aside ref={preview} class={`catalog-details${item.kind === "vod" ? " movie-detail" : ""}`} data-focus-zone="details">
-        {item.kind === "vod" && item.logo && <img key={itemKey(item)} alt="" class="movie-art" src={item.logo}
+      {item && <TitleDetail item={item} t={t} panel={preview} close={close}
+        episodes={episodes} history={history} marked={favoriteKeys.has(itemKey(item))}
+        toggle={toggle} play={play} playDirect={playDirect} previews={allowEpisodePreviews(item)} />}
+    </div>
+  );
+}
+
+
+export function TitleDetail({item, t, panel, close, episodes, history, marked, toggle, play, playDirect, previews}: {
+  item: Item;
+  t: (de: string, en: string) => string;
+  panel: RefObject<HTMLElement>;
+  close: () => void;
+  episodes: Item[];
+  history: Watched[];
+  marked: boolean;
+  previews: boolean;
+  toggle: (item: Item) => void;
+  play: (item: Item, position: number) => void;
+  playDirect: (item: Item, position: number, untracked?: boolean) => void;
+}) {
+  const position = item.kind === "vod" ? history.find(h => itemKey(h.item) === itemKey(item))?.position || 0 : 0;
+  const favorite = <button class="favorite-toggle" aria-label={t("Favorit", "Favorite")}
+    aria-pressed={marked} onClick={() => toggle(item)}>
+    <span aria-hidden="true">{marked ? "♥" : "♡"}</span>
+  </button>;
+  return (
+      <aside ref={panel} class={`catalog-details movie-detail${item.kind === "series" ? " series-detail" : ""}`} data-focus-zone="details">
+        {item.logo && <img key={itemKey(item)} alt="" class="movie-art" src={item.logo}
           onError={(event) => { event.currentTarget.hidden = true; }} />}
         <header class="catalog-detail-header">
           <button class="menu-back" onClick={close}>{t("‹ Zurück", "‹ Back")}</button>
         </header>
+        <div class="title-copy" key={`copy:${itemKey(item)}`}>
+          <h2>{item.name}</h2>
+          {item.description && <p>{item.description}</p>}
+        </div>
         {item.kind === "vod" ? (
           <div class="movie-controls" key={itemKey(item)}>
-            <div class="movie-main">
-              <h2>{item.name}</h2>
-              <div class="movie-actions">
-                <button class="primary" onClick={() => play(item, position)}>
-                  {position > 1 ? t("▶ Fortsetzen", "▶ Resume") : t("▶ Abspielen", "▶ Play")}
-                </button>
-                {favorite(item)}
-              </div>
+            <div class="movie-actions">
+              <button class="primary movie-play" onClick={() => play(item, position)}>
+                {t("▶ Abspielen", "▶ Play")}
+              </button>
+              {favorite}
             </div>
-            {item.description && <Description text={item.description} action={t("Beschreibung lesen", "Read description")} />}
           </div>
         ) : (
-          <div class="catalog-detail-scroll" key={itemKey(item)}>
-            <div class="catalog-heading">
-              {item.logo && <img src={item.logo} alt="" />}
-              <div>
-                <h2>{item.name}</h2>
-                {favorite(item)}
-              </div>
-            </div>
-            <Description text={item.description || ""} />
-            <EpisodePicker episodes={episodes} history={history} play={play} />
+          <div class="series-controls" key={itemKey(item)}>
+            <EpisodePicker episodes={episodes} history={history} play={play} playDirect={playDirect} t={t} previews={previews} seriesCover={item.logo}
+              actions={<>{favorite}{item.description && <Description text={item.description}
+                action={t("Mehr lesen", "Read more")} />}</>} />
           </div>
         )}
-      </aside>}
-    </div>
+      </aside>
   );
 }

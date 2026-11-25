@@ -1,4 +1,5 @@
 {
+  "resumeMinimumSeconds": 60,
   "resumeEndMarginSeconds": 60,
   "controlsHideMs": 2000,
   "historyLimit": 150,

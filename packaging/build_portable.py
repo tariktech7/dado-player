@@ -20,6 +20,8 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from prepare_windows_vlc import prepare as prepare_vlc
 import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -160,6 +162,11 @@ def build_package():
             sys.exit(f"FEHLT: {path}")
         data = open(path, "rb").read()
         entries.append((name, data, zlib.compress(data, 9)))
+    with TemporaryDirectory(prefix="dado-portable-vlc-") as temporary:
+        runtime = Path(temporary)
+        for name in prepare_vlc(runtime, os.environ.get("DADO_VLC_WIN_ARCHIVE")):
+            data = (runtime / name).read_bytes()
+            entries.append((name, data, zlib.compress(data, 9)))
 
     blob = bytearray()
     blob += b"DADOBLOB"

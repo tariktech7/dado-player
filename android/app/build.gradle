@@ -15,7 +15,7 @@ android {
         // treats an APK as an *update* when versionCode grows; with a frozen
         // value the installer keeps reporting the same version and some OEM
         // installers refuse the package outright.
-        versionCode 41
+        versionCode 42
         versionName "0.8.0"
 
         // We only ship an arm64-v8a build (matches `cargo ndk -t arm64-v8a` and the
@@ -94,6 +94,7 @@ android {
             // 41 MB to /data/app before the app can start, which is the bulk
             // of the "installing takes forever" complaint.
             useLegacyPackaging = false
+            pickFirsts += ['**/libc++_shared.so']
         }
         // libmpv.so / libdadoplayer.so are already stripped (verified with
         // llvm-strip: stripping them again saves 8 bytes). Do not let the
@@ -103,6 +104,7 @@ android {
 }
 
 dependencies {
+    implementation 'org.videolan.android:libvlc-all:3.6.5'
     // Align all Kotlin stdlib artifacts to one version. Since Kotlin 1.8 the
     // kotlin-stdlib-jdk7/jdk8 modules are empty shims folded into
     // kotlin-stdlib; leaving them at 1.6.21 (pulled transitively) duplicates

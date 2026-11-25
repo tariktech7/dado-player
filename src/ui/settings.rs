@@ -269,7 +269,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             response.widget_info(|| {
                                 egui::WidgetInfo::labeled(egui::WidgetType::Button, label)
                             });
-                            if activate(ui, &response) {
+                            let clicked = if app.shared_remote_navigation() {
+                                focus::clicked(ui, &response)
+                            } else {
+                                response.clicked()
+                            };
+                            if clicked {
                                 app.settings_section = Some(index);
                                 app.settings_return_tile = Some(index);
                                 if section.id == "cache" {
@@ -388,7 +393,7 @@ fn panel(
                     }
                 }
                 "player" => {
-                    #[cfg(target_os = "android")]
+                    #[cfg(any(target_os = "android", target_os = "windows"))]
                     if let Some(value) = quick_choice(
                         ui,
                         draft,
@@ -396,7 +401,6 @@ fn panel(
                         &crate::types::PlayerBackend::all().map(|player| (player, player.label())),
                         save,
                     ) {
-                        app.settings.settings_mode = SettingsMode::Expert;
                         app.settings.player_backend = value;
                         *changed = true;
                         app.close_settings_section();
@@ -428,7 +432,11 @@ fn panel(
                             app.close_settings_section();
                         }
                     }
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    #[cfg(not(any(
+                        target_os = "android",
+                        target_os = "ios",
+                        target_os = "windows"
+                    )))]
                     ui.label(t("Integrierter Dado Player", "Built-in Dado Player"));
                 }
                 "cache" => {

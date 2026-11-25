@@ -198,14 +198,6 @@ pub fn active(ctx: &Context) -> bool {
     s.x < TOUCH_UI_MAX_W || s.y < TOUCH_UI_MAX_H
 }
 
-pub(crate) fn use_tv_layout(
-    mode: crate::types::TvMode,
-    tv_device: bool,
-    handheld_landscape: bool,
-) -> bool {
-    mode.resolve(tv_device || handheld_landscape)
-}
-
 pub(crate) fn handheld_landscape(ctx: &Context) -> bool {
     let size = ctx.screen_rect().size();
     cfg!(any(target_os = "ios", target_os = "android"))

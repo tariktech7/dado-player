@@ -82,15 +82,58 @@ test('catalogue opens a title page and restores the unchanged poster grid', asyn
   await card.click();
   await expect(preview.getByRole('heading', {name:'Demo Film'})).toBeVisible();
   await expect(preview.locator('.movie-art')).toBeVisible();
-  await expect(preview.getByRole('button', {name: 'Beschreibung lesen'})).toBeVisible();
+  await expect(preview.locator('.title-copy p')).not.toBeEmpty();
+  await expect(preview.locator('.movie-actions button')).toHaveCount(2);
   await expect(card).toBeHidden();
   await expect(grid).toHaveAttribute('data-focus-grid', columns!);
-  await page.screenshot({path: 'test-results/beta2-title-page.png', animations: 'disabled'});
+  const play = preview.getByRole('button', {name: '▶ Abspielen', exact:true});
+  const description = preview.locator('.title-copy p');
+  for (const viewport of [{width: 1920, height: 1080}, {width: 1280, height: 720}, {width: 960, height: 540}]) {
+    await page.setViewportSize(viewport);
+    expect((await play.boundingBox())!.y).toBeGreaterThan((await description.boundingBox())!.y);
+    await expect(play).toBeInViewport({ratio: 0.99});
+    await expect(description).toBeInViewport({ratio: 0.99});
+    if (viewport.width === 1920) {
+      await page.screenshot({path: 'test-results/movie-play-detail.png', animations: 'disabled'});
+    }
+  }
+  await page.setViewportSize({width: 1920, height: 1080});
   await preview.getByRole('button', {name:'‹ Zurück'}).click();
   await expect(card).toBeFocused();
   await expect(grid).toHaveAttribute('data-focus-grid', columns!);
   await page.locator('.navigation [data-focus-key="live"]').click();
   await expect(page.locator('.preview-panel')).toBeVisible();
+});
+
+test('saved titles ask at one minute and show the full playback timestamp', async ({ page }) => {
+  await fixture(page, true, true);
+  await page.goto('/');
+  await expect(page.locator('.home-hero')).toBeVisible();
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('dado.tv.v1')!);
+    saved.history.qa = [
+      { item: { id: '1', kind: 'vod', name: 'Demo Film', category: '1', logo: '', url: 'https://provider.invalid/movie/demo/demo/1.mp4' }, position: 59, duration: 1200, at: 1 },
+      { item: { id: '10', kind: 'episode', seriesId: '2', name: 'Staffel 1 · Folge 1', season: 1, episode: 1,
+        category: '1', logo: '', url: 'https://provider.invalid/series/demo/demo/10.mp4' },
+        position: 3723, duration: 4200, at: 2 },
+    ];
+    localStorage.setItem('dado.tv.v1', JSON.stringify(saved));
+  });
+  await page.reload();
+  const dialog = page.getByRole('dialog', { name: 'Wiedergabe fortsetzen?' });
+  await page.locator('.navigation [data-focus-key="vod"]').click();
+  await page.getByRole('button', { name: 'Demo Film', exact: true }).click();
+  await page.getByRole('button', { name: '▶ Abspielen', exact: true }).click();
+  await expect(page.locator('.vod-player')).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.locator('.navigation [data-focus-key="series"]').click();
+  await page.getByRole('button', { name: 'Demo Serie', exact: true }).click();
+  await expect(dialog).toContainText('01:02:03');
+  await dialog.getByRole('button', { name: 'Von vorne anfangen' }).click();
+  await expect(page.locator('.vod-player')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__avLog.filter((entry: unknown[]) => entry[0] === 'seek'))).toHaveLength(0);
 });
 
 test('Classic persists, keeps its navigation usable and shares the playback layout with Modern', async ({page}) => {
@@ -114,7 +157,13 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await expect(page.locator('.vod-player .seek-transport .player-play-toggle')).toBeVisible();
   const transport = page.locator('.vod-player .transport');
   await expect(transport.getByRole('button', {name: 'Audio', exact: true})).toBeVisible();
-  await expect(transport.getByRole('button', {name: 'Optionen', exact: true}).locator('svg')).toBeVisible();
+  const aspect = transport.getByRole('button', {name: 'Bildformat', exact: true});
+  await aspect.click();
+  const formats = page.locator('.player-options');
+  await expect(formats.getByRole('button', {name: 'Automatisch', exact: true})).toBeVisible();
+  await expect(formats.getByRole('button', {name: /Audio|Beenden/})).toHaveCount(0);
+  await formats.getByRole('button', {name: 'Einpassen', exact: true}).click();
+  await expect(aspect).toBeFocused();
   await expect(transport.getByRole('button', {name: /10 s/})).toHaveCount(0);
   expect(await page.locator('.vod-player').evaluate(node => getComputedStyle(node, '::before').backgroundImage)).toContain('linear-gradient');
   await expect(page.locator('.vod-player .seek-bar')).toBeVisible();
@@ -144,7 +193,7 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await expect(page.locator('.fullscreen')).toHaveCount(0);
   await expect(page.locator('.channel').first()).toBeFocused();
   expect(await page.evaluate(() => (window as any).webapis.avplay.getState())).toBe('PLAYING');
-  await page.getByRole('button', {name: /Übersicht/}).click();
+  await page.locator('.classic-header').getByRole('button', {name: '‹ Zurück'}).click();
   await page.locator('.classic-actions').getByRole('button', {name: 'Einstellungen'}).click();
   await openSettingsSection(page, 'general');
   await page.getByRole('combobox', {name: 'Oberfläche'}).click();
@@ -152,6 +201,46 @@ test('Classic persists, keeps its navigation usable and shares the playback layo
   await expect(page.locator('.navigation')).toBeVisible();
   await page.reload();
   await expect(page.locator('.navigation')).toBeVisible();
+});
+
+test('Classic remote separates horizontal rails and vertical menu rows', async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto('/');
+  const live = page.locator('.classic-primary [data-focus-key="live"]');
+  const movies = page.locator('.classic-primary [data-focus-key="vod"]');
+  const series = page.locator('.classic-primary [data-focus-key="series"]');
+  await live.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(live).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(movies).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(series).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(series).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.classic-actions button:focus')).toHaveCount(1);
+  await page.keyboard.press('ArrowUp');
+  await expect(series).toBeFocused();
+  await page.keyboard.press('Enter');
+  const header = page.locator('.classic-header');
+  const back = header.getByRole('button', {name: '‹ Zurück'});
+  const category = page.locator('.category-list button').first();
+  await expect(back).toBeVisible();
+  const bounds = (await header.boundingBox())!;
+  const button = (await back.boundingBox())!;
+  expect(button.y).toBeGreaterThan(bounds.y);
+  expect(button.y + button.height).toBeLessThan(bounds.y + bounds.height);
+  await category.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(category).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.catalog-poster:focus')).toHaveCount(1);
+  await page.keyboard.press('ArrowLeft');
+  await expect(category).toBeFocused();
+  await back.focus();
+  await page.keyboard.press('Enter');
+  await expect(series).toBeFocused();
 });
 
 test('Classic tiles keep their spacing, scale and visible focus on HD and 4K displays', async ({page}) => {
@@ -358,16 +447,21 @@ test("blue and the aspect hint cycle the running live decoder without opening a 
   await page.getByRole("button", {name: "▣ Live TV", exact: true}).click();
   await page.locator(".channel").first().click();
   await page.getByRole("button", {name: /Vollbild öffnen/}).click();
+  await page.clock.install();
   const dispatchBlue = () => page.evaluate(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", {keyCode: 406, bubbles: true})));
-  for (const [aspect, mode] of [["stretch", "FULL_SCREEN"], ["fill", "AUTO_ASPECT_RATIO"], ["fit", "LETTER_BOX"]]) {
+  const popup = page.locator(".player-aspect-notice");
+  for (const [aspect, mode, label] of [["stretch", "FULL_SCREEN", "Strecken"], ["fill", "AUTO_ASPECT_RATIO", "Automatisch"], ["fit", "LETTER_BOX", "Einpassen"]]) {
     if (aspect === "fill") await page.getByRole("button", {name: "Bildformat", exact: true}).click();
     else await dispatchBlue();
+    await expect(popup).toHaveText(label);
     await expect(page.locator(".player-options,.selection-dialog")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => (window as any).__avLog
       .filter((entry: string[]) => entry[0] === "aspect").slice(-1)[0]?.[1]))
       .toBe(`PLAYER_DISPLAY_MODE_${mode}`);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("dado.tv.v1")!).settings.aspect)).toBe(aspect);
   }
+  await page.clock.runFor(1100);
+  await expect(popup).toHaveCount(0);
 });
 test('parental controls protect movies, every series episode and home continue',async({page})=>{
   await fixture(page,true,true);
@@ -399,8 +493,15 @@ test('parental controls persist, block live previews and require PIN for every n
   await page.getByRole('button',{name:'⚙ Einstellungen',exact:true}).click();
   await openSettingsSection(page, 'parental');
   await page.getByRole('button',{name:'Eltern-PIN einrichten',exact:true}).click();
-  await parentalPin(page,'0123',true);await parentalPin(page,'0123',true);
   const modal=page.locator('[data-parental]');
+  await expect(modal).toBeVisible();
+  await expect(page.locator('.settings-options')).toBeVisible();
+  const box = (await modal.boundingBox())!;
+  expect(box.x + box.width / 2).toBeCloseTo(960, 0);
+  expect(box.y + box.height / 2).toBeCloseTo(540, 0);
+  await expect(page.locator('.parental-scrim')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.54)');
+  await page.screenshot({path:'test-results/parental-centered.png'});
+  await parentalPin(page,'0123',true);await parentalPin(page,'0123',true);
   await modal.getByRole('button',{name:'Freigegeben · Dado Kanal 0001',exact:true}).click();
   await expect(modal.getByRole('button',{name:'Gesperrt · Dado Kanal 0001',exact:true})).toBeVisible();
   await modal.getByRole('button',{name:'Zurück / Abbrechen'}).click();
@@ -562,7 +663,6 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
     );
     await page.addInitScript(() => {
       let state = "NONE",
-        listener: any,
         time = 0;
       const log: any[] = [];
       (window as any).__avLog = log;
@@ -584,7 +684,7 @@ async function fixture(page: Page, seed = true, native = false, licenseKind: 'pe
             state = "IDLE";
             log.push(["open", url]);
           },
-          setListener: (l: any) => (listener = l),
+          setListener() {},
           setBufferingParam() {},
           setStreamingProperty() {},
           prepareAsync: (ok: any) =>
@@ -854,8 +954,7 @@ test("Samsung player preserves stream across preview/fullscreen, exposes tracks 
   await expect(page.locator(".live-player .shortcut-legend > li")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Ton & Untertitel" })).toHaveCount(0);
   await page.evaluate(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", {key: "Info", bubbles: true})));
-  await page.getByRole("button", { name: "Ton & Untertitel" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Ton & Untertitel" })).toBeVisible();
   await page.getByRole("button", { name: "deu · AAC" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -1184,7 +1283,7 @@ test("catalogues keep seasons, favorites and independent section positions; live
   await expect(page.locator(".episode-list")).not.toContainText("Der Anfang");
   await page.getByRole("button", { name: "Staffel 2", exact: true }).click();
   await expect(page.locator(".episode-list button")).toHaveCount(1);
-  await expect(page.locator(".episode-list button")).toHaveText("Folge 1▷");
+  await expect(page.locator(".episode-list button")).toHaveAccessibleName("Folge 1");
   await page.screenshot({path: "test-results/beta2-series-page.png", animations: "disabled"});
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "▷ Filme", exact: true }).click();
@@ -1195,6 +1294,100 @@ test("catalogues keep seasons, favorites and independent section positions; live
   await expect
     .poll(() => page.locator(".channel-list").evaluate((e) => e.scrollTop))
     .toBe(1200);
+});
+
+test("episode cards display a frame decoded from their media", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  const clip = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 160; canvas.height = 90;
+    const context = canvas.getContext("2d")!;
+    const stream = canvas.captureStream(15);
+    const recording = new MediaRecorder(stream, {mimeType: "video/webm"});
+    const pieces: Blob[] = [];
+    const complete = new Promise<void>(resolve => { recording.onstop = () => resolve(); });
+    recording.ondataavailable = event => pieces.push(event.data);
+    recording.start();
+    const paint = setInterval(() => {
+      context.fillStyle = "#44bbff"; context.fillRect(0, 0, 160, 90);
+      context.fillStyle = "#ee5511"; context.fillRect(80, 0, 80, 90);
+    }, 65);
+    await new Promise(resolve => setTimeout(resolve, 600));
+    recording.stop();
+    clearInterval(paint);
+    await complete;
+    stream.getTracks().forEach(track => track.stop());
+    return Array.from(new Uint8Array(await new Blob(pieces).arrayBuffer()));
+  });
+  await page.route("https://provider.invalid/series/demo/demo/*.mp4", route => route.fulfill({
+    body: Buffer.from(clip),
+    headers: {"Access-Control-Allow-Origin": "*", "Content-Type": "video/webm"},
+  }));
+  await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
+  await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
+  const card = page.locator(".episode-list button").first();
+  await expect(card.locator("img")).toHaveAttribute("src", /^data:image\/jpeg/);
+  await expect(card.getByText("Folge 1")).toBeInViewport({ratio: 1});
+});
+
+test("series favorites open the same detail page and restore the original card", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
+  await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
+  await page.locator(".series-detail .favorite-toggle").click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", {name: "☆ Favoriten", exact: true}).click();
+  await page.getByRole("tab", {name: "Serien", exact: true}).click();
+  const card = page.getByRole("button", {name: "Demo Serie", exact: true});
+  await card.click();
+  const detail = page.locator(".external-title-detail .series-detail");
+  await expect(detail.getByRole("heading", {name: "Demo Serie"})).toBeVisible();
+  await expect(detail.locator(".episode-list button")).toHaveCount(2);
+  await expect(detail.locator(".series-play")).toBeFocused();
+  await page.evaluate(() => { Math.random = () => 0; });
+  await detail.locator(".series-random").click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail.locator(".series-random")).toBeFocused();
+  await detail.getByRole("button", {name: "‹ Zurück"}).click();
+  await expect(card).toBeFocused();
+});
+
+test("random series playback leaves the saved episode and timestamp untouched", async ({page}) => {
+  await fixture(page, true, true);
+  await page.goto("/");
+  await expect(page.locator(".home-hero")).toBeVisible();
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("dado.tv.v1")!);
+    s.history.qa = [{
+      item: {id: "10", kind: "episode", seriesId: "2", season: 1, episode: 1,
+        name: "Staffel 1 · Folge 1", category: "1", logo: "",
+        url: "https://provider.invalid/series/demo/demo/10.mp4"},
+      position: 213, duration: 1200, at: Date.now(),
+    }];
+    localStorage.setItem("dado.tv.v1", JSON.stringify(s));
+  });
+  await page.reload();
+  const readHistory = () => page.evaluate(() => JSON.parse(localStorage.getItem("dado.tv.v1")!).history.qa);
+  const before = await readHistory();
+  await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
+  await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
+  await page.getByRole("dialog", {name: "Wiedergabe fortsetzen?"}).getByRole("button", {name: "Abbrechen"}).click();
+  await page.evaluate(() => { Math.random = () => 0.999; });
+  const random = page.getByRole("button", {name: "Zufällige Folge"});
+  await random.click();
+  await expect(page.locator(".fullscreen")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__avLog
+    .filter((event: any[]) => event[0] === "open").slice(-1)[0]?.[1])).toMatch(/\/12\.mp4$/);
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(random).toBeFocused();
+  expect(await readHistory()).toEqual(before);
+  await page.locator(".series-play").click();
+  await expect.poll(() => page.evaluate(() => (window as any).__avLog
+    .filter((event: any[]) => event[0] === "seek").slice(-1)[0]?.[1])).toBe(213000);
 });
 
 test("changing live categories leaves the preview open and zero recalls the previous channel in preview", async ({page}) => {
@@ -1364,8 +1557,6 @@ test("all home rails scroll horizontally with remote focus and both menus split 
   await page.locator(".shell").evaluate(async el => {
     await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
   });
-  const last = await rail.locator("button").nth(7).boundingBox(),
-    box = await rail.boundingBox();
   await expect.poll(async()=>{
     const last=await rail.locator('button').nth(7).boundingBox(),box=await rail.boundingBox();
     return last!.x+last!.width-box!.x-box!.width;
@@ -1613,6 +1804,8 @@ test("series details restore season five and episode six, keep episodes visible,
   await page
     .getByRole("button", { name: "Modern Family", exact: true })
     .click();
+  await page.getByRole('dialog', { name: 'Wiedergabe fortsetzen?' })
+    .getByRole('button', { name: 'Abbrechen' }).click();
   await expect(page.locator(".season-buttons .selected")).toHaveText(
     "Staffel 5",
   );
@@ -1627,10 +1820,12 @@ test("series details restore season five and episode six, keep episodes visible,
     episode = await page
       .locator(".episode-list [aria-current=true]")
       .boundingBox();
-  expect(episode!.y).toBeGreaterThanOrEqual(box!.y - 1);
-  expect(episode!.y + episode!.height).toBeLessThanOrEqual(
-    box!.y + box!.height + 1,
-  );
+  expect(episode!.x).toBeGreaterThanOrEqual(box!.x - 1);
+  expect(episode!.x + episode!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+  await page.locator(".episode-list [aria-current=true]").focus();
+  for (let step = 0; step < 12; step++) await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".episode-list button").nth(17)).toBeFocused();
+  await expect.poll(() => page.locator(".episode-list").evaluate(e => e.scrollLeft)).toBeGreaterThan(0);
   const tabs = await page.locator(".season-buttons button").all();
   const y = (await tabs[0].boundingBox())!.y;
   for (const tab of tabs)
@@ -1648,6 +1843,8 @@ test("series details restore season five and episode six, keep episodes visible,
   await page
     .getByRole("button", { name: "Modern Family", exact: true })
     .click();
+  await page.getByRole('dialog', { name: 'Wiedergabe fortsetzen?' })
+    .getByRole('button', { name: 'Abbrechen' }).click();
   await expect(page.locator(".season-buttons .selected")).toHaveText(
     "Staffel 5",
   );
@@ -1661,6 +1858,8 @@ test("series details restore season five and episode six, keep episodes visible,
   await page
     .getByRole("button", { name: "Modern Family", exact: true })
     .click();
+  await page.getByRole('dialog', { name: 'Wiedergabe fortsetzen?' })
+    .getByRole('button', { name: 'Abbrechen' }).click();
   await expect(page.locator(".season-buttons .selected")).toHaveText(
     "Staffel 5",
   );

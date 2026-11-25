@@ -389,7 +389,7 @@ fn hero(app: &mut App, ui: &mut Ui, item: &PlayItem) {
     );
     #[cfg(windows)]
     super::desktop::remember_favorite_target(&play_response, &item.progress_key);
-    let play_hit = if app.tv {
+    let play_hit = if app.shared_remote_navigation() {
         crate::ui::mobile::focus::clicked(&info, &play_response)
     } else {
         play_response.clicked()
@@ -1028,7 +1028,7 @@ fn section_title(app: &mut App, ui: &mut Ui, title: &str, count: usize, target: 
 }
 
 fn hit(app: &App, ui: &Ui, response: &egui::Response) -> bool {
-    if app.tv {
+    if app.shared_remote_navigation() {
         crate::ui::mobile::focus::clicked(ui, response)
     } else {
         response.clicked()

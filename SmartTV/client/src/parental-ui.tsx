@@ -13,15 +13,17 @@ export function ParentalPanel({controls,catalog,profile,onChange}:{controls:Pare
   const rows=useMemo(()=>catalog[kind].filter(i=>i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())),[catalog,kind,query]);
   if(!controls.open)return null;
   const setup=!controls.enabled||changing;
+  const pinView=setup||!authenticated||!!controls.pending;
   const run=async(action:()=>Promise<void>|void)=>{setBusy(true);setError('');try{await action();}catch(e){setError((e as Error).message);}finally{setBusy(false);setPin('');}};
-  return <div class="scrim parental-scrim"><section class="modal glass parental-modal" role="dialog" aria-modal="true" aria-label="Elternsperre" data-parental>
-    <h1>Elternsperre</h1><button onClick={()=>controls.close()}>Zurück / Abbrechen</button>
+  return <div class="scrim parental-scrim"><section class={`modal glass parental-modal${pinView ? " parental-pin" : ""}`} role="dialog" aria-modal="true" aria-label="Elternsperre" data-parental>
+    <h1>Elternsperre</h1>
     <p role="status">{error}</p>
-    {setup||!authenticated||controls.pending?<>
+    {pinView?<>
       <p>{setup?(first?'Neue PIN bestätigen':'Neue PIN: genau vier Ziffern'):'Geschützt · Eltern-PIN eingeben'}</p>
       {controls.pending&&<h2>{controls.pending.name}</h2>}
       <output aria-label="PIN-Eingabe">{'●'.repeat(pin.length)}{'○'.repeat(4-pin.length)}</output>
-      <div class="parental-keypad">{['1','2','3','4','5','6','7','8','9','Löschen','0'].map(n=><button aria-label={n} disabled={busy} onClick={()=>setPin(v=>n==='Löschen'?v.slice(0,-1):(v+n).slice(0,4))}>{n==='Löschen'?'⌫':n}</button>)}</div>
+      <div class="parental-keypad">{['1','2','3','4','5','6','7','8','9','','0','Löschen'].map(n=>n ? <button aria-label={n} disabled={busy} onClick={()=>setPin(v=>n==='Löschen'?v.slice(0,-1):(v+n).slice(0,4))}>{n==='Löschen'?'⌫':n}</button> : <span aria-hidden="true" />)}</div>
+      <div class="parental-actions">
       <button class="primary" disabled={busy||pin.length!==4} onClick={()=>void run(async()=>{
         if(setup){
           if(!first){setFirst(pin);return;}
@@ -31,7 +33,10 @@ export function ParentalPanel({controls,catalog,profile,onChange}:{controls:Pare
           controls.persist(next);setFirst('');change(false);auth(true);
         }else{await controls.authenticate(pin);auth(true);}
       })}>{setup?'PIN speichern / bestätigen':'Entsperren'}</button>
+        <button onClick={()=>controls.close()}>Zurück / Abbrechen</button>
+      </div>
     </>:<>
+      <button onClick={()=>controls.close()}>Zurück / Abbrechen</button>
       <p>Gesperrte Serien schützen alle Staffeln und Folgen. Die Auswahl gilt für das jeweilige Anbieterprofil auf diesem Gerät.</p>
       <button disabled={busy} onClick={()=>change(true)}>PIN ändern</button>
       <button disabled={busy} onClick={()=>void run(()=>{controls.persist(emptyPolicy());controls.close();})}>Elternsperre ausschalten</button>

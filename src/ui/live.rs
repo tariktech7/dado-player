@@ -182,8 +182,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
     if playing {
         app.position_preview(shown, ui.ctx().pixels_per_point());
         #[cfg(target_os = "android")]
-        ui.painter()
-            .add(crate::platform::android::render::shape(shown));
+        app.paint_android_video(ui, shown);
     } else {
         components::icon(
             ui,
@@ -209,7 +208,9 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
         [w, super::desktop::handheld_size(40.0 * s, 44.0)],
         egui::Button::new("Vollbild öffnen  ↗").frame(false),
     );
-    if activated(ui, &response, app.tv) | activated(ui, &open, app.tv) {
+    if activated(ui, &response, app.shared_remote_navigation())
+        | activated(ui, &open, app.shared_remote_navigation())
+    {
         if app.preview.is_some() {
             app.promote_preview(false);
         } else {
@@ -284,7 +285,7 @@ fn preview_desktop(app: &mut App, ui: &mut Ui, s: f32) -> Option<Rect> {
                         "Keine aktuellen Programmdaten."
                     });
                     let retry = ui.button("EPG erneut laden");
-                    if activated(ui, &retry, app.tv) {
+                    if activated(ui, &retry, app.shared_remote_navigation()) {
                         app.retry_epg(id);
                     }
                 }
@@ -594,7 +595,7 @@ fn categories(app: &mut App, ui: &mut Ui, heading: bool) {
                         );
                     }
                 }
-                if activated(ui, &r, tv) {
+                if activated(ui, &r, app.shared_remote_navigation()) {
                     selected = Some(id.to_owned());
                 }
                 r.on_hover_text(name);
@@ -684,7 +685,8 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
         }
         ui.add_space(6.0);
         if desktop {
-            super::desktop::search_field(ui, &mut app.live_q, "Sender suchen", tv);
+            let remote = app.shared_remote_navigation();
+            super::desktop::search_field(ui, &mut app.live_q, "Sender suchen", remote);
         } else {
             let query = ui.add_sized(
                 [
@@ -699,7 +701,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 ],
                 egui::TextEdit::singleline(&mut app.live_q).hint_text("Sender suchen"),
             );
-            if tv && focus::clicked(ui, &query) {
+            if app.shared_remote_navigation() && focus::clicked(ui, &query) {
                 query.request_focus();
             }
         }
@@ -803,7 +805,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                 let r = row(ui, ("channel", id), row_h, app.is_previewing(&key), classic);
                 if desktop && app.desktop_return_item.as_deref() == Some(key.as_str()) {
                     r.request_focus();
-                    if tv {
+                    if app.shared_remote_navigation() {
                         focus::request_id(r.id);
                     }
                     app.desktop_return_item = None;
@@ -959,7 +961,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                         );
                     }
                 }
-                if activated(ui, &r, tv) {
+                if activated(ui, &r, app.shared_remote_navigation()) {
                     selected = Some(index);
                 }
             }
@@ -1063,10 +1065,9 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     if active && visible.is_positive() {
         app.position_preview(visible, ui.ctx().pixels_per_point());
         #[cfg(target_os = "android")]
-        ui.painter()
-            .add(crate::platform::android::render::shape(visible));
+        app.paint_android_video(ui, visible);
     }
-    let promote = activated(ui, &response, tv);
+    let promote = activated(ui, &response, app.shared_remote_navigation());
     ui.add_space(8.0);
     if tv {
         ui.label(
@@ -1077,7 +1078,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
     } else {
         ui.horizontal_wrapped(|ui| {
             let r = ui.button("Im Player öffnen");
-            if activated(ui, &r, tv) {
+            if activated(ui, &r, app.shared_remote_navigation()) {
                 if active {
                     app.promote_preview(false);
                 } else {
@@ -1085,7 +1086,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                 }
             }
             let r = ui.button("Vorschau schließen");
-            if activated(ui, &r, tv) {
+            if activated(ui, &r, app.shared_remote_navigation()) {
                 app.close_preview();
             }
         });
@@ -1130,7 +1131,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                     } else {
                         "Zu Favoriten"
                     });
-                    if activated(ui, &r, tv) {
+                    if activated(ui, &r, app.shared_remote_navigation()) {
                         app.toggle_favorite(&item.progress_key);
                     }
                 }
@@ -1179,7 +1180,7 @@ pub fn preview_panel(app: &mut App, ui: &mut Ui) {
                     });
                     if app.epg_failed(channel.id) {
                         let r = ui.button("EPG erneut laden");
-                        if activated(ui, &r, tv) {
+                        if activated(ui, &r, app.shared_remote_navigation()) {
                             app.retry_epg(channel.id);
                         }
                     }

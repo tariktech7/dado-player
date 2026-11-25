@@ -26,7 +26,7 @@ pub mod mpv;
 pub mod mpv;
 pub mod parental;
 pub mod platform;
-pub mod player;
+mod playback;
 pub mod store;
 pub mod test_pattern;
 pub mod theme;

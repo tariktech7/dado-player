@@ -548,6 +548,8 @@ struct SeriesInfo {
 }
 #[derive(Deserialize)]
 struct EpInfo {
+    #[serde(default)]
+    info: serde_json::Value,
     #[serde(default, deserialize_with = "as_u32")]
     id: u32,
     #[serde(default, deserialize_with = "as_string")]
@@ -639,6 +641,12 @@ fn episodes_from_info(
             // base works, but the extension did not exist on the panel.
             let ext = stream_ext(&e.container_extension, "mp4");
             out.push(Episode {
+                preview: e
+                    .info
+                    .get("movie_image")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
                 id: e.id,
                 series_id,
                 season,

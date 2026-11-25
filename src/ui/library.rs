@@ -15,7 +15,6 @@ struct Entry {
     name: String,
     cover: String,
     plot: String,
-    meta: String,
     url: String,
 }
 fn hit(ui: &Ui, r: &egui::Response, tv: bool) -> bool {
@@ -30,54 +29,37 @@ fn button(ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
     hit(ui, &r, tv)
 }
 pub(super) fn show_detail_page(app: &mut App, ui: &mut Ui, series: bool, id: u32) {
-    if !series {
-        if let Some(entry) = app
-            .library
-            .movies
-            .iter()
-            .position(|movie| movie.id == id)
-            .and_then(|index| entry_at(app, false, index))
-        {
-            show_movie_page(app, ui, entry);
-            return;
-        }
-    }
-    let text = app.settings.language.text("‹ Zurück", "‹ Back");
-    focus::set_zone(1);
-    let back = super::desktop::back_button(ui, text);
-    if hit(ui, &back, app.tv) {
+    let index = if series {
+        app.library.series.iter().position(|entry| entry.id == id)
+    } else {
+        app.library.movies.iter().position(|entry| entry.id == id)
+    };
+    if let Some(entry) = index.and_then(|index| entry_at(app, series, index)) {
+        show_title_page(app, ui, entry, series);
+    } else if button(
+        ui,
+        app.settings.language.text("‹ Zurück", "‹ Back"),
+        app.shared_remote_navigation(),
+    ) {
         app.close_catalog_detail();
-        ui.ctx().request_repaint();
-        return;
     }
-    ui.add_space(8.0);
-    focus::set_zone(2);
-    egui::ScrollArea::vertical()
-        .id_source(("catalog-title", series, id))
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            details(app, ui, series, super::desktop::handheld())
-        });
 }
 
-fn show_movie_page(app: &mut App, ui: &mut Ui, entry: Entry) {
+fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     let bounds = ui.available_rect_before_wrap();
     if !bounds.is_positive() {
         return;
     }
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
-    let key = format!("vod:{}", entry.id);
+    let key = format!("{}:{}", if series { "series" } else { "vod" }, entry.id);
     let image_key = format!("detail:{key}");
     let base = Color32::from_rgb(12, 27, 44);
     ui.painter().rect_filled(bounds, 12.0, base);
     if !entry.cover.is_empty() {
         app.request_image(image_key.clone(), entry.cover.clone());
         if let Some(texture) = app.image(&image_key) {
-            let art = Rect::from_min_max(
-                pos2(bounds.left() + bounds.width() * 0.30, bounds.top()),
-                bounds.max,
-            );
+            let art = bounds;
             let size = texture.size_vec2();
             let ratio = (art.width() / art.height()) / (size.x / size.y);
             let visible = vec2(ratio.min(1.0), ratio.recip().min(1.0));
@@ -105,13 +87,26 @@ fn show_movie_page(app: &mut App, ui: &mut Ui, entry: Entry) {
         mesh.add_triangle(0, 2, 3);
         ui.painter().add(egui::Shape::mesh(mesh));
     };
-    let fade_end = bounds.left() + bounds.width() * 0.76;
+    let touch = super::desktop::handheld();
+    let shade_split = bounds.left() + bounds.width() * if touch { 0.69 } else { 0.58 };
+    let fade_end = bounds.left() + bounds.width() * 0.92;
+    let shade_start = Color32::from_black_alpha(228);
+    let shade_mid = Color32::from_black_alpha(158);
+    shade(
+        Rect::from_min_max(bounds.min, pos2(shade_split, bounds.bottom())),
+        [shade_start, shade_mid, shade_mid, shade_start],
+    );
     shade(
         Rect::from_min_max(
-            pos2(bounds.left() + bounds.width() * 0.30, bounds.top()),
+            pos2(shade_split, bounds.top()),
             pos2(fade_end, bounds.bottom()),
         ),
-        [base, Color32::TRANSPARENT, Color32::TRANSPARENT, base],
+        [
+            shade_mid,
+            Color32::TRANSPARENT,
+            Color32::TRANSPARENT,
+            shade_mid,
+        ],
     );
     shade(
         Rect::from_min_max(
@@ -125,65 +120,199 @@ fn show_movie_page(app: &mut App, ui: &mut Ui, entry: Entry) {
             Color32::BLACK,
         ],
     );
-    let inset = super::desktop::handheld_size(24.0 * super::desktop::scale(ui.ctx()), 14.0);
+    let scale = super::desktop::scale(ui.ctx());
+    let inset = super::desktop::handheld_size(24.0 * scale, 14.0);
     let content = bounds.shrink(inset);
-    let mut top = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), "movie-back");
+    let mut top = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), "title-back");
     focus::set_zone(1);
     let back = super::desktop::back_button(&mut top, t("‹ Zurück", "‹ Back"));
-    if hit(&top, &back, app.tv) {
+    if hit(&top, &back, app.shared_remote_navigation()) {
         app.close_catalog_detail();
         ui.ctx().request_repaint();
         return;
     }
-    let font_size = (bounds.height() * 0.062).clamp(24.0, 46.0);
-    let plot_width = if entry.plot.is_empty() {
-        0.0
-    } else {
-        (content.width() * 0.4).min(210.0)
-    };
-    let controls = Rect::from_min_max(
-        pos2(content.left(), content.bottom() - (font_size * 2.45 + 48.0)),
-        pos2(content.right() - plot_width, content.bottom()),
+    let rail_height = (bounds.height() * 0.065).clamp(24.0, 54.0);
+    let gap = 8.0;
+    let season_label_height = 20.0;
+    let episode_height = (bounds.height() * 0.21).clamp(48.0, 190.0).min(
+        (content.bottom()
+            - back.rect.bottom()
+            - rail_height
+            - season_label_height
+            - 5.0 * gap
+            - 85.0)
+            .max(28.0),
     );
-    let mut bottom =
-        ui.child_ui_with_id_source(controls, Layout::bottom_up(Align::Min), "movie-actions");
-    focus::set_zone(2);
-    let resume = app.get_progress(&key) > 1;
-    let caption = if resume {
-        t("▶ Fortsetzen", "▶ Resume")
+    let controls_bottom = if series {
+        content.bottom() - rail_height - episode_height - season_label_height - 3.0 * gap
     } else {
-        t("▶ Abspielen", "▶ Play")
+        content.bottom()
     };
-    let tv = app.tv;
+    let font_size = (bounds.height() * 0.069).clamp(if touch { 18.0 } else { 24.0 }, 54.0);
+    let mut play_size = vec2(
+        super::desktop::handheld_size((280.0 * scale).max(144.0), 174.0),
+        super::desktop::handheld_size((96.0 * scale).max(52.0), 62.0),
+    );
+    if series {
+        play_size.x = play_size.x.min(content.width() * 0.31);
+        play_size.y = super::desktop::handheld_size((64.0 * scale).max(42.0), 44.0);
+    }
+    let controls = Rect::from_min_max(
+        pos2(
+            content.left(),
+            (controls_bottom - play_size.y).max(content.top()),
+        ),
+        pos2(content.right(), controls_bottom),
+    );
+    let copy_bounds = Rect::from_min_max(
+        pos2(content.left(), back.rect.bottom() + gap),
+        pos2(
+            content.left() + content.width() * if touch { 0.72 } else { 0.62 },
+            (controls.top() - gap).max(back.rect.bottom() + gap),
+        ),
+    );
+    if copy_bounds.is_positive() {
+        let mut copy =
+            ui.child_ui_with_id_source(copy_bounds, Layout::top_down(Align::Min), "title-copy");
+        copy.set_clip_rect(copy_bounds.intersect(ui.clip_rect()));
+        let width = copy.available_width();
+        let title = components::wrap(
+            &copy,
+            &entry.name,
+            tokens::bold(font_size),
+            Color32::WHITE,
+            width,
+            2,
+        );
+        copy.label(title);
+        if !entry.plot.is_empty() {
+            let text_size = (bounds.height() * 0.033).clamp(13.0, 27.0);
+            let lines = (copy.available_height() / (text_size * 1.28))
+                .floor()
+                .max(0.0) as usize;
+            if lines > 0 {
+                let plot = components::wrap(
+                    &copy,
+                    &entry.plot,
+                    tokens::reg(text_size),
+                    Color32::WHITE,
+                    width,
+                    lines.min(if series { 4 } else { 10 }),
+                );
+                copy.label(plot);
+            }
+        }
+    }
+    let mut bottom = ui.child_ui_with_id_source(
+        controls,
+        Layout::left_to_right(Align::Center),
+        "title-actions",
+    );
+    focus::set_zone(1);
+    let target = if series {
+        app.request_series(entry.id);
+        app.series_resume_target(entry.id)
+    } else {
+        None
+    };
+    let caption = t("▶ Abspielen", "▶ Play");
+    let tv = app.shared_remote_navigation();
+    let mut random = false;
     let play = bottom
         .horizontal(|ui| {
-            let play = play_button(app, ui, RichText::new(caption).strong(), tv);
-            crate::ui::fav_button(app, ui, &key);
+            let play_text = RichText::new(caption)
+                .size(if series {
+                    super::desktop::handheld_type((27.0 * scale).max(16.0), 16.0)
+                } else {
+                    super::desktop::handheld_type((38.0 * scale).max(20.0), 23.0)
+                })
+                .strong()
+                .color(Color32::WHITE);
+            let primary = egui::Button::new(play_text)
+                .min_size(play_size)
+                .rounding(egui::Rounding::same(12.0))
+                .fill(crate::theme::accent_fill(ui))
+                .stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(154, 201, 243)));
+            let play = if !series || target.is_some() {
+                play_button(app, ui, primary, tv)
+            } else {
+                ui.add_enabled(false, primary);
+                false
+            };
+            if series && target.is_some() {
+                let shuffle = ui.add(
+                    egui::Button::new(t("Zufällige Folge", "Random episode"))
+                        .min_size(vec2(0.0, play_size.y)),
+                );
+                random = hit(ui, &shuffle, tv);
+            }
+            let marked = app.is_favorite(&key);
+            let heart = ui
+                .add(
+                    egui::Button::new(
+                        RichText::new(if marked { "♥" } else { "♡" })
+                            .size(if touch { 20.0 } else { 25.0 })
+                            .color(if marked {
+                                Color32::from_rgb(255, 135, 157)
+                            } else {
+                                Color32::WHITE
+                            }),
+                    )
+                    .min_size(vec2(play_size.y * 0.85, play_size.y)),
+                )
+                .on_hover_text(t("Favorit", "Favorite"));
+            super::desktop::remember_favorite_target(&heart, &key);
+            if hit(ui, &heart, tv) {
+                app.toggle_favorite(&key);
+            }
+            if series && !entry.plot.is_empty() {
+                let description = ui.add(
+                    egui::Button::new(t("Mehr lesen", "Read more"))
+                        .min_size(vec2(0.0, play_size.y)),
+                );
+                if hit(ui, &description, tv) {
+                    app.description_open = Some((entry.name.clone(), entry.plot.clone()));
+                }
+            }
             play
         })
         .inner;
-    let title = components::wrap(
-        &bottom,
-        &entry.name,
-        tokens::bold(font_size),
-        Color32::WHITE,
-        controls.width(),
-        2,
-    );
-    bottom.label(title);
-    if plot_width > 0.0 {
-        let area = Rect::from_min_max(
-            pos2(content.right() - plot_width, controls.top()),
-            content.max,
+    if series {
+        let rails = Rect::from_min_max(pos2(content.left(), controls_bottom + gap), content.max);
+        let mut rows = ui.child_ui_with_id_source(
+            rails,
+            Layout::top_down(Align::Min),
+            ("series-rows", entry.id),
         );
-        let mut plot =
-            ui.child_ui_with_id_source(area, Layout::bottom_up(Align::Max), "movie-description");
-        if button(&mut plot, t("Beschreibung lesen", "Read description"), tv) {
-            app.description_open = Some((entry.name.clone(), entry.plot));
+        rows.set_clip_rect(rails.intersect(ui.clip_rect()));
+        episode_rows(
+            app,
+            &mut rows,
+            entry.id,
+            target.as_ref().map(|(e, _)| e),
+            vec2(rail_height, episode_height),
+            gap,
+            season_label_height,
+            &entry.cover,
+        );
+        if play {
+            app.play_series_resume(entry.id);
+        } else if random {
+            if let Some(episodes) = app
+                .series_episodes_for(entry.id)
+                .filter(|episodes| !episodes.is_empty())
+            {
+                let mut entropy = [0; 8];
+                if getrandom::getrandom(&mut entropy).is_ok() {
+                    let episode =
+                        &episodes[(u64::from_ne_bytes(entropy) % episodes.len() as u64) as usize];
+                    let item = episode_item(entry.id, episode);
+                    app.play_untracked(item);
+                }
+            }
         }
-    }
-    if play {
-        app.play(PlayItem {
+    } else if play {
+        app.play_selected(PlayItem {
             title: entry.name,
             url: entry.url,
             kind: PlayKind::Vod,
@@ -191,8 +320,8 @@ fn show_movie_page(app: &mut App, ui: &mut Ui, entry: Entry) {
         });
     }
 }
-fn play_button(app: &mut App, ui: &mut Ui, label: impl Into<egui::WidgetText>, tv: bool) -> bool {
-    let response = ui.button(label);
+fn play_button(app: &mut App, ui: &mut Ui, button: egui::Button<'_>, tv: bool) -> bool {
+    let response = ui.add(button);
     if app.catalog_focus_play {
         response.request_focus();
         if tv {
@@ -212,7 +341,6 @@ fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
             name: v.name.clone(),
             cover: v.cover.clone(),
             plot: v.plot.clone(),
-            meta: "Serie".into(),
             url: String::new(),
         })
     } else {
@@ -222,7 +350,6 @@ fn entry_at(app: &App, series: bool, index: usize) -> Option<Entry> {
             name: v.name.clone(),
             cover: v.cover.clone(),
             plot: v.plot.clone(),
-            meta: crate::ui::vod::rating_badge_for_home(&v.rating).unwrap_or_else(|| "Film".into()),
             url: v.stream_url.clone(),
         })
     }
@@ -286,11 +413,12 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
             super::desktop::column(ui, cr, "catalog-categories", offset, |ui| {
                 if classic {
                     let language = app.settings.language;
+                    let remote = app.shared_remote_navigation();
                     super::desktop::search_field(
                         ui,
                         &mut app.catalog_queries[usize::from(series)],
                         language.text("Titel suchen", "Search titles"),
-                        app.tv,
+                        remote,
                     );
                     let id = egui::Id::new(("classic-catalog-sort", series));
                     let alphabetic = ui
@@ -301,7 +429,7 @@ pub fn show(app: &mut App, ui: &mut Ui, series: bool) {
                     } else {
                         language.text("Sortierung: Anbieter", "Sort: Provider")
                     };
-                    if button(ui, caption, app.tv) {
+                    if button(ui, caption, app.shared_remote_navigation()) {
                         ui.ctx().data_mut(|data| data.insert_temp(id, !alphabetic));
                     }
                 }
@@ -339,14 +467,7 @@ pub fn show_touch(app: &mut App, ui: &mut Ui, series: bool, layout: &super::mobi
                     app.selected_movie
                 };
                 if let Some(id) = selected {
-                    egui::ScrollArea::vertical()
-                        .id_source(("detail-page", id))
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            details(app, ui, series, true);
-                            ui.add_space(layout.bottom_inset + 24.0);
-                        });
+                    show_detail_page(app, ui, series, id);
                 } else {
                     let mut cats = vec![
                         ("favorites".to_owned(), "Favoriten".to_owned()),
@@ -414,7 +535,7 @@ pub fn toggle_touch_search(app: &mut App, ctx: &egui::Context, series: bool) {
     }
 }
 fn categories(app: &mut App, ui: &mut Ui, series: bool) {
-    let tv = app.tv;
+    let tv = app.shared_remote_navigation();
     let desktop = super::desktop::active(ui.ctx());
     let scale = super::desktop::scale(ui.ctx());
     let classic_counts = super::classic::enabled(app).then(|| {
@@ -704,7 +825,7 @@ fn indices(app: &App, ui: &Ui, series: bool) -> Arc<Vec<usize>> {
 fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
     let desktop = super::desktop::active(ui.ctx());
     let scale = super::desktop::scale(ui.ctx());
-    let tv = app.tv;
+    let tv = app.shared_remote_navigation();
     if !touch {
         if super::desktop::active(ui.ctx()) {
             super::desktop::catalog_heading(
@@ -925,299 +1046,284 @@ fn posters(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
             app.open_series(id);
         } else {
             app.selected_movie = Some(id);
+            app.ask_resume(&format!("vod:{id}"));
         }
     }
 }
-fn details(app: &mut App, ui: &mut Ui, series: bool, touch: bool) {
-    let tv = app.tv;
-    let selected = if series {
-        app.selected_series
-    } else {
-        app.selected_movie
-    };
-    let index = selected.and_then(|id| {
-        if series {
-            app.library.series.iter().position(|v| v.id == id)
-        } else {
-            app.library.movies.iter().position(|v| v.id == id)
-        }
-    });
-    let entry = index.and_then(|i| entry_at(app, series, i));
-    let Some(entry) = entry else {
-        ui.heading(if series {
-            "Serie auswählen"
-        } else {
-            "Film auswählen"
-        });
-        ui.label("Poster auswählen für Details und Wiedergabe.");
-        return;
-    };
-    let key = format!("{}:{}", if series { "series" } else { "vod" }, entry.id);
-    ui.horizontal_top(|ui| {
-        let (art, _) = ui.allocate_exact_size(
-            if touch {
-                vec2(84.0, 124.0)
-            } else {
-                vec2(76.0, 110.0)
-            },
-            Sense::hover(),
-        );
-        components::thumb(
-            app,
-            ui,
-            &format!("detail:{key}"),
-            &entry.cover,
-            art,
-            &entry.name,
-        );
-        ui.vertical(|ui| {
-            let mut job = egui::text::LayoutJob::simple(
-                entry.name.clone(),
-                tokens::medium(if tv { 15.0 } else { 17.0 }),
-                ui.visuals().text_color(),
-                ui.available_width(),
-            );
-            job.wrap.max_rows = 2;
-            ui.label(job);
-            let response = ui
-                .horizontal(|ui| {
-                    let response = crate::ui::fav_button(app, ui, &key);
-                    ui.label(if app.is_favorite(&key) {
-                        app.settings.language.text("Favorit", "Favorite")
-                    } else {
-                        app.settings.language.text("Merken", "Save")
-                    });
-                    response
-                })
-                .inner;
-            if series && app.catalog_focus_play && app.series_episodes_for(entry.id).is_none() {
-                let key = ui
-                    .id()
-                    .with(("loading-series-focus", app.series_open_revision));
-                if !ui.data(|data| data.get_temp::<bool>(key).unwrap_or(false)) {
-                    ui.data_mut(|data| data.insert_temp(key, true));
-                    response.request_focus();
-                    if tv {
-                        focus::request_id(response.id);
-                    }
-                }
-            }
-        });
-    });
-    if !entry.plot.is_empty() {
-        let mut job = egui::text::LayoutJob::simple(
-            entry.plot.clone(),
-            tokens::reg(if tv { 11.0 } else { 12.0 }),
-            crate::theme::muted(ui),
-            ui.available_width(),
-        );
-        let expanded_key = ui.id().with(("plot-expanded", entry.id));
-        let expanded = touch && ui.data(|d| d.get_temp::<bool>(expanded_key).unwrap_or(false));
-        if !expanded {
-            job.wrap.max_rows = if touch { 3 } else { 2 };
-        }
-        ui.label(job);
-        if button(
-            ui,
-            if expanded {
-                "Weniger anzeigen"
-            } else {
-                "Mehr lesen"
-            },
-            tv,
-        ) {
-            if touch {
-                ui.data_mut(|d| d.insert_temp(expanded_key, !expanded));
-            } else {
-                app.description_open = Some((entry.name.clone(), entry.plot.clone()));
-            }
-        }
-    }
-    if series {
-        series_details(app, ui, entry.id, touch);
-    } else {
-        ui.label(&entry.meta);
-        let caption = if app.get_progress(&key) > 1 {
-            "▶ Fortsetzen"
-        } else {
-            "▶ Abspielen"
-        };
-        if play_button(app, ui, caption, tv) {
-            app.play(PlayItem {
-                title: entry.name,
-                url: entry.url,
-                kind: PlayKind::Vod,
-                progress_key: key,
-            });
-        }
+fn episode_item(sid: u32, e: &Episode) -> PlayItem {
+    PlayItem {
+        title: format!("Staffel {} · Folge {}", e.season, e.episode),
+        url: e.stream_url.clone(),
+        kind: PlayKind::Episode,
+        progress_key: format!("ep:{sid}:{}", e.id),
     }
 }
-fn series_details(app: &mut App, ui: &mut Ui, sid: u32, touch: bool) {
-    let tv = app.tv;
-    app.request_series(sid);
+
+fn episode_rows(
+    app: &mut App,
+    ui: &mut Ui,
+    sid: u32,
+    target: Option<&Episode>,
+    heights: egui::Vec2,
+    gap: f32,
+    heading_height: f32,
+    cover: &str,
+) {
+    let height = heights.x;
+    let episode_height = heights.y;
+    let tv = app.shared_remote_navigation();
+    let language = app.settings.language;
+    let t = |de, en| language.text(de, en);
     let Some(source) = app.series_episodes_for(sid) else {
         if app.series_failed(sid) {
-            ui.label("Folgen konnten nicht geladen werden.");
-            if button(ui, "Erneut versuchen", tv) {
+            if button(ui, t("Folgen erneut laden", "Reload episodes"), tv) {
                 app.retry_series(sid);
             }
         } else {
-            ui.spinner();
-            ui.label("Folgen werden geladen …");
+            ui.label(t("Folgen werden geladen …", "Loading episodes…"));
         }
         return;
     };
-    type Cached = ((usize, usize), Arc<Vec<Episode>>);
+    if source.is_empty() {
+        ui.label(t("Keine Folgen verfügbar.", "No episodes available."));
+        return;
+    }
+    type Cached = ((usize, usize), Arc<(Vec<Episode>, Vec<u32>)>);
     let signature = (source.as_ptr() as usize, source.len());
-    let cache = ui.id().with(("episode-cache", sid));
-    let episodes = ui
-        .data(|d| d.get_temp::<Cached>(cache))
-        .filter(|v| v.0 == signature)
-        .map(|v| v.1)
+    let cache = ui.id().with("episodes");
+    let sorted = ui
+        .data(|data| data.get_temp::<Cached>(cache))
+        .filter(|value| value.0 == signature)
+        .map(|value| value.1)
         .unwrap_or_else(|| {
-            let mut rows = source.clone();
-            rows.sort_by_key(|e| (e.season, e.episode, e.id));
-            let rows = Arc::new(rows);
-            ui.data_mut(|d| d.insert_temp(cache, (signature, rows.clone())));
-            rows
+            let mut episodes = source.clone();
+            episodes.sort_by_key(|e| (e.season, e.episode, e.id));
+            let mut seasons: Vec<_> = episodes.iter().map(|e| e.season).collect();
+            seasons.dedup();
+            let sorted = Arc::new((episodes, seasons));
+            ui.data_mut(|data| data.insert_temp(cache, (signature, Arc::clone(&sorted))));
+            sorted
         });
-    let target = app.series_resume_target(sid);
-    if let Some((next, pos)) = &target {
-        let caption = format!(
-            "▶ {} · S{} F{}",
-            if *pos > 1 { "Fortsetzen" } else { "Abspielen" },
-            next.season,
-            next.episode
-        );
-        if play_button(app, ui, caption, tv) {
-            app.play_series_resume(sid);
-            return;
-        }
+    let (episodes, seasons) = sorted.as_ref();
+    let profile = app
+        .active_profile
+        .as_ref()
+        .map(|p| p.id.as_str())
+        .unwrap_or("");
+    let locked = app
+        .parental
+        .policy
+        .locked(profile, &format!("series:{sid}"));
+    if locked {
+        app.cancel_episode_frame();
     }
-    let mut seasons: Vec<_> = episodes.iter().map(|e| e.season).collect();
-    seasons.dedup();
-    if !seasons.contains(&app.series_season) {
-        app.series_season = target
-            .as_ref()
-            .map(|v| v.0.season)
-            .or_else(|| seasons.first().copied())
-            .unwrap_or(1);
-    }
-    let position_key = ui.id().with(("episode-position", sid));
-    let old = ui.data(|d| d.get_temp::<(u64, u32, Option<u32>)>(position_key));
-    let position = old
-        != Some((
-            app.series_open_revision,
-            app.series_season,
-            target.as_ref().map(|v| v.0.id),
-        ));
-    let season_before = app.series_season;
-    egui::ScrollArea::horizontal()
-        .id_source(("season-tabs", sid))
-        .max_height(if touch { 56.0 } else { 34.0 })
-        .auto_shrink([false, true])
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for s in seasons {
-                    let r = ui.selectable_label(app.series_season == s, format!("Staffel {s}"));
-                    if position && app.series_season == s {
-                        ui.scroll_to_rect(r.rect, Some(Align::Min));
-                    }
-                    if hit(ui, &r, tv) {
-                        app.series_season = s;
-                    }
-                }
-            });
-        });
-    let returning_episode = app.desktop_return_item.as_deref().and_then(|key| {
+    let return_id = app.desktop_return_item.as_deref().and_then(|key| {
         let (series, episode) = key.strip_prefix("ep:")?.split_once(':')?;
         (series.parse::<u32>().ok()? == sid)
             .then(|| episode.parse::<u32>().ok())
             .flatten()
     });
-    if let Some(episode) = episodes.iter().find(|e| Some(e.id) == returning_episode) {
-        app.series_season = episode.season;
+    let returning = return_id.and_then(|id| episodes.iter().find(|episode| episode.id == id));
+    let position_key = ui.id().with("episode-position");
+    let previous = ui.data(|data| data.get_temp::<(u64, u32)>(position_key));
+    let new_entry = previous.map(|(revision, _)| revision) != Some(app.series_open_revision);
+    if let Some(e) = returning {
+        app.series_season = e.season;
+    } else if new_entry || seasons.binary_search(&app.series_season).is_err() {
+        app.series_season = target.map_or(seasons[0], |e| e.season);
+    }
+    let tab = seasons.binary_search(&app.series_season).unwrap_or(0);
+    let card_width = super::desktop::handheld_size((height * 2.9).max(92.0), 112.0);
+    let step = card_width + gap;
+    let bounds = ui.available_rect_before_wrap();
+    let heading = Rect::from_min_size(bounds.min, vec2(bounds.width(), heading_height));
+    ui.painter().text(
+        heading.left_center(),
+        egui::Align2::LEFT_CENTER,
+        t("Staffeln", "Seasons"),
+        tokens::bold(16.0),
+        Color32::WHITE,
+    );
+    let tab_rect = Rect::from_min_size(
+        pos2(bounds.left(), heading.bottom() + gap),
+        vec2(bounds.width(), height),
+    );
+    let mut tabs =
+        ui.child_ui_with_id_source(tab_rect, Layout::top_down(Align::Min), "season-tabs");
+    tabs.set_clip_rect(tab_rect.intersect(ui.clip_rect()));
+    let tabs_offset = (new_entry || returning.is_some()).then_some(tab as f32 * step);
+    if let Some(selected) = episode_rail(
+        &mut tabs,
+        "seasons",
+        seasons.len(),
+        height,
+        card_width,
+        gap,
+        tabs_offset,
+        |ui, index, rect| {
+            let season = seasons[index];
+            let r = ui.put(
+                rect,
+                egui::SelectableLabel::new(
+                    index == tab,
+                    format!("{} {season}", t("Staffel", "Season")),
+                ),
+            );
+            hit(ui, &r, tv)
+        },
+    ) {
+        if app.series_season != seasons[selected] {
+            app.cancel_episode_frame();
+            app.series_season = seasons[selected];
+        }
     }
     let season = app.series_season;
-    let rows: Vec<_> = episodes.iter().filter(|e| e.season == season).collect();
-    let mut play = None;
-    let target_id = target
-        .as_ref()
-        .filter(|t| t.0.season == season)
-        .map(|v| v.0.id);
-    let has_history = app
-        .history
-        .iter()
-        .any(|h| h.key.starts_with(&format!("ep:{sid}:")));
-    let scroll_to = if touch && (!has_history || season != season_before) {
-        None
-    } else if position || season != season_before {
-        target_id.or_else(|| rows.first().map(|e| e.id))
+    let rows = &episodes[episodes.partition_point(|e| e.season < season)
+        ..episodes.partition_point(|e| e.season <= season)];
+    let target_id = target.filter(|e| e.season == season).map(|e| e.id);
+    let focus_index = returning.and_then(|e| rows.iter().position(|row| row.id == e.id));
+    let episode_width = (episode_height * 1.58).max(108.0);
+    let episode_step = episode_width + gap;
+    let offset = if let Some(index) = focus_index {
+        Some(index as f32 * episode_step)
+    } else if new_entry || previous.map(|(_, old)| old) != Some(season) {
+        Some(
+            target_id
+                .and_then(|id| rows.iter().position(|e| e.id == id))
+                .unwrap_or(0) as f32
+                * episode_step,
+        )
     } else {
         None
     };
-    let episode_list = |ui: &mut Ui| {
-        if touch {
-            ui.add_space(12.0);
-            ui.label(RichText::new("Folgen").strong());
-        }
-        for e in rows {
-            let r = ui.add_sized(
-                [
-                    ui.available_width(),
-                    if touch {
-                        56.0
-                    } else if tv {
-                        29.0
-                    } else {
-                        38.0
-                    },
-                ],
-                egui::SelectableLabel::new(target_id == Some(e.id), format!("Folge {}", e.episode)),
-            );
-            if returning_episode == Some(e.id) {
+    let episode_rect = Rect::from_min_max(
+        pos2(
+            bounds.left(),
+            (bounds.bottom() - episode_height).max(tab_rect.bottom()),
+        ),
+        bounds.max,
+    );
+    let mut cards =
+        ui.child_ui_with_id_source(episode_rect, Layout::top_down(Align::Min), "episode-cards");
+    cards.set_clip_rect(episode_rect.intersect(ui.clip_rect()));
+    let selected = episode_rail(
+        &mut cards,
+        ("episodes", season),
+        rows.len(),
+        episode_rect.height(),
+        episode_width,
+        gap,
+        offset,
+        |ui, index, rect| {
+            let e = &rows[index];
+            let key = format!("ep:{sid}:{}", e.id);
+            let r = ui.interact(rect, ui.id().with(e.id), Sense::click());
+            if ui.is_rect_visible(rect) {
+                let fill = if target_id == Some(e.id) || r.hovered() {
+                    crate::theme::accent_fill(ui)
+                } else {
+                    Color32::from_rgb(27, 50, 75)
+                };
+                ui.painter().rect_filled(rect, 8.0, fill);
+                let art = Rect::from_min_max(rect.min + vec2(3.0, 3.0), rect.max - vec2(3.0, 21.0));
+                let frame_key = format!("episode-frame:{sid}:{}", e.id);
+                let fallback = if !locked && e.preview.trim() != cover.trim() {
+                    e.preview.as_str()
+                } else {
+                    ""
+                };
+                if !locked {
+                    app.request_episode_frame(&frame_key, e);
+                }
+                if let Some(image) = (!locked).then(|| app.image(&frame_key)).flatten() {
+                    ui.painter().image(
+                        image.id(),
+                        art,
+                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
+                } else {
+                    components::thumb(app, ui, &key, fallback, art, "▶");
+                }
+                if let Some(duration) = app.durations.get(&key).filter(|duration| **duration > 0) {
+                    let progress =
+                        (app.get_progress(&key) as f32 / *duration as f32).clamp(0.0, 1.0);
+                    if progress > 0.0 {
+                        let bar = Rect::from_min_size(
+                            art.left_bottom() + vec2(5.0, -7.0),
+                            vec2((art.width() - 10.0) * progress, 4.0),
+                        );
+                        ui.painter()
+                            .rect_filled(bar, 2.0, Color32::from_rgb(136, 197, 247));
+                    }
+                }
+                ui.painter().text(
+                    rect.left_bottom() + vec2(7.0, -10.0),
+                    egui::Align2::LEFT_CENTER,
+                    format!("{} {}", t("Folge", "Episode"), e.episode),
+                    tokens::medium(13.0),
+                    Color32::WHITE,
+                );
+            }
+            if focus_index == Some(index) {
                 r.request_focus();
+                if tv {
+                    focus::request_id(r.id);
+                }
                 app.desktop_return_item = None;
-                ui.scroll_to_rect(r.rect, Some(Align::Center));
-            } else if scroll_to == Some(e.id) {
-                ui.scroll_to_rect(r.rect, Some(Align::Min));
             }
             #[cfg(windows)]
             if r.has_focus() {
                 super::desktop::remember_favorite_target(&r, &format!("ep:{sid}:{}", e.id));
             }
-            if hit(ui, &r, tv) {
-                play = Some(e.clone());
-            }
-        }
-    };
-    if touch {
-        episode_list(ui);
-    } else {
-        egui::ScrollArea::vertical()
-            .id_source(("episodes", sid, season))
-            .auto_shrink([false, false])
-            .show(ui, episode_list);
-    }
-    ui.data_mut(|d| {
-        d.insert_temp(
-            position_key,
-            (
-                app.series_open_revision,
-                season,
-                target.as_ref().map(|v| v.0.id),
-            ),
-        )
-    });
-    if let Some(e) = play {
-        app.play(PlayItem {
-            title: format!("Staffel {} · Folge {}", e.season, e.episode),
-            url: e.stream_url,
-            kind: PlayKind::Episode,
-            progress_key: format!("ep:{sid}:{}", e.id),
-        });
+            hit(ui, &r, tv)
+        },
+    );
+    ui.data_mut(|data| data.insert_temp(position_key, (app.series_open_revision, season)));
+    if let Some(index) = selected {
+        app.play_selected(episode_item(sid, &rows[index]));
     }
 }
+
+#[allow(clippy::too_many_arguments)]
+fn episode_rail(
+    ui: &mut Ui,
+    id: impl Hash,
+    count: usize,
+    height: f32,
+    width: f32,
+    gap: f32,
+    offset: Option<f32>,
+    mut render: impl FnMut(&mut Ui, usize, Rect) -> bool,
+) -> Option<usize> {
+    let step = width + gap;
+    let mut scroll = egui::ScrollArea::horizontal()
+        .id_source(id)
+        .max_height(height)
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .auto_shrink([false, true]);
+    if let Some(offset) = offset {
+        let max = (count as f32 * step - gap - ui.available_width()).max(0.0);
+        scroll = scroll.horizontal_scroll_offset(offset.min(max));
+    }
+    let mut selected = None;
+    scroll.show_viewport(ui, |ui, viewport| {
+        let origin = ui.cursor().min;
+        ui.set_min_size(vec2((count as f32 * step - gap).max(0.0), height));
+        let visible = (viewport.min.x / step) as usize;
+        let end = ((viewport.max.x / step).ceil() as usize + 3).min(count);
+        for index in visible.saturating_sub(3)..end {
+            let rect =
+                Rect::from_min_size(origin + vec2(index as f32 * step, 0.0), vec2(width, height));
+            let active = ui.push_id(index, |ui| render(ui, index, rect)).inner;
+            if active {
+                selected = Some(index);
+            }
+        }
+    });
+    selected
+}
+
 pub fn description_dialog(app: &mut App, ctx: &egui::Context) {
     let Some((title, text)) = app.description_open.clone() else {
         return;
@@ -1231,7 +1337,7 @@ pub fn description_dialog(app: &mut App, ctx: &egui::Context) {
         .open(&mut open)
         .default_width((ctx.screen_rect().width() * 0.65).clamp(260.0, 720.0))
         .show(ctx, |ui| {
-            if app.tv {
+            if app.shared_remote_navigation() {
                 focus::begin_modal(0);
             }
             egui::ScrollArea::vertical()
@@ -1239,7 +1345,7 @@ pub fn description_dialog(app: &mut App, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.label(text);
                 });
-            close = button(ui, "Schließen", app.tv);
+            close = button(ui, "Schließen", app.shared_remote_navigation());
         });
     if !open || close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         app.description_open = None;

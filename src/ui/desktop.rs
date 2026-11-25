@@ -169,6 +169,9 @@ pub(super) fn search_field(
     if remote && ui::mobile::focus::clicked(ui, &response) {
         response.request_focus();
     }
+    if response.has_focus() {
+        ui.data_mut(|data| data.insert_temp(Id::new("desktop-search-editor"), response.id));
+    }
     if response.gained_focus() {
         crate::platform::set_input_type(1);
         crate::platform::seed_ime(value);
@@ -382,12 +385,29 @@ pub fn heading(ui: &mut Ui, text: &str) -> Rect {
 }
 
 pub(super) fn back_button(ui: &mut Ui, label: &str) -> egui::Response {
+    let height = ui.spacing().interact_size.y;
+    compact_back_button(ui, label, height)
+}
+
+pub(super) fn compact_back_button(ui: &mut Ui, label: &str, height: f32) -> egui::Response {
     let accent = theme::accent_fill(ui);
-    let response = ui.add(
-        egui::Button::new(egui::RichText::new(label).strong().color(Color32::WHITE))
-            .fill(accent)
-            .stroke(egui::Stroke::new(1.5, Color32::from_white_alpha(180))),
-    );
+    let response = ui
+        .scope(|ui| {
+            let scale = scale(ui.ctx());
+            ui.spacing_mut().button_padding = vec2((12.0 * scale).max(8.0), 2.0);
+            ui.spacing_mut().interact_size.y = height;
+            ui.add(
+                egui::Button::new(
+                    egui::RichText::new(label)
+                        .size(handheld_type(20.0 * scale, 15.0))
+                        .strong()
+                        .color(Color32::WHITE),
+                )
+                .fill(accent)
+                .stroke(egui::Stroke::new(1.5, Color32::from_white_alpha(180))),
+            )
+        })
+        .inner;
     if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
@@ -739,7 +759,7 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
             if live_player {
                 super::player_desktop::cycle_live_aspect(app, ctx);
             } else if player {
-                super::player_desktop::toggle_options_shortcut(app, ctx);
+                super::player_desktop::toggle_aspect_shortcut(app, ctx);
             } else {
                 app.navigate(View::Settings);
                 focus_navigation(app);
@@ -805,7 +825,9 @@ pub fn show(app: &mut App, ctx: &Context) {
                 ui.painter().add(fill);
                 let rect = screen.shrink(edge);
                 column(ui, rect, "catalog-title-page", 0.0, |ui| {
-                    super::library::show_detail_page(app, ui, series, id);
+                    ui.add_enabled_ui(app.pending_resume.is_none() && !app.parental.open, |ui| {
+                        super::library::show_detail_page(app, ui, series, id);
+                    });
                 });
             });
         return;
@@ -813,7 +835,7 @@ pub fn show(app: &mut App, ctx: &Context) {
     let classic = super::classic::enabled(app);
     let expanded = handheld_size(a.navigation_expanded * s, 178.0);
     let collapsed = handheld_size(a.navigation_collapsed * s, 52.0);
-    if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) && !ctx.wants_keyboard_input() {
+    if !classic && app.shared_remote_navigation() && ui::mobile::focus::current_zone() == Some(0) {
         app.nav_collapsed = false;
     }
     let left = screen.left()
@@ -828,8 +850,12 @@ pub fn show(app: &mut App, ctx: &Context) {
             pos2(left + width, screen.bottom()),
         )
     };
-    let is_collapsed =
-        !classic && navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded));
+    let is_collapsed = !classic
+        && if app.parental.open {
+            app.nav_collapsed
+        } else {
+            navigation_is_collapsed(app, ctx, rail(collapsed), rail(expanded))
+        };
     let target = if is_collapsed { collapsed } else { expanded };
     let dx = motion(ctx, target);
     let visual = target + dx;
@@ -838,6 +864,7 @@ pub fn show(app: &mut App, ctx: &Context) {
         .frame(egui::Frame::none())
         .show(ctx, |ui| {
             let backdrop = ui.painter().add(egui::Shape::Noop);
+            ui.set_enabled(!app.parental.open);
             if classic {
                 let edge = handheld_size(22.0 * s, 8.0);
                 let mut canvas = screen.shrink(edge);
@@ -898,7 +925,11 @@ pub fn show(app: &mut App, ctx: &Context) {
                         .max(screen.top() + pad + 1.0),
                 ),
             );
-            if handheld() && handheld_content_scroll(ctx, body) && !app.nav_collapsed {
+            if !app.parental.open
+                && handheld()
+                && handheld_content_scroll(ctx, body)
+                && !app.nav_collapsed
+            {
                 app.nav_collapsed = true;
                 ctx.request_repaint();
             }
@@ -952,18 +983,18 @@ pub fn show(app: &mut App, ctx: &Context) {
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
-            if app.tv {
+            if app.shared_remote_navigation() {
                 ui::mobile::focus::begin_modal(0);
             }
             ui.horizontal(|ui| {
                 let keep = ui.button(app.settings.language.text("Weitersehen", "Keep watching"));
                 let stop = ui.button(app.settings.language.text("Beenden", "Quit"));
-                dismiss = if app.tv {
+                dismiss = if app.shared_remote_navigation() {
                     ui::mobile::focus::clicked(ui, &keep)
                 } else {
                     keep.clicked()
                 };
-                quit = if app.tv {
+                quit = if app.shared_remote_navigation() {
                     ui::mobile::focus::clicked(ui, &stop)
                 } else {
                     stop.clicked()
@@ -1196,7 +1227,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 let selected = view == Some(app.view);
                 if focus_requested && selected {
                     response.request_focus();
-                    if app.tv {
+                    if app.shared_remote_navigation() {
                         ui::mobile::focus::request_id(response.id);
                     }
                     response.scroll_to_me(None);
@@ -1261,7 +1292,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                     label
                 };
                 let response = response.on_hover_text(help);
-                if if app.tv {
+                if if app.shared_remote_navigation() {
                     ui::mobile::focus::clicked(nav, &response)
                 } else {
                     response.clicked()

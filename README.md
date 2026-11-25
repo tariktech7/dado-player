@@ -18,10 +18,12 @@ Unter **Einstellungen → Allgemein → Oberfläche** stehen **Modern** und **Kl
 Klassisch ist die Voreinstellung. Die App speichert die gewählte Ansicht.
 Klassisch öffnet eine Bibliotheksübersicht mit großen Medienkacheln und nutzt eine kompakte Senderliste
 sowie größere Poster. Beide Modi verwenden dieselbe Wiedergabe und dieselben Profile.
-Die Detailspalte erscheint bei Filmen und Serien nach der Auswahl. In Live-TV ist die Vorschau dauerhaft
-sichtbar. In Seriendetails lassen sich die Staffeln horizontal und die Folgen vertikal durchblättern.
-Der Play-Button setzt die zuletzt gesehene Folge fort und geht bei höchstens 60 Sekunden Rest
-zur nächsten Folge über. Favoriten und Fortsetzen haben getrennte Rubriken für Live-TV, Serien
+Filme und Serien öffnen einen eigenen Detailbildschirm mit Poster und Inhaltsangabe. Die zwei Reihen
+für Staffeln und Folgen lassen sich horizontal durchblättern. Folgenkarten zeigen ein Standbild aus
+dem Video, ein verfügbares Folgenbild des Anbieters oder einen Play-Platzhalter. Abspielen setzt die zuletzt gesehene
+Folge fort und geht bei höchstens 60 Sekunden Rest zur nächsten über. Zufällige Folge startet am
+Anfang und speichert weder Folge noch Fortschritt. Die Live-TV-Vorschau ist dauerhaft sichtbar.
+Favoriten und Fortsetzen haben getrennte Rubriken für Live-TV, Serien
 und Filme. Die Startseite kombiniert Fortsetzen mit Artwork und dem aktuellen Favoritenprogramm.
 Pro Serie erscheint dort und unter Fortsetzen die zuletzt angesehene Folge. Der Folgenverlauf bleibt erhalten.
 Auf Geräten mit Farbtasten öffnet Rot die Elternsperre. Unter Windows entspricht das F1.
@@ -30,6 +32,8 @@ Player-Steuerung blendet sich nach zwei Sekunden aus.
 OK im Live-Vollbild öffnet die Senderliste und setzt den Fokus auf den laufenden Sender.
 Der Live-Player bündelt Sender und aktuelles Programm unten. Filme und Folgen zeigen dort Play/Pause,
 Zeiten und Spulleiste. Tonspuren und die nächste verfügbare Folge sind direkt erreichbar.
+
+Unter **Einstellungen → Wiedergabe → Player** kann Windows und Android zwischen MPV und eingebettetem VLC gewählt werden. Auf iOS gibt es eingebettetes VLC und Apple-Wiedergabe. Samsung nutzt AVPlay oder HTML5. Auf allen Plattformen bleibt dabei die Dado-Oberfläche aktiv.
 
 Der iOS-Build wird lokal unter Windows/WSL mit
 xtool-Darwin-SDK, Rust und Swift als Geräte-IPA gebaut. Installation über AltStore/Sideloadly
@@ -41,8 +45,8 @@ Der Rust-Kern unter `src/` enthält App-Zustand, IPTV-Client, Speicherung, Daten
 
 | Ziel | Einstieg und Wiedergabe | Build aus dem Projektordner | Ergebnis |
 | --- | --- | --- | --- |
-| Windows | src/main.rs → src/platform/windows, libmpv | `./windows/build.ps1` in PowerShell | target/release/Dado-Player.exe |
-| Android | android/ (Gradle), src/platform/android, JNI und libmpv | `bash android/build.sh` unter Windows mit Git Bash | Dado-Player-arm64-debug.apk |
+| Windows | src/main.rs → src/platform/windows, libmpv und LibVLC | `./windows/build.ps1` in PowerShell | target/release/Dado-Player.exe |
+| Android | android/ (Gradle), src/platform/android, JNI, libmpv und LibVLC | `bash android/build.sh` unter Windows mit Git Bash | Dado-Player-arm64-debug.apk |
 | iOS | ios/Sources (UIKit, AVPlayer), src/platform/ios (Rust und C-ABI) | `bash ios/build.sh --ipa` mit iOS-SDK | Dado-Player-unsigned.ipa |
 | Samsung Tizen 6.5+ | SmartTV/client (Preact/TypeScript, AVPlay) | `./SmartTV/client/build.ps1` | Dado-Player-Tizen-0.6.0-unsigned.wgt; TV-Zertifikat für Installation erforderlich |
 

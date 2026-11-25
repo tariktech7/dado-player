@@ -52,6 +52,7 @@ def updates():
         f'pub const ANDROID_BUILD: u32 = {release["androidBuild"]};\n'
         f'pub const IOS_BUILD: u32 = {release["iosBuild"]};\n'
         f'pub const WINDOWS_BUILD: u32 = {release["windowsBuild"]};\n'
+        f'pub const RESUME_MINIMUM_SECONDS: u64 = {policy["resumeMinimumSeconds"]};\n'
         f'pub const RESUME_END_MARGIN_SECONDS: u64 = {policy["resumeEndMarginSeconds"]};\n'
         f'pub const SEEK_STEP_SECONDS: f64 = {policy["seekStepSeconds"]:.1f};\n'
         f'pub const CONTROLS_HIDE_SECONDS: f64 = {policy["controlsHideMs"] / 1000:.1f};\n'

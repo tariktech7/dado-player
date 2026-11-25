@@ -406,111 +406,6 @@ pub fn set_input_type(input_type: i32) {
     }
 }
 
-/// Start an external video player with an `ACTION_VIEW` intent.
-///
-/// Rust has no `Context`, so the intent has to be built in Java. The Java side
-/// returns a status code instead of a message: provider URLs contain
-/// `username`/`password` in the path, and a Java exception string could carry
-/// the full URL back through JNI into a visible error box. Codes:
-/// `0` started, `1` no matching app installed, `2` any other failure.
-///
-/// Called from `android_main`, so every `JNIEnv` call clears a pending
-/// exception on its error path (see the module doc). The activity class is a
-/// global ref cached by `nativeOnInsets` at startup, so no `FindClass` is
-/// needed on this thread.
-/// Start an external video player with an `ACTION_VIEW` intent.
-///
-/// Rust has no `Context`, so the intent has to be built in Java. The Java side
-/// returns a status code instead of a message: provider URLs contain
-/// `username`/`password` in the path, and a Java exception string could carry
-/// the full URL back through JNI into a visible error box. Codes:
-/// `0` started, `1` no matching app installed, `2` any other failure.
-///
-/// Called from `android_main`, so every `JNIEnv` call clears a pending
-/// exception on its error path (see the module doc). The activity class is a
-/// global ref cached by `nativeOnInsets` at startup, so no `FindClass` is
-/// needed on this thread.
-pub fn open_external(
-    url: &str,
-    title: &str,
-    backend: crate::types::PlayerBackend,
-    key: &str,
-    position: u64,
-) -> Result<(), String> {
-    if url.trim().is_empty() {
-        return Err("Keine Stream-URL vorhanden.".to_string());
-    }
-    let Some(app) = super::entry::app_handle() else {
-        return Err("Android-App noch nicht bereit.".to_string());
-    };
-    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }
-        .map_err(|_| "Java-VM nicht verfügbar.".to_string())?;
-    let mut env = vm
-        .attach_current_thread()
-        .map_err(|_| "JNI-Umgebung nicht verfügbar.".to_string())?;
-    let Some(class) = ACTIVITY_CLASS.get() else {
-        return Err("App noch nicht initialisiert.".to_string());
-    };
-
-    let j_url = match env.new_string(url) {
-        Ok(s) => s,
-        Err(_) => {
-            let _ = env.exception_clear();
-            return Err("Stream-URL konnte nicht übergeben werden.".to_string());
-        }
-    };
-    let j_title = match env.new_string(title) {
-        Ok(s) => s,
-        Err(_) => {
-            let _ = env.exception_clear();
-            return Err("Titel konnte nicht übergeben werden.".to_string());
-        }
-    };
-    let url_obj: jni::objects::JObject = j_url.into();
-    let title_obj: jni::objects::JObject = j_title.into();
-
-    *EXTERNAL_KEY.lock().unwrap_or_else(|e| e.into_inner()) = Some(key.to_owned());
-    let status = env.call_static_method(
-        class,
-        "openExternalPlayer",
-        "(Ljava/lang/String;Ljava/lang/String;IJ)I",
-        &[
-            jni::objects::JValue::Object(&url_obj),
-            jni::objects::JValue::Object(&title_obj),
-            jni::objects::JValue::Int(backend.android_code()),
-            jni::objects::JValue::Long(position.saturating_mul(1000).min(i64::MAX as u64) as i64),
-        ],
-    );
-    let code = match status {
-        Ok(v) => v.i().unwrap_or(2),
-        Err(_) => {
-            let _ = env.exception_clear();
-            2
-        }
-    };
-    if code != 0 {
-        *EXTERNAL_KEY.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    }
-    // Log the decision, never the URL: provider URLs carry credentials in the
-    // path and logcat is readable by anyone with adb access to the device.
-    eprintln!(
-        "[player] external backend={} status={}",
-        backend.label(),
-        code
-    );
-    match code {
-        0 => Ok(()),
-        1 => Err(format!(
-            "{} ist nicht installiert – integrierter Player läuft.",
-            backend.label()
-        )),
-        _ => Err(
-            "Externer Player konnte nicht gestartet werden – integrierter Player läuft."
-                .to_string(),
-        ),
-    }
-}
-
 /// Tell Java whether the UI can consume a back press.
 pub fn set_can_back(v: bool) {
     CAN_BACK.store(v, Ordering::Relaxed);
@@ -805,35 +700,19 @@ pub fn mobile_update_status() -> anyhow::Result<String> {
     Ok(value)
 }
 
-// External players return only numeric progress. Never forward provider URLs.
-static EXTERNAL_KEY: Mutex<Option<String>> = Mutex::new(None);
-static EXTERNAL_RESULT: Mutex<Option<(String, u64, u64)>> = Mutex::new(None);
-pub fn take_playback_result() -> Option<(String, u64, u64)> {
-    EXTERNAL_RESULT
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-}
-#[no_mangle]
-pub extern "system" fn Java_com_tarik_dadoplayer_GameActivity_nativePlaybackResult(
-    _env: JNIEnv,
-    _class: JClass,
-    position: jni::sys::jlong,
-    duration: jni::sys::jlong,
-    completed: jni::sys::jboolean,
-) {
-    if let Some(key) = EXTERNAL_KEY
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-    {
-        let mut pos = (position.max(0) as u64) / 1000;
-        let mut dur = (duration.max(0) as u64) / 1000;
-        if completed != 0 {
-            dur = dur.max(pos).max(1);
-            pos = dur;
+pub(crate) fn prepare_vlc() -> Result<(), String> {
+    fn prepare() -> anyhow::Result<()> {
+        use anyhow::{ensure, Context};
+        let app = super::entry::app_handle().context("Android-Activity fehlt")?;
+        let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }?;
+        let mut env = vm.attach_current_thread()?;
+        let class = ACTIVITY_CLASS.get().context("Activity-Klasse fehlt")?;
+        let result = env.call_static_method(class, "prepareEmbeddedVlc", "()Z", &[]);
+        if result.is_err() {
+            let _ = env.exception_clear();
         }
-        *EXTERNAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, pos, dur));
-        wake_ui();
+        ensure!(result?.z()?, "LibVLC konnte nicht geladen werden");
+        Ok(())
     }
+    prepare().map_err(|err| format!("VLC: {err}"))
 }

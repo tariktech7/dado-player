@@ -127,7 +127,6 @@ pub(super) fn back(app: &mut App, ctx: &egui::Context) {
         ctx.data_mut(|data| data.insert_temp(Id::new("desktop-exit-prompt"), true));
     } else {
         app.navigate(View::Home);
-        focus::request_index(0);
         ctx.request_repaint();
     }
 }
@@ -137,16 +136,18 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
     let gap = desktop::handheld_size(a.classic_gap * scale, 8.0);
     let header_height = desktop::handheld_size(a.classic_header_height * scale, 40.0);
     let header = Rect::from_min_size(canvas.min, vec2(canvas.width(), header_height));
-    focus::set_zone(0);
+    focus::set_header_zone();
     desktop::column(ui, header, "classic-header", 0.0, |ui| {
         let language = app.settings.language;
         ui.horizontal_centered(|ui| {
             if app.view != View::Home {
-                let response =
-                    desktop::back_button(ui, language.text("‹ Übersicht", "‹ Dashboard"));
-                if activate(ui, &response, app.tv) {
-                    app.navigate(View::Home);
-                    focus::request_index(0);
+                let response = desktop::compact_back_button(
+                    ui,
+                    language.text("‹ Zurück", "‹ Back"),
+                    header_height - 8.0,
+                );
+                if activate(ui, &response, app.shared_remote_navigation()) {
+                    back(app, ui.ctx());
                 }
             }
             ui.heading("Dado Player");
@@ -190,7 +191,7 @@ pub(super) fn show(app: &mut App, ui: &mut Ui, canvas: Rect, scale: f32) -> Opti
                     }
                     response
                         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
-                    if activate(ui, &response, app.tv) {
+                    if activate(ui, &response, app.shared_remote_navigation()) {
                         if icon == Icon::Refresh {
                             app.refresh_catalog();
                         } else {
@@ -386,7 +387,10 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             Color32::WHITE,
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
-        if activate(ui, &response, app.tv) {
+        if view == View::Live {
+            focus::prefer_next_when_inactive();
+        }
+        if activate(ui, &response, app.shared_remote_navigation()) {
             next = Some(view);
         }
     }
@@ -413,7 +417,6 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
     ];
     let width = ((right - left - gap * 3.0) / 4.0).max(1.0);
     let mut open_profiles = false;
-    focus::set_zone(2);
     for (index, (view, label, icon, profiles)) in actions.into_iter().enumerate() {
         let rect = Rect::from_min_size(
             pos2(left + index as f32 * (width + gap), actions_y),
@@ -458,7 +461,7 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
             ui.visuals().text_color(),
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
-        if activate(ui, &response, app.tv) {
+        if activate(ui, &response, app.shared_remote_navigation()) {
             open_profiles = profiles;
             next = Some(view);
         }

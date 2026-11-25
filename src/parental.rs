@@ -71,6 +71,8 @@ pub struct Controls {
     pub open: bool,
     pub authenticated: bool,
     pub pending: Option<(crate::types::PlayItem, bool)>,
+    pub restart: bool,
+    pub untracked: bool,
     pub grant: Option<String>,
     pub pin: String,
     pub first_pin: String,
@@ -96,6 +98,8 @@ impl Controls {
         self.open = false;
         self.authenticated = false;
         self.pending = None;
+        self.restart = false;
+        self.untracked = false;
         self.grant = None;
         self.pin.clear();
         self.first_pin.clear();

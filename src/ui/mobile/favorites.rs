@@ -98,7 +98,7 @@ pub fn show(app: &mut App, ui: &mut Ui, l: &Layout) {
         app.open_series(id);
     }
     if let Some(item) = play {
-        app.play(item);
+        app.play_selected(item);
     }
     let _ = l;
 }

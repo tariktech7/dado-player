@@ -724,12 +724,7 @@ fn parse_blob(blob: &[u8]) -> Result<Vec<Entry>, String> {
         }
         let name = String::from_utf8_lossy(&blob[pos..pos + name_len]).into_owned();
         pos += name_len;
-        if name.is_empty()
-            || name == "."
-            || name == ".."
-            || name.contains(['/', '\\'])
-            || Path::new(&name).is_absolute()
-        {
+        if !valid_package_path(&name) {
             return Err("Paket enthält einen ungültigen Dateinamen".into());
         }
         if pos + 20 > blob.len() {
@@ -759,6 +754,31 @@ fn parse_blob(blob: &[u8]) -> Result<Vec<Entry>, String> {
         });
     }
     Ok(out)
+}
+
+fn valid_package_path(name: &str) -> bool {
+    match name.split('/').collect::<Vec<_>>().as_slice() {
+        [file] => {
+            !file.is_empty()
+                && !file.starts_with('.')
+                && file
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"._-+".contains(&c))
+        }
+        ["plugins", "plugins.dat"] => true,
+        ["plugins", category, file] => {
+            !category.is_empty()
+                && category
+                    .bytes()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                && file.starts_with("lib")
+                && file.ends_with("_plugin.dll")
+                && file
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"._-+".contains(&c))
+        }
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -839,6 +859,11 @@ fn ensure_extracted(entries: &[Entry], content_id: &str) -> Result<PathBuf, Stri
             if crc32(&raw) != e.raw_crc {
                 return Err(format!("CRC-Prüfung für {} fehlgeschlagen", e.name));
             }
+            let parent = dest
+                .parent()
+                .expect("Laufzeit-Datei hat ein Stammverzeichnis");
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Kann Pluginverzeichnis nicht anlegen: {e}"))?;
             let pid = std::process::id();
             let tmp = dir.join(format!("{}.tmp-{}", e.name, pid));
             let mut fh = std::fs::File::create(&tmp)
@@ -1039,6 +1064,27 @@ mod update_tests {
             super::GdiplusShutdown(guard.token);
         }
     }
+    #[test]
+    fn allows_vlc_plugin_paths_without_allowing_directory_traversal() {
+        for name in [
+            "Dado-Player.exe",
+            "VLC-COPYING.txt",
+            "plugins/plugins.dat",
+            "plugins/access/libhttp_plugin.dll",
+        ] {
+            assert!(super::valid_package_path(name), "{name}");
+        }
+        for name in [
+            "../Dado-Player.exe",
+            "plugins/../libhttp_plugin.dll",
+            r"plugins\access\libhttp_plugin.dll",
+            "plugins/access/libhttp_plugin.dll:alternate",
+            "plugins/other.exe",
+        ] {
+            assert!(!super::valid_package_path(name), "{name}");
+        }
+    }
+
     #[test]
     fn detects_same_size_corruption_in_cached_runtime() {
         let dir = tempfile::tempdir().unwrap();

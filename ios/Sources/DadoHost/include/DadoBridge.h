@@ -95,6 +95,9 @@ void dado_host_video_visible(int32_t visible);
 /// logged by the host.
 void dado_host_load(const char *url);
 
+/// Decode one RGBX preview frame on a worker thread into caller-owned storage.
+int32_t dado_host_episode_frame(const char *source, void *bytes, int32_t width, int32_t height);
+
 /// Stops playback and releases the current item.
 void dado_host_stop(void);
 

@@ -212,64 +212,34 @@ pub enum HwDec {
     Vulkan,
 }
 
-/// Which app actually plays the stream.
-///
-/// Automatic mode always uses the integrated player. External Android apps
-/// remain opt-in expert choices; old serialized variants stay readable.
+/// Playback engines and legacy Android preferences retained for deserialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PlayerBackend {
-    /// MX Player (free `…ad`, falling back to Pro `…pro`).
+    /// Legacy external MX Player preference.
     MxPlayer,
-    /// VLC for Android.
+    /// Embedded LibVLC.
     Vlc,
-    /// Android's resolver / chooser — any installed video player.
+    /// Legacy Android system chooser preference.
     System,
-    /// Built-in libmpv. Also the only backend available on desktop.
+    /// Built-in libmpv.
     #[default]
     Mpv,
-    /// Legacy value; normalized to the actual integrated backend.
+    /// Legacy MX Player preference.
     MxPlayerIntegrated,
-    /// Legacy value; normalized to the external MX app with built-in fallback.
+    /// Legacy MX Player preference with fallback.
     MxPlayerFallback,
 }
 
 impl PlayerBackend {
     pub fn label(self) -> &'static str {
-        match self {
-            PlayerBackend::MxPlayer => "MX Player",
-            PlayerBackend::Vlc => "VLC",
-            PlayerBackend::System => "Systemauswahl",
-            PlayerBackend::Mpv => "Integriert",
-            PlayerBackend::MxPlayerIntegrated => "Integriert (ältere Einstellung)",
-            PlayerBackend::MxPlayerFallback => "MX Player (ältere Einstellung)",
+        if self == Self::Vlc {
+            "VLC"
+        } else {
+            "Dado Player · MPV"
         }
     }
-    pub fn all() -> [PlayerBackend; 4] {
-        [
-            PlayerBackend::MxPlayer,
-            PlayerBackend::Vlc,
-            PlayerBackend::System,
-            PlayerBackend::Mpv,
-        ]
-    }
-    pub fn is_external(self) -> bool {
-        match self {
-            PlayerBackend::Mpv | PlayerBackend::MxPlayerIntegrated => false,
-            PlayerBackend::MxPlayerFallback => true,
-            _ => true,
-        }
-    }
-    /// Wire format for the JNI `openExternalPlayer` call. Keep in sync with the
-    /// `BACKEND_*` constants in GameActivity.java.
-    pub fn android_code(self) -> i32 {
-        match self {
-            PlayerBackend::MxPlayer => 0,
-            PlayerBackend::Vlc => 1,
-            PlayerBackend::System => 2,
-            PlayerBackend::Mpv => 3,
-            PlayerBackend::MxPlayerIntegrated => 3,
-            PlayerBackend::MxPlayerFallback => 0,
-        }
+    pub fn all() -> [PlayerBackend; 2] {
+        [PlayerBackend::Mpv, PlayerBackend::Vlc]
     }
 }
 
@@ -588,14 +558,9 @@ impl Settings {
     }
 
     pub fn effective_player_backend(&self) -> PlayerBackend {
-        if self.settings_mode == SettingsMode::Easy {
-            PlayerBackend::Mpv
-        } else {
-            match self.player_backend {
-                PlayerBackend::MxPlayerIntegrated => PlayerBackend::Mpv,
-                PlayerBackend::MxPlayerFallback => PlayerBackend::MxPlayer,
-                other => other,
-            }
+        match self.player_backend {
+            PlayerBackend::Vlc => PlayerBackend::Vlc,
+            _ => PlayerBackend::Mpv,
         }
     }
     pub fn startup_profile<'a>(&self, profiles: &'a [Profile]) -> Option<&'a Profile> {
@@ -695,6 +660,7 @@ pub struct Series {
 
 #[derive(Debug, Clone)]
 pub struct Episode {
+    pub preview: String,
     pub id: u32,
     pub series_id: u32,
     pub season: u32,
@@ -867,13 +833,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn automatic_playback_is_internal_and_experiments_are_opt_in() {
+    fn playback_reset_restores_the_default_engine() {
         let mut s = Settings {
             player_backend: PlayerBackend::Vlc,
             ..Settings::default()
         };
-        assert_eq!(s.effective_player_backend(), PlayerBackend::Mpv);
-        s.settings_mode = SettingsMode::Expert;
         assert_eq!(s.effective_player_backend(), PlayerBackend::Vlc);
         s.ios_native_player = true;
         s.ios_playback_engine = IosPlaybackEngine::Apple;

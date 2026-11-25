@@ -187,7 +187,7 @@ fn render_channels(app: &mut App, ui: &mut Ui, chans: &[Channel]) {
         ui.add_space(2.0);
     }
     if let Some(item) = play {
-        app.play(item);
+        app.play_selected(item);
     }
 }
 
@@ -228,7 +228,7 @@ fn render_movies(app: &mut App, ui: &mut Ui, movies: &[VodMovie]) {
             });
         });
     if let Some(item) = play {
-        app.play(item);
+        app.play_selected(item);
     }
 }
 
@@ -267,7 +267,7 @@ pub fn category_tabs(app: &mut App, ui: &mut Ui) {
     ui.horizontal_wrapped(|ui| {
         for (i, label) in ["Live-TV", "Serien", "Filme"].iter().enumerate() {
             let r = ui.selectable_label(app.favorite_section == i, *label);
-            let clicked = if app.tv {
+            let clicked = if app.shared_remote_navigation() {
                 crate::ui::mobile::focus::clicked(ui, &r)
             } else {
                 r.clicked()

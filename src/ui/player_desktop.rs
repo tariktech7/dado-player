@@ -136,12 +136,6 @@ fn button(
                 );
             }
         }
-        "⚙" => super::mobile::components::icon(
-            ui,
-            Rect::from_center_size(center, vec2(size, size)),
-            super::mobile::components::Icon::Settings,
-            ink,
-        ),
         _ => {
             ui.painter()
                 .with_clip_rect(rect.shrink2(vec2(4.0, 0.0)))
@@ -161,9 +155,6 @@ fn button(
                 if label == "▶" { "Play" } else { "Pause" },
             )
         });
-    }
-    if label == "⚙" {
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, "Optionen"));
     }
     crate::ui::mobile::focus::clicked_player(ui, &response)
 }
@@ -351,9 +342,9 @@ fn popup_row(
     pane(ctx, name, rect, scale, |ui| {
         let mut x = rect.left() + pad;
         let mut selection = None;
-        if name == "options"
+        if name == "aspect"
             && ctx.data_mut(|data| {
-                let id = Id::new("desktop-options-focus");
+                let id = Id::new("desktop-aspect-focus");
                 let requested = data.get_temp::<bool>(id).unwrap_or(false);
                 data.remove::<bool>(id);
                 requested
@@ -381,20 +372,19 @@ fn popup_row(
 
 pub(crate) fn menus_open(ctx: &Context) -> bool {
     ctx.data(|data| {
-        ["desktop-player-aspect-menu", "desktop-player-options-menu"]
-            .iter()
-            .any(|key| data.get_temp::<bool>(Id::new(key)).unwrap_or(false))
+        data.get_temp::<bool>(Id::new("desktop-player-aspect-menu"))
+            .unwrap_or(false)
     })
 }
 
-pub(crate) fn toggle_options_shortcut(app: &mut App, ctx: &Context) {
-    let id = Id::new("desktop-player-options-menu");
+pub(crate) fn toggle_aspect_shortcut(app: &mut App, ctx: &Context) {
+    let id = Id::new("desktop-player-aspect-menu");
     let open = !ctx.data(|data| data.get_temp::<bool>(id).unwrap_or(false));
     dismiss_menus(app, ctx);
     if open {
         ctx.data_mut(|data| {
             data.insert_temp(id, true);
-            data.insert_temp(Id::new("desktop-options-focus"), true);
+            data.insert_temp(Id::new("desktop-aspect-focus"), true);
         });
     }
     app.ui_activity = ctx.input(|input| input.time);
@@ -406,11 +396,10 @@ pub(crate) fn dismiss_menus(app: &mut App, ctx: &Context) -> bool {
     app.audio_menu_open = false;
     app.sub_menu_open = false;
     ctx.data_mut(|data| {
-        for key in ["desktop-player-aspect-menu", "desktop-player-options-menu"] {
-            let id = Id::new(key);
-            active |= data.get_temp::<bool>(id).unwrap_or(false);
-            data.insert_temp(id, false);
-        }
+        let id = Id::new("desktop-player-aspect-menu");
+        active |= data.get_temp::<bool>(id).unwrap_or(false);
+        data.insert_temp(id, false);
+        data.remove::<f64>(Id::new("player-aspect-toast"));
     });
     active
 }
@@ -421,13 +410,23 @@ pub(crate) fn cycle_live_aspect(app: &mut App, ctx: &Context) {
         DesktopAspect::Fit | DesktopAspect::Fill => DesktopAspect::Stretch,
         DesktopAspect::Stretch => DesktopAspect::Auto,
     };
+    apply_aspect(app, ctx, aspect);
+}
+
+fn apply_aspect(app: &mut App, ctx: &Context, aspect: DesktopAspect) {
+    let changed = app.settings.desktop_aspect != aspect;
     app.settings.desktop_aspect = aspect;
     if let Some(player) = &app.player {
         player.mpv.set_desktop_aspect(aspect);
     }
     app.save_settings_now();
-    app.ui_activity = ctx.input(|input| input.time);
+    let now = ctx.input(|input| input.time);
+    app.ui_activity = now;
     app.player_reveal = false;
+    if changed {
+        ctx.data_mut(|data| data.insert_temp(Id::new("player-aspect-toast"), now + 1.0));
+        ctx.request_repaint();
+    }
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -523,8 +522,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     #[cfg(windows)]
     let video = app.player.as_ref().map(|p| p.surface.native_handle());
     #[cfg(target_os = "android")]
-    ui.painter()
-        .add(crate::platform::android::render::shape(full));
+    app.paint_android_video(ui, full);
     app.position_video(
         if radio {
             Rect::from_min_size(pos2(-50.0, -50.0), vec2(1.0, 1.0))
@@ -539,10 +537,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let time = ctx.input(|i| i.time);
     let keep = std::env::var_os("DADO_KEEP_UI").is_some();
     let aspect_menu = Id::new("desktop-player-aspect-menu");
-    let options_menu = Id::new("desktop-player-options-menu");
-    let mut options_open = ctx
-        .data(|data| data.get_temp(options_menu))
-        .unwrap_or(false);
     let mut aspect_open = ctx.data(|data| data.get_temp(aspect_menu)).unwrap_or(false);
     #[cfg(windows)]
     let hovering_controls = app.player_chrome
@@ -576,7 +570,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         || app.audio_menu_open
         || app.sub_menu_open
         || aspect_open
-        || options_open
     {
         app.ui_activity = time;
     }
@@ -594,7 +587,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 Rect::NOTHING
             },
         ];
-        let modal = app.audio_menu_open || app.sub_menu_open || options_open || aspect_open;
+        let modal = app.audio_menu_open || app.sub_menu_open || aspect_open;
         super::player_gestures::frame(app, &ctx, safe, live, &blocked, modal)
     } else {
         false
@@ -744,7 +737,10 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         }
         let mut action = None;
         if !live {
-            let mut controls = vec![(4, "Audio", 78.0), (3, "⚙", 44.0)];
+            let mut controls = vec![
+                (4, "Audio", 78.0),
+                (3, t("Bildformat", "Aspect ratio"), 118.0),
+            ];
             if next.is_some() {
                 controls.push((5, t("Nächste Folge", "Next episode"), 132.0));
             }
@@ -764,7 +760,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     r,
                     name,
                     a.player_button_font * 0.88 * s,
-                    i == 3 && options_open,
+                    i == 3 && aspect_open,
                 ) {
                     action = Some(i);
                 }
@@ -959,19 +955,24 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             }
         }
         Some(3) => {
-            options_open = !options_open;
+            aspect_open = !aspect_open;
             app.audio_menu_open = false;
             app.sub_menu_open = false;
-            aspect_open = false;
+            if aspect_open {
+                ctx.data_mut(|data| data.insert_temp(Id::new("desktop-aspect-focus"), true));
+            }
         }
         Some(4) => {
             app.audio_menu_open = true;
-            options_open = false;
             aspect_open = false;
         }
         Some(5) => {
             if let Some(next) = next {
-                app.play(next);
+                if app.untracked_playback {
+                    app.play_untracked(next);
+                } else {
+                    app.play(next);
+                }
             }
         }
         Some(6) => {
@@ -988,41 +989,6 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         Some(9) => cycle_live_aspect(app, &ctx),
         _ => {}
     }
-    if options_open {
-        let (selection, layer) = popup_row(
-            &ctx,
-            "options",
-            bottom,
-            s,
-            &[
-                (
-                    if live {
-                        t("Ton & Untertitel", "Audio & subtitles")
-                    } else {
-                        "Audio"
-                    },
-                    132.0,
-                    false,
-                ),
-                (t("Bildformat", "Aspect ratio"), 146.0, false),
-                (t("Beenden", "Stop"), 128.0, false),
-            ],
-        );
-        layers.push(layer);
-        if let Some(selection) = selection {
-            options_open = false;
-            match selection {
-                0 => app.audio_menu_open = true,
-                1 => aspect_open = true,
-                _ => {
-                    dismiss_menus(app, &ctx);
-                    app.stop_play();
-                    return;
-                }
-            }
-        }
-    }
-    ctx.data_mut(|data| data.insert_temp(options_menu, options_open));
     if aspect_open {
         let aspects = [
             DesktopAspect::Auto,
@@ -1040,17 +1006,36 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let (selected, layer) = popup_row(&ctx, "aspect", bottom, s, &entries);
         layers.push(layer);
         if let Some(value) = selected.and_then(|index| aspects.get(index).copied()) {
-            app.settings.desktop_aspect = value;
-            if let Some(player) = &app.player {
-                player.mpv.set_desktop_aspect(value);
-            }
-            app.save_settings_now();
+            apply_aspect(app, &ctx, value);
             aspect_open = false;
         }
     }
     ctx.data_mut(|data| data.insert_temp(aspect_menu, aspect_open));
     if app.audio_menu_open || app.sub_menu_open {
         layers.push(track_menu(app, &ctx, title, bottom, s));
+    }
+    let aspect_toast = Id::new("player-aspect-toast");
+    if let Some(until) = ctx.data(|data| data.get_temp::<f64>(aspect_toast)) {
+        if until > time {
+            ctx.request_repaint_after(Duration::from_secs_f64(until - time));
+            let size = vec2((242.0 * s).max(140.0), (54.0 * s).max(34.0));
+            let rect = Rect::from_center_size(
+                pos2(safe.center().x, safe.top() + safe.height() * 0.14),
+                size,
+            );
+            let (_, layer) = pane(&ctx, "aspect-toast", rect, s, |ui| {
+                ui.painter().text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    aspect_label(app.settings.desktop_aspect, is_english),
+                    FontId::proportional((28.0 * s).max(17.0)),
+                    Palette::get().text,
+                );
+            });
+            layers.push(layer);
+        } else {
+            ctx.data_mut(|data| data.remove::<f64>(aspect_toast));
+        }
     }
     if let Some(error) = &error {
         let rect = Rect::from_center_size(full.center(), vec2(820.0, 132.0) * s);

@@ -2,7 +2,7 @@
 
 use super::{components, focus, tokens::*};
 #[cfg(not(target_os = "ios"))]
-use crate::types::{HwDec, PlayerBackend};
+use crate::types::HwDec;
 use crate::{app::App, types::LiveFormat};
 use egui::Ui;
 
@@ -74,29 +74,6 @@ pub fn advanced(app: &mut App, ui: &mut Ui, changed: &mut bool) {
                 let r = components::chip(ui, label, app.settings.hwdec == mode);
                 if focus::clicked(ui, &r) {
                     app.settings.hwdec = mode;
-                    *changed = true;
-                }
-            }
-        });
-        ui.add_space(8.0);
-
-        // ---- player backend ----
-        components::section(ui, "Player");
-        ui.label(
-            egui::RichText::new(
-                "Standard: integrierter Player. Externe Player öffnen den Stream in \
-                             einer anderen App; „Integriert\" nutzt den eingebauten \
-                             libmpv-Player (auf dem Desktop immer aktiv).",
-            )
-            .font(reg(FS_CAP))
-            .color(muted(ui)),
-        );
-        ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            for mode in PlayerBackend::all() {
-                let r = components::chip(ui, mode.label(), app.settings.player_backend == mode);
-                if focus::clicked(ui, &r) {
-                    app.settings.player_backend = mode;
                     *changed = true;
                 }
             }

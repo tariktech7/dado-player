@@ -1,0 +1,6 @@
+LibVLC for Android 3.6.5
+Copyright VideoLAN and the VLC authors
+This package includes the upstream LibVLC for Android runtime.
+Upstream source and notices: https://code.videolan.org/videolan/vlc-android
+Artifact: https://repo.maven.apache.org/maven2/org/videolan/android/libvlc-all/3.6.5/
+GNU Lesser General Public License 2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html

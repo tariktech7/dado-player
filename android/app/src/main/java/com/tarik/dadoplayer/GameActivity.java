@@ -4,7 +4,6 @@ import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
@@ -48,6 +47,12 @@ import com.google.androidgamesdk.gametextinput.State;
  * </ul>
  */
 public class GameActivity extends com.google.androidgamesdk.GameActivity {
+
+    /** Load VideoLAN's JNI entry points through the app class loader. */
+    public static boolean prepareEmbeddedVlc() {
+        System.loadLibrary("vlcjni");
+        return org.videolan.libvlc.LibVLC.version() != null;
+    }
 
     /**
      * Keyboard type for the field Rust currently has focused.
@@ -132,41 +137,6 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
         return PlayerUpdate.status;
     }
 
-    // ---- external players -------------------------------------------------
-    // Wire codes must match PlayerBackend::android_code() in src/types.rs.
-    private static final int BACKEND_MX = 0;
-    private static final int BACKEND_VLC = 1;
-    private static final int BACKEND_SYSTEM = 2;
-    private static final int BACKEND_MPV = 3;
-    private static final int BACKEND_MX_INTEGRATED = 4;
-    private static final int BACKEND_MX_FALLBACK = 5;
-
-    /** MX Player free / Pro and VLC package ids. Declared in <queries>. */
-    private static final String MX_FREE = "com.mxtech.videoplayer.ad";
-    private static final String MX_PRO = "com.mxtech.videoplayer.pro";
-    private static final String VLC = "org.videolan.vlc";
-
-    /** Status codes returned to Rust (never a URL — those carry credentials). */
-    private static final int EXTERNAL_OK = 0;
-    private static final int EXTERNAL_NO_APP = 1;
-    private static final int EXTERNAL_ERROR = 2;
-
-    /**
-     * MIME types tried when handing a URL to another player. Panels disagree
-     * about live and series formats: some expose {@code .ts}, some only
-     * {@code .m3u8}, and a few declare no MIME type at all. A single
-     * {@code video/*} intent is not enough — an {@code application/vnd.apple.mpegurl}
-     * filter does not match a {@code video/*} intent. {@code null} means a bare
-     * data URI with no type, which catches OEM players that filter on scheme.
-     */
-    private static final String[] MIME_CANDIDATES = {
-        "video/*",
-        "application/vnd.apple.mpegurl",
-        "application/x-mpegURL",
-        "application/octet-stream",
-        null
-    };
-
     /**
      * Diagnostic tag for the back key. Back is dead on this app on the emulator
      * and this log is how the cause gets decided: whether the key reaches
@@ -221,151 +191,6 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
         if (self != null) {
             self.setImeEditorInfoFields(inputType, 0, IME_OPTIONS);
         }
-    }
-
-    /**
-     * Open a stream in a separate video player app.
-     *
-     * <p>Called from Rust ({@code jni_bridge::open_external}) on the
-     * {@code android_main} thread. {@code Activity.startActivity} ends in a
-     * binder transaction and is safe from that thread; the new activity's
-     * lifecycle still runs on the UI thread. This must stay synchronous so the
-     * status code reaches Rust — a posted runnable cannot report a missing app.
-     *
-     * <p>Only a status code crosses back over JNI. Provider URLs embed
-     * username/password in the path, so letting a Java exception message (which
-     * often contains the intent's data URI) reach Rust would risk printing
-     * credentials in the app's error box.
-     *
-     * @return 0 started, 1 no matching app installed, 2 other failure
-     */
-    public static int openExternalPlayer(String url, String title, int backend, long position) {
-        final GameActivity self = sSelf;
-        if (self == null || self.isFinishing() || self.isDestroyed()
-                || url == null || url.length() == 0) {
-            return EXTERNAL_ERROR;
-        }
-        final String label = (title == null || title.length() == 0) ? "Video" : title;
-        try {
-            final Uri uri = Uri.parse(url);
-            // Explicit packages are visible through <queries><package> even on
-            // Android 11+, so try them FIRST. A generic resolveActivity() on a
-            // "video/*" + http URI is not a reliable canary: some player
-            // filters only declare the HLS MIME type, others only a scheme.
-            switch (backend) {
-                case BACKEND_MX:
-                    // Free build first, Pro second. Some devices ship only one,
-                    // and the two are not interchangeable package names.
-                    if (startWithPackage(self, uri, label, MX_FREE, position)
-                            || startWithPackage(self, uri, label, MX_PRO, position)) {
-                        return EXTERNAL_OK;
-                    }
-                    // Explicitly chosen and not installed. Report NO_APP so Rust
-                    // falls back to the built-in player. Do NOT fall through to
-                    // the generic chooser: the user asked for MX Player, and on
-                    // the QA emulator "video/*" resolved to Google Photos, which
-                    // opened a black screen instead of the stream.
-                    return EXTERNAL_NO_APP;
-                case BACKEND_VLC:
-                    if (startWithPackage(self, uri, label, VLC, position)) {
-                        return EXTERNAL_OK;
-                    }
-                    return EXTERNAL_NO_APP;
-                case BACKEND_SYSTEM:
-                default:
-                    // Only "System-Auswahl" is supposed to show a chooser.
-                    return self.startChooser(uri, label);
-            }
-        } catch (ActivityNotFoundException e) {
-            return EXTERNAL_NO_APP;
-        } catch (Exception e) {
-            // Never log the exception itself: its message can contain the
-            // intent data URI, and provider URLs carry username/password in
-            // the path. Only the numeric backend is safe to print.
-            Log.w(TAG, "openExternalPlayer failed (backend=" + backend + ")");
-            return EXTERNAL_ERROR;
-        }
-    }
-
-    /** Build one ACTION_VIEW intent for a URL / MIME combination. */
-    private static Intent buildViewIntent(Uri uri, String mime, String label) {
-        Intent i = new Intent(Intent.ACTION_VIEW);
-        if (mime == null) {
-            i.setData(uri);
-        } else {
-            i.setDataAndType(uri, mime);
-        }
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        // MX Player and VLC both read the standard title extra; harmless for
-        // players that ignore it.
-        i.putExtra(Intent.EXTRA_TITLE, label);
-        i.putExtra("title", label);
-        return i;
-    }
-
-    /**
-     * Try one explicit player package with every plausible MIME type.
-     * A package that is not installed (or hidden by package visibility) makes
-     * startActivity throw; that is not an error, just a reason to try the next.
-     */
-    private static boolean startWithPackage(
-            GameActivity self, Uri uri, String label, String pkg, long position) {
-        for (String mime : MIME_CANDIDATES) {
-            Intent i = buildViewIntent(uri, mime, label);
-            i.setPackage(pkg);
-            i.putExtra("return_result", true);
-            if (pkg.equals(VLC)) { i.putExtra("position", position); }
-            else {
-                i.putExtra("position", (int)Math.min(Integer.MAX_VALUE, position));
-                i.putExtra("secure_uri", true);
-                i.setClassName(pkg, pkg.equals(MX_FREE) ? "com.mxtech.videoplayer.ad.ActivityScreen" : "com.mxtech.videoplayer.ActivityScreen");
-            }
-            try {
-                self.startActivityForResult(i, REQUEST_PLAYBACK);
-                return true;
-            } catch (ActivityNotFoundException e) {
-                // Try the next MIME type, then the next package.
-            }
-        }
-        return false;
-    }
-
-    private static final int REQUEST_PLAYBACK = 7207;
-    private static native void nativePlaybackResult(long position, long duration, boolean completed);
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_PLAYBACK || data == null || resultCode == RESULT_CANCELED) return;
-        Bundle extras = data.getExtras();
-        if (extras == null) return;
-        Object position = extras.containsKey("extra_position") ? extras.get("extra_position") : extras.get("position");
-        Object duration = extras.containsKey("extra_duration") ? extras.get("extra_duration") : extras.get("duration");
-        boolean completed = "playback_completion".equals(data.getStringExtra("end_by"));
-        if (!(position instanceof Number) && !completed) return;
-        nativePlaybackResult(position instanceof Number ? ((Number)position).longValue() : 0,
-                duration instanceof Number ? ((Number)duration).longValue() : 0, completed);
-    }
-
-    /** Let Android pick among every visible handler; NO_APP when there is none. */
-    private int startChooser(Uri uri, String label) {
-        for (String mime : MIME_CANDIDATES) {
-            Intent base = buildViewIntent(uri, mime, label);
-            ResolveInfo resolved = getPackageManager().resolveActivity(base, 0);
-            if (resolved == null) {
-                continue;
-            }
-            Intent chooser = Intent.createChooser(base, label);
-            // A chooser started from an Activity context needs no NEW_TASK, but
-            // adding it covers OEMs that route through a resolver activity
-            // with a cleared task affinity.
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                startActivity(chooser);
-                return EXTERNAL_OK;
-            } catch (ActivityNotFoundException e) {
-                return EXTERNAL_NO_APP;
-            }
-        }
-        return EXTERNAL_NO_APP;
     }
 
     /**

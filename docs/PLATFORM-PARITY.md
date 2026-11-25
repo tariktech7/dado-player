@@ -18,9 +18,9 @@ eine eigene GitHub-Veröffentlichung wie `v0.8.0-beta.2`. Nach Änderungen
 | Seitenleiste (Windows und Samsung) | Öffnet sich beim Überfahren mit der Maus. Ohne Auswahl klappt sie 700 ms nach dem Verlassen ein. Ein Klick auf einen Menüpunkt lässt sie geöffnet. |
 | Player-Overlay (Windows und Samsung) | Abgesetzte, abgerundete Playerleisten mit Bild hinter der Oberfläche, gemeinsamen Farben und vier Elementen in der Hauptleiste. Ton, Untertitel, Bildformat und Beenden stehen unter Optionen. Windows behält die native Vollbild- und Lautstärkesteuerung. |
 | Live-Vorschau | 712 Einheiten bei 1920 × 1080, auf schmaleren oder kürzeren Flächen entsprechend begrenzt. 16:9-Fläche mit vollständigem Streambild. Programmdetails bleiben separat scrollbar. |
-| Favoritenstatus | Gefüllter Stern für gemerkte Inhalte, leerer Stern für andere. In Live-Zeilen, Film- und Serienpostern, Details und Player anzeigen. |
+| Favoritenstatus | Gefüllter Stern für gemerkte Inhalte, leerer Stern für andere. In Live-Zeilen, Film- und Serienpostern und im Player anzeigen. Titeldetails verwenden ein Herz. |
 | Liste aktualisieren | Sender, Filme und Serien des aktiven Profils neu laden. Bei einem Teilfehler bleiben die bisherigen Einträge des betroffenen Bereichs verfügbar. |
-| Serien | Staffelzeile horizontal, Folgen als Folge 1 usw.; letzte Staffel/Folge vorpositionieren. |
+| Serien | Poster im Hintergrund, horizontale Reihen für Staffeln und Episodenvorschauen. Abspielen folgt dem Wiedergabefortschritt. Zufällige Folge speichert keinen Fortschritt oder Verlauf. |
 | Fortsetzen | Startseite und Fortsetzen zeigen die zuletzt angesehene Folge pro Serie. Beim Starten bei höchstens 60 Sekunden Rest zur nächsten Folge wechseln. Fertige Filme beginnen erneut. Fehlende Episodendaten werden asynchron geladen. |
 | Farbtasten | Rot/F1 öffnet die PIN-Verwaltung, Grün/F2 wechselt zu Live-TV, Gelb/F3 ändert den Favoritenstatus und Blau/F4 öffnet Einstellungen oder Player-Optionen. Die Zurück-Taste steuert die Navigation. |
 | Player | Beide Layouts verwenden denselben Player. Live-TV zeigt Sender und Programm in einer unteren Leiste. OK führt zur Senderliste und zum laufenden Sender. Filme und Folgen haben Play/Pause neben der Timeline und Direktzugriff auf Ton und vorhandene nächste Folgen. Links/Rechts spult in Zehn-Sekunden-Schritten. Hoch/Runter fokussiert bei Filmen und Folgen zuerst Play/Pause. Bei Live-TV schaltet Hoch/Runter den Sender und 0 ruft den vorherigen Sender auf. |
@@ -70,7 +70,7 @@ VLC-Decoder für Dateicontainer; ein AVPlayer-Fehler kann einmal auf VLC wechsel
 Der optionale Apple-Player erzwingt AVPlayer und dessen Formatgrenzen.
 Samsung verwendet im Automatikmodus AVPlay mit einmaliger HTML-Alternative bei
 Fehlern. Diese Alternative erweitert nicht die Hardware-Codecs des Fernsehers.
-Decoderwahl, externe Android-Apps und Netzwerkexperimente stehen im Expertenmodus.
+Windows und Android bieten im Player-Untermenü MPV und eingebettetes VLC. Auf Samsung stehen AVPlay und HTML5 zur Wahl.
 Filme/Folgen behalten die tatsächliche Anbieter-Dateiendung auf allen Plattformen.
 
 Samsung: Einstellungen haben eigene Fokuszonen pro Bereich. Links/Rechts bewegt

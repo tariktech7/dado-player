@@ -115,7 +115,7 @@ export function moveFocus(
   const horizontal = direction === "ArrowLeft" || direction === "ArrowRight",
     sign = direction === "ArrowLeft" || direction === "ArrowUp" ? -1 : 1;
   const rail = horizontal
-    ? current.closest<HTMLElement>(".card-rail,.season-buttons,.kind-tabs")
+    ? current.closest<HTMLElement>(".card-rail,.series-rail,.kind-tabs")
     : null;
   if (rail) {
     let next: HTMLElement | undefined;
@@ -132,13 +132,14 @@ export function moveFocus(
       scrollFocused(next);
       return;
     }
+    if (rail.matches(".series-rail")) return;
   }
   const grid = current.closest<HTMLElement>("[data-focus-grid]");
   if (grid) {
     const cols = Number(grid.dataset.focusGrid),
       index = Number(current.dataset.gridIndex),
       next = index + sign * (horizontal ? 1 : cols);
-    if (!horizontal || Math.floor(next / cols) === Math.floor(index / cols)) {
+    if (next >= 0 && (!horizontal || Math.floor(next / cols) === Math.floor(index / cols))) {
       const target = grid.querySelector<HTMLElement>(
         `[data-grid-index="${next}"]`,
       );
@@ -150,7 +151,7 @@ export function moveFocus(
     }
     // At the first/last row stay in the grid. Never use animated screen
     // coordinates to guess the next row while the current row is moving.
-    if(!horizontal)return;
+    if (!horizontal && sign > 0) return;
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
   const homeRow = !horizontal && current.closest(".home-primary > section");
@@ -169,49 +170,68 @@ export function moveFocus(
     }
     return;
   }
-  if(!horizontal && current.parentElement?.matches('.category-list,.episode-list,.channel-list,.home-favorites .favorite-programs')) {
+  if(!horizontal && current.parentElement?.matches('.category-list,.channel-list,.home-favorites .favorite-programs')) {
     const sibling=sign<0?current.previousElementSibling:current.nextElementSibling;
     if(sibling instanceof HTMLElement && sibling.matches(selector)) {
       sibling.focus({preventScroll:true});scrollFocused(sibling);return;
     }
   }
-  const settingsTiles = current.closest<HTMLElement>(".settings-sections");
-  if (horizontal && zone && !settingsTiles && !current.closest(".modal,.fullscreen")) {
-    const scope = zone.closest<HTMLElement>("[data-focus-scope]")!;
-    const zones = [
-      ...scope.querySelectorAll<HTMLElement>("[data-focus-zone]"),
-    ].filter((z) => focusables(z).length > 0);
-    const next = zones[zones.indexOf(zone) + sign],
-      target = next && zoneTarget(next);
-    if (target) {
-      target.focus({ preventScroll: true });
-      rememberFocus(target);
-      scrollFocused(target);
-      return;
-    }
-  }
-  const a = current.getBoundingClientRect(),ax=a.x+a.width/2,ay=a.y+a.height/2;
-  const candidates = focusables(settingsTiles || (!horizontal && zone ? zone : root))
-    .filter(
-      (el) => el !== current && (horizontal || !zone || zone.contains(el)),
-    )
-    .map((el) => {
-      const b = el.getBoundingClientRect(),
-        bx = b.x + b.width / 2,
-        by = b.y + b.height / 2;
-      const primary = ((horizontal ? bx : by) - (horizontal ? ax : ay)) * sign;
-      const cross = Math.abs((horizontal ? by : bx) - (horizontal ? ay : ax));
-      return { el, primary, score: primary + cross * 3 };
-    })
-    .filter((c) => c.primary > 2)
-    .sort((a, b) => a.score - b.score);
-  const target = candidates[0]?.el;
-  if (target) {
+  const scope = zone?.closest<HTMLElement>("[data-focus-scope]");
+  const a = current.getBoundingClientRect();
+  const move = (target: HTMLElement | undefined) => {
+    if (!target) return false;
     target.focus({ preventScroll: true });
     rememberFocus(target);
     scrollFocused(target);
-  } else if (settingsTiles && horizontal && sign < 0) {
-    focusNavigation();
+    return true;
+  };
+  const nearest = (controls: HTMLElement[], inRow = false) => {
+    let best: HTMLElement | undefined;
+    let bestScore = Infinity;
+    for (const el of controls) {
+      if (el === current) continue;
+      const b = el.getBoundingClientRect();
+      const dx = (b.left + b.right - a.left - a.right) / 2;
+      const dy = (b.top + b.bottom - a.top - a.bottom) / 2;
+      const primary = (horizontal ? dx : dy) * sign;
+      if (primary <= 2) continue;
+      const rowOverlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      const sameRow = rowOverlap >= Math.min(a.height, b.height) / 2;
+      if ((inRow && !sameRow) || (!horizontal && sameRow)) continue;
+      const overlap = horizontal
+        ? rowOverlap
+        : Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const score = primary + Math.abs(horizontal ? dy : dx) * (overlap > 0 ? 1 : 3);
+      if (score < bestScore) {
+        best = el;
+        bestScore = score;
+      }
+    }
+    return best;
+  };
+  const local = zone && root.contains(zone) ? zone : root;
+  if (move(nearest(focusables(local).filter(el => local === root || el.closest("[data-focus-zone]") === zone), horizontal))) return;
+  if (!scope || !zone || !root.contains(scope)) return;
+
+  // The classic header and dashboard action row sit above/below the content.
+  // Left/Right must never jump up or down to either of them.
+  const stacked = ".classic-header,.classic-primary,.classic-actions";
+  if (horizontal && !zone.matches(stacked)) {
+    const zones = [...scope.querySelectorAll<HTMLElement>("[data-focus-zone]")]
+      .filter(z => z === zone || (!z.matches(stacked) && !z.contains(zone) && !zone.contains(z)));
+    for (let index = zones.indexOf(zone) + sign; zones[index]; index += sign) {
+      if (move(zoneTarget(zones[index]))) return;
+    }
+  } else if (!horizontal) {
+    const destination = zone.matches(".classic-header")
+      ? (sign > 0 ? ".classic-primary,[data-focus-zone='categories'],main" : "")
+      : zone.matches(".classic-primary")
+        ? (sign > 0 ? ".classic-actions" : ".classic-header")
+        : zone.matches(".classic-actions")
+          ? (sign < 0 ? ".classic-primary" : "")
+          : (sign < 0 ? ".classic-header" : "");
+    const section = destination && scope.querySelector<HTMLElement>(destination);
+    if (section) move(nearest(focusables(section)));
   }
 }
 let pendingFocus:HTMLElement|null=null, focusFrame=0;

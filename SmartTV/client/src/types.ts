@@ -25,6 +25,7 @@ export interface Item {
   season?: number;
   episode?: number;
   seriesId?: string;
+  preview?: string;
   number?: number;
   added?: number;
 }

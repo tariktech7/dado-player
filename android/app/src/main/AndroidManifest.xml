@@ -17,32 +17,6 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!--
-      Android 11+ (API 30) hides other apps unless they are declared here.
-      Without these entries PackageManager.resolveActivity() returns null even
-      when MX Player/VLC IS installed, so the default external player would
-      always fail with "nicht installiert" and silently fall back to libmpv.
-      The generic video/* intent covers the system chooser and other players.
-    -->
-        <queries>
-            <package android:name="com.mxtech.videoplayer.ad" />
-            <package android:name="com.mxtech.videoplayer.pro" />
-            <package android:name="org.videolan.vlc" />
-            <intent>
-                <action android:name="android.intent.action.VIEW" />
-                <data android:mimeType="video/*" />
-            </intent>
-        </queries>
-
-        <!-- Additional query for MX Player integration capabilities -->
-        <queries>
-            <intent>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="video/*" />
-            </intent>
-        </queries>
-
     <!-- Profiles include provider credentials; do not expose app-private data to Android backup/transfer. -->
     <application
         android:allowBackup="false"

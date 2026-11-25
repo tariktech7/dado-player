@@ -128,8 +128,7 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
     // player uses a native child window instead.
     #[cfg(target_os = "android")]
     {
-        ui.painter()
-            .add(crate::platform::android::render::shape(full));
+        app.paint_android_video(ui, full);
         if is_radio {
             draw_radio_card(ui, video, &title_for_radio(app));
         }
@@ -179,32 +178,6 @@ fn body(app: &mut App, ui: &mut Ui, l: &Layout) {
             reg(FS_LABEL),
             Color32::from_rgb(0xE5, 0x9B, 0x9B),
         );
-    }
-
-    // "MX Player ist nicht installiert, integrierter Player läuft" - a status
-    // message, not a failure. It fades out after a few seconds instead of
-    // becoming permanent furniture over the picture.
-    if let Some((msg, at)) = app.player_note.clone() {
-        if at.elapsed().as_secs_f64() < 6.0 {
-            let g = components::fit(ui, &msg, reg(FS_CAP), Color32::WHITE, full.width() - 80.0);
-            let box_r = Rect::from_center_size(
-                pos2(full.center().x, full.bottom() - bot_h - 36.0),
-                g.size() + vec2(36.0, 20.0),
-            );
-            ui.painter()
-                .rect_filled(box_r, Rounding::same(12.0), Color32::from_black_alpha(200));
-            ui.painter().galley(
-                pos2(
-                    box_r.center().x - g.size().x * 0.5,
-                    box_r.center().y - g.size().y * 0.5,
-                ),
-                g,
-                Color32::WHITE,
-            );
-            ctx.request_repaint_after(std::time::Duration::from_millis(250));
-        } else {
-            app.player_note = None;
-        }
     }
 
     if !show_ui {

@@ -38,6 +38,8 @@ pub mod android;
 // `pub use` block below).
 #[cfg(any(target_os = "ios", feature = "ios-check"))]
 pub mod ios;
+#[cfg(any(target_os = "android", target_os = "windows"))]
+pub(crate) mod vlc;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
@@ -93,29 +95,6 @@ pub fn set_input_type(_input_type: i32) {
     #[cfg(target_os = "android")]
     {
         android::insets::set_input_type(_input_type);
-    }
-}
-
-/// Hand the stream to an external video player (MX Player / VLC / chooser).
-///
-/// Only Android has an `ACTION_VIEW` resolver; on desktop the caller falls
-/// back to the built-in libmpv player. The error string is deliberately
-/// generic: provider URLs carry username/password in the path, and nothing
-/// returned from here may echo the URL into the UI.
-pub fn open_external(
-    _url: &str,
-    _title: &str,
-    _backend: crate::types::PlayerBackend,
-    _key: &str,
-    _position: u64,
-) -> Result<(), String> {
-    #[cfg(target_os = "android")]
-    {
-        android::jni_bridge::open_external(_url, _title, _backend, _key, _position)
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        Err("Externe Player sind nur auf Android verfügbar.".to_string())
     }
 }
 

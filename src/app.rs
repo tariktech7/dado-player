@@ -1,6 +1,6 @@
 use crate::client;
-use crate::mpv::Mpv;
 use crate::platform::VideoSurface;
+use crate::playback::Playback;
 use crate::store;
 use crate::types::*;
 use crate::ui;
@@ -74,6 +74,7 @@ pub enum AppEvent {
     Epg(u64, u32, Result<Vec<EpgEntry>, String>),
     SeriesInfo(u64, u32, Result<Vec<Episode>, String>),
     Image(u64, String, Result<egui::ColorImage, String>),
+    EpisodeFrame(u64, String, Option<egui::ColorImage>),
 }
 
 /// Wake the reactive UI when network/decode work finishes, including after the
@@ -152,7 +153,7 @@ impl ImageState {
 
 pub struct Player {
     /// Declared before `surface` so mpv is torn down before its window.
-    pub mpv: Mpv,
+    pub(crate) mpv: Playback,
     pub surface: VideoSurface,
     pub current_key: String,
     pub position: f64,
@@ -268,6 +269,7 @@ pub struct App {
     pub settings_return_tile: Option<usize>,
 
     pub images: ImageState,
+    episode_frame_request: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     pub connect: crate::connect::DeviceClient,
     pub epg: HashMap<u32, Vec<EpgEntry>>,
     epg_order: VecDeque<u32>,
@@ -288,7 +290,9 @@ pub struct App {
     /// Set when a watched movie/series is clicked; the UI renders the modal
     /// before anything actually starts. `None` = no dialog is open.
     pub pending_resume: Option<(String, PlayItem, u64)>,
+    catalog_resume_series: Option<u32>,
     pending_history_key: Option<String>,
+    pub(crate) untracked_playback: bool,
     /// Channel currently shown in the inline preview (list stays visible).
     pub preview: Option<PlayItem>,
     /// Channel ids in the order the Live list currently shows them (for ←/→).
@@ -324,12 +328,9 @@ pub struct App {
     #[cfg(target_os = "windows")]
     pub(crate) desktop_overlay: crate::platform::windows::player_overlay::Overlay,
     pub player: Option<Player>,
+    #[cfg(target_os = "android")]
+    parked_mpv: Option<Playback>,
     pub player_error: Option<String>,
-    /// Short-lived status line for the player, e.g. "MX Player ist nicht
-    /// installiert - integrierter Player". Kept apart from `player_error` on
-    /// purpose: falling back to the built-in player is not a playback failure,
-    /// and an error banner over a perfectly fine picture is a bug report.
-    pub player_note: Option<(String, std::time::Instant)>,
     main_hwnd: isize,
     pub fullscreen: bool,
     pub volume: i64,
@@ -492,6 +493,7 @@ impl App {
             settings_section: None,
             settings_return_tile: None,
             images: ImageState::default(),
+            episode_frame_request: None,
             connect: crate::connect::DeviceClient::default(),
             epg: HashMap::new(),
             epg_order: VecDeque::new(),
@@ -526,8 +528,9 @@ impl App {
             #[cfg(target_os = "windows")]
             desktop_overlay: Default::default(),
             player: None,
+            #[cfg(target_os = "android")]
+            parked_mpv: None,
             player_error: None,
-            player_note: None,
             main_hwnd: 0,
             fullscreen: false,
             volume: 100,
@@ -536,7 +539,9 @@ impl App {
             sub_menu_open: false,
             frame_count: 0,
             pending_resume: None,
+            catalog_resume_series: None,
             pending_history_key: None,
+            untracked_playback: false,
             palette_open: false,
             palette_q: String::new(),
             palette_sel: 0,
@@ -569,17 +574,19 @@ impl App {
             }
             if app.view == View::Series {
                 app.selected_series = Some(app.library.series.first().map(|s| s.id).unwrap_or(0));
+                let demo_url = std::env::var("IPTV_TEST_URL").unwrap_or_default();
                 app.series_episodes.insert(
                     2000,
                     (1..=6)
                         .map(|i| Episode {
                             id: 9000 + i,
                             series_id: 2000,
+                            preview: String::new(),
                             season: if i <= 3 { 1 } else { 2 },
                             episode: if i <= 3 { i } else { i - 3 },
                             title: format!("Demo Episode {}", i),
                             container_extension: "mkv".to_string(),
-                            stream_url: String::new(),
+                            stream_url: demo_url.clone(),
                         })
                         .collect(),
                 );
@@ -592,11 +599,12 @@ impl App {
                     vec![Episode {
                         id: 9101,
                         series_id: 2001,
+                        preview: String::new(),
                         season: 1,
                         episode: 1,
                         title: "Pilot".to_string(),
                         container_extension: "mkv".to_string(),
-                        stream_url: String::new(),
+                        stream_url: demo_url.clone(),
                     }],
                 );
             }
@@ -703,6 +711,14 @@ impl App {
                 self.favorites.insert(format!("vod:{}", movie.id));
             }
         }
+    }
+
+    pub(crate) fn shared_remote_navigation(&self) -> bool {
+        self.parental.open
+            || self.tv
+            || (self.active_profile.is_some()
+                && !self.palette_open
+                && (self.view != View::Settings || self.settings_section.is_none()))
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
@@ -837,16 +853,6 @@ impl App {
             // from the UI thread and an idle screen never schedules a frame, so
             // without this the request would wait for an unrelated touch.
             jni_bridge::bind_context(ctx);
-            if let Some((key, position, duration)) = jni_bridge::take_playback_result() {
-                if self.history.iter().any(|h| h.key == key) && !key.starts_with("live:") {
-                    self.set_progress(&key, position);
-                    if duration > 0 {
-                        self.durations.insert(key, duration);
-                    }
-                    self.save_user_data();
-                }
-            }
-
             // The paint callback creates mpv's render context at the *end* of
             // a frame and wakes this loop; loadfile is only legal afterwards.
             self.flush_android_load();
@@ -908,17 +914,29 @@ impl App {
 
         // Poll the player and keep playback progress + stream metadata in memory.
         if let Some(pl) = &mut self.player {
+            #[cfg(any(target_os = "android", target_os = "windows"))]
+            if (self.current_play.is_some() || self.preview.is_some()) && pl.mpv.error() {
+                self.player_error = Some(
+                    self.settings
+                        .language
+                        .text(
+                            "VLC konnte diesen Stream nicht abspielen.",
+                            "VLC could not play this stream.",
+                        )
+                        .to_owned(),
+                );
+            }
             let pos = pl.mpv.position();
             let dur = pl.mpv.duration();
             let paused = pl.mpv.paused();
             let key = pl.current_key.clone();
             pl.position = pos;
             pl.duration = dur;
-            if !key.is_empty() && dur > 0.0 {
+            if !self.untracked_playback && !key.is_empty() && dur > 0.0 {
                 self.durations.insert(key.clone(), dur as u64);
             }
             pl.paused = paused;
-            if !key.is_empty() && pos > 1.0 {
+            if !self.untracked_playback && !key.is_empty() && pos > 1.0 {
                 self.progress.insert(key, pos as u64);
             }
 
@@ -990,10 +1008,17 @@ impl App {
             self.play_test_stream();
         }
 
-        // ---- D-pad / TV-remote focus (touch UI only) ----
-        // Drain unconditionally so the native key queue never backs up on the
-        // desktop UI, where there is nothing to focus.
+        // Hardware and platform remote keys share the same menu navigation.
         let mut keys = crate::platform::drain_remote_keys();
+        #[cfg(windows)]
+        keys.extend(ctx.data_mut(|data| {
+            let id = egui::Id::new("desktop-remote-keys");
+            let keys = data
+                .get_temp::<Vec<crate::platform::RemoteKey>>(id)
+                .unwrap_or_default();
+            data.remove::<Vec<crate::platform::RemoteKey>>(id);
+            keys
+        }));
         if !crate::platform::text_focus() && !ctx.wants_keyboard_input() {
             keys.retain(|key| {
                 use crate::platform::RemoteKey;
@@ -1160,8 +1185,8 @@ impl App {
             self.pending_resume.as_ref().map(|(key, _, _)| key.clone());
         let returning_to_catalog = self.desktop_return_item.is_some() && self.view != View::Player;
         let mobile = cfg!(any(target_os = "android", target_os = "ios"))
-            || self.tv
-            || (cfg!(windows) && self.view == View::Player);
+            || self.shared_remote_navigation()
+            || (cfg!(windows) && (self.view == View::Player || self.parental.open));
         if mobile {
             // Screen fingerprint: a new screen restarts focus at its first
             // control. View is Copy, so `as u64` is legal.
@@ -1180,8 +1205,10 @@ impl App {
             let pointer_used = ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down());
             let in_shell = self.active_profile.is_some() && self.view != View::Player;
             let modal = (!in_shell && self.pending_delete.is_some())
+                || self.parental.open
+                || self.pending_resume.is_some()
                 || self.description_open.is_some()
-                || (self.tv && ui::desktop::exit_prompt(ctx));
+                || (self.shared_remote_navigation() && ui::desktop::exit_prompt(ctx));
 
             // PlayPause is a global media key. On the player it must only toggle
             // pause, not also select the focused control: focus restarts at idx 0
@@ -1213,7 +1240,7 @@ impl App {
             // Spatial focus is for the 10-foot *browse* shell. Login stays
             // linear (a form with no horizontal neighbours) and so does the
             // player (one row of transport controls).
-            let spatial = in_player || (self.tv && self.active_profile.is_some());
+            let spatial = in_player || self.shared_remote_navigation();
             crate::ui::mobile::focus::begin(&focus_keys, screen, pointer_used, modal, spatial);
 
             if in_player && play_pause {
@@ -1315,13 +1342,12 @@ impl App {
     }
 
     fn draw(&mut self, ctx: &Context) {
+        if !matches!(self.catalog_detail(), Some((true, _))) {
+            self.cancel_episode_frame();
+        }
         #[cfg(target_os = "windows")]
         if self.parental.open || self.view != View::Player || self.palette_open {
             self.desktop_overlay.hide();
-        }
-        if self.parental.open {
-            crate::ui::parental::show(self, ctx);
-            return;
         }
         #[cfg(target_os = "windows")]
         if crate::licensing::enabled() && !crate::licensing::allowed() {
@@ -1340,7 +1366,24 @@ impl App {
         }
 
         crate::ui::desktop::show(self, ctx);
+        if self.parental.open {
+            crate::ui::parental::show(self, ctx);
+            return;
+        }
 
+        if let Some(series_id) = self.catalog_resume_series {
+            if self.catalog_detail() != Some((true, series_id)) || self.series_failed(series_id) {
+                self.catalog_resume_series = None;
+            } else if self.series_episodes_for(series_id).is_some() {
+                self.catalog_resume_series = None;
+                if let Some((episode, position)) = self.series_resume_target(series_id) {
+                    if position >= crate::release_info::RESUME_MINIMUM_SECONDS {
+                        self.ask_resume(&format!("ep:{series_id}:{}", episode.id));
+                    }
+                }
+            }
+        }
+        ui::continue_watching::resume_dialog(self, ctx);
         ui::library::description_dialog(self, ctx);
         ui::palette::show(self, ctx);
     }
@@ -1504,6 +1547,19 @@ impl App {
                     }
                 }
             }
+            AppEvent::EpisodeFrame(generation, key, result) => {
+                let cancelled = self
+                    .episode_frame_request
+                    .take()
+                    .is_none_or(|token| token.load(std::sync::atomic::Ordering::Relaxed));
+                if !cancelled {
+                    self.handle_event(AppEvent::Image(
+                        generation,
+                        key,
+                        result.ok_or_else(|| "No episode frame".into()),
+                    ));
+                }
+            }
             AppEvent::Image(generation, key, res) => {
                 if generation != self.login_generation {
                     return;
@@ -1578,6 +1634,8 @@ impl App {
         self.description_open = None;
         self.selected_movie = None;
         self.catalog_return_poster = None;
+        self.pending_resume = None;
+        self.catalog_resume_series = None;
         self.live_selected = None;
         self.previous_live = None;
         self.selected_series = None;
@@ -1752,6 +1810,8 @@ impl App {
             self.selected_movie = None;
         }
         self.catalog_focus_play = false;
+        self.catalog_resume_series = None;
+        self.cancel_episode_frame();
         true
     }
 
@@ -1780,6 +1840,9 @@ impl App {
         // dialog, which reads as "confirm".
         if self.pending_delete.is_some() {
             self.pending_delete = None;
+            return true;
+        }
+        if self.pending_resume.take().is_some() {
             return true;
         }
         if self.close_settings_section() {
@@ -1998,9 +2061,8 @@ impl App {
         let Some(pl) = &mut self.player else {
             return;
         };
-        pl.mpv.load(&url);
-        if resume > 0.0 {
-            pl.mpv.seek_absolute(resume);
+        if !pl.mpv.is_vlc() {
+            pl.mpv.load_after_render_ready(&url, resume);
         }
         eprintln!("[player] loadfile (render context ready)");
     }
@@ -2009,6 +2071,19 @@ impl App {
         if !self.parental_gate(&item, false) {
             return;
         }
+        self.play_authorized(item, false);
+    }
+
+    pub(crate) fn play_untracked(&mut self, item: PlayItem) {
+        if !self.parental_gate(&item, false) {
+            self.parental.untracked = true;
+            return;
+        }
+        self.play_authorized(item, true);
+    }
+
+    fn play_authorized(&mut self, item: PlayItem, untracked: bool) {
+        self.cancel_episode_frame();
         self.pending_history_key = None;
         #[cfg(target_os = "windows")]
         if crate::licensing::enabled() && !crate::licensing::allowed() {
@@ -2017,9 +2092,6 @@ impl App {
         }
         self.remember_live(&item);
         self.preview = None;
-        // A note from the previous item ("MX Player fehlt") must not survive
-        // into the next one.
-        self.player_note = None;
         if self.view != View::Player {
             self.previous_view = self.view;
         }
@@ -2036,48 +2108,17 @@ impl App {
             let _ = store::save_profiles(&self.profiles);
         }
 
-        let resume = if item.kind != PlayKind::Live {
-            self.get_progress(&item.progress_key)
+        let position = self.get_progress(&item.progress_key);
+        let resume = if !untracked
+            && item.kind != PlayKind::Live
+            && position >= crate::release_info::RESUME_MINIMUM_SECONDS
+        {
+            position
         } else {
             0
         };
 
-        // ---- external player (Android) ----
-        // Automatic mode uses our integrated player. Expert mode may delegate
-        // to an explicitly selected Android app. When another app takes over,
-        // do not switch to our own player view: the user
-        // returns with BACK and expects the list where they left it, not a
-        // black internal player with a stale stream.
-        #[cfg(target_os = "android")]
-        {
-            let backend = self.settings.effective_player_backend();
-            // Try external player first, but not for integrated capabilities
-            if backend.is_external() && backend != crate::types::PlayerBackend::MxPlayerIntegrated {
-                match crate::platform::open_external(
-                    &item.url,
-                    &item.title,
-                    backend,
-                    &item.progress_key,
-                    self.get_progress(&item.progress_key),
-                ) {
-                    Ok(()) => {
-                        self.player_error = None;
-                        self.player_note = None;
-                        self.preview = None;
-                        self.record_history(&item);
-                        return;
-                    }
-                    Err(e) => {
-                        // Never a dead end: fall through to the built-in player
-                        // and say why the chosen app could not be started. This
-                        // is a note, not an error - the picture below it works.
-                        self.player_error = None;
-                        self.player_note = Some((e, std::time::Instant::now()));
-                    }
-                }
-            }
-        }
-
+        self.untracked_playback = untracked;
         self.current_play = Some(item.clone());
         self.view = View::Player;
         // Force the player view to resize and reveal the native MPV child HWND
@@ -2086,7 +2127,9 @@ impl App {
         // `hide()` drops the native region; forget the cache so the next play
         // re-applies it instead of assuming it is still installed.
         self.last_video_cutouts = None;
-        self.record_history(&item);
+        if !untracked {
+            self.record_history(&item);
+        }
         // Negative = "controls freshly opened, start the auto-hide timer now".
         self.ui_activity = -1.0;
         self.player_chrome = true;
@@ -2107,12 +2150,7 @@ impl App {
                 }
                 // Android: `loadfile` must wait for the render context. It is
                 // queued here and drained by flush_android_load() in update().
-                #[cfg(target_os = "android")]
-                crate::platform::android::render::request_load(&item.url, resume as f64);
-                #[cfg(not(target_os = "android"))]
-                {
-                    pl.mpv.load_at(&item.url, resume as f64);
-                }
+                pl.mpv.load_at(&item.url, resume as f64);
                 pl.mpv.set_volume(vol);
                 pl.mpv.set_pause(false);
                 pl.position = 0.0;
@@ -2170,7 +2208,7 @@ impl App {
                 self.player_reveal = false;
                 if self.ensure_player() {
                     if let Some(pl) = &self.player {
-                        pl.mpv.load(&url);
+                        pl.mpv.load_at(&url, 0.0);
                         pl.mpv.set_volume(self.volume);
                         pl.mpv.set_pause(false);
                     }
@@ -2236,10 +2274,7 @@ impl App {
         let vol = self.volume;
         if let Some(pl) = &mut self.player {
             pl.current_key = String::new();
-            #[cfg(target_os = "android")]
-            crate::platform::android::render::request_load(&url, 0.0);
-            #[cfg(not(target_os = "android"))]
-            pl.mpv.load(&url);
+            pl.mpv.load_at(&url, 0.0);
             pl.mpv.set_volume(vol);
             pl.mpv.set_pause(false);
             pl.position = 0.0;
@@ -2277,33 +2312,6 @@ impl App {
             let _ = store::save_profiles(&self.profiles);
         }
 
-        // With an external backend selected, even an inline preview goes to
-        // that app: a channel step on a TV must not silently drop back to the
-        // built-in player the user just switched away from. On failure the
-        // internal preview remains as a working fallback.
-        #[cfg(target_os = "android")]
-        {
-            let backend = self.settings.effective_player_backend();
-            if backend.is_external() {
-                match crate::platform::open_external(
-                    &item.url,
-                    &item.title,
-                    backend,
-                    &item.progress_key,
-                    self.get_progress(&item.progress_key),
-                ) {
-                    Ok(()) => {
-                        self.preview = None;
-                        self.record_history(&item);
-                        return;
-                    }
-                    Err(e) => {
-                        self.player_note = Some((e, std::time::Instant::now()));
-                    }
-                }
-            }
-        }
-
         let same = self
             .preview
             .as_ref()
@@ -2327,12 +2335,9 @@ impl App {
             } else {
                 pl.mpv.enable_video();
             }
-            #[cfg(target_os = "android")]
-            crate::platform::android::render::request_load(&item.url, 0.0);
             #[cfg(target_os = "ios")]
             crate::platform::ios::bridge::native_player(false);
-            #[cfg(not(target_os = "android"))]
-            pl.mpv.load(&item.url);
+            pl.mpv.load_at(&item.url, 0.0);
             pl.mpv.set_volume(vol);
             pl.mpv.set_pause(false);
             pl.position = 0.0;
@@ -2776,6 +2781,8 @@ impl App {
             let w = (rect.width() * ppp).round() as i32;
             let h = (rect.height() * ppp).round() as i32;
             pl.surface.position(x, y, w, h);
+            #[cfg(windows)]
+            pl.mpv.set_video_size(w.max(0) as u32, h.max(0) as u32);
         }
     }
 
@@ -2802,8 +2809,24 @@ impl App {
     }
 
     fn ensure_player(&mut self) -> bool {
+        #[cfg(any(target_os = "android", target_os = "windows"))]
+        if self.player.as_ref().is_some_and(|player| {
+            player.mpv.is_vlc()
+                != (self.settings.effective_player_backend() == crate::types::PlayerBackend::Vlc)
+        }) {
+            if let Some(player) = self.player.take() {
+                player.mpv.stop();
+                #[cfg(target_os = "android")]
+                if !player.mpv.is_vlc() {
+                    self.parked_mpv = Some(player.mpv);
+                }
+            }
+            self.last_video_rect = None;
+            self.last_video_cutouts = None;
+        }
         if let Some(player) = &self.player {
             player.mpv.configure(&self.settings);
+            self.player_error = None;
             return true;
         }
         // Android has no child window: mpv renders into egui's own GL context
@@ -2814,7 +2837,16 @@ impl App {
         #[cfg(target_os = "android")]
         {
             let surface = VideoSurface::ANativeWindow(std::ptr::null_mut());
-            match Mpv::new(0, &self.settings) {
+            let decoder =
+                if self.settings.effective_player_backend() == crate::types::PlayerBackend::Mpv {
+                    self.parked_mpv
+                        .take()
+                        .map(Ok)
+                        .unwrap_or_else(|| Playback::new(0, &self.settings))
+                } else {
+                    Playback::new(0, &self.settings)
+                };
+            match decoder {
                 Ok(mpv) => {
                     self.player = Some(Player {
                         mpv,
@@ -2832,7 +2864,7 @@ impl App {
                         subtitle_preference_applied: false,
                     });
                     self.player_error = None;
-                    eprintln!("[player] libmpv initialisiert (render API)");
+                    eprintln!("[player] Integrierten Android-Player initialisiert");
                     return true;
                 }
                 Err(e) => {
@@ -2856,7 +2888,7 @@ impl App {
                     return false;
                 }
             };
-            match Mpv::new(0, &self.settings) {
+            match Playback::new(0, &self.settings) {
                 Ok(mpv) => {
                     self.player = Some(Player {
                         mpv,
@@ -2898,7 +2930,7 @@ impl App {
                     return false;
                 }
             };
-            match Mpv::new(surface.native_handle(), &self.settings) {
+            match Playback::new(surface.native_handle(), &self.settings) {
                 Ok(mpv) => {
                     self.player = Some(Player {
                         mpv,
@@ -2928,6 +2960,13 @@ impl App {
         }
     }
 
+    #[cfg(target_os = "android")]
+    pub(crate) fn paint_android_video(&self, ui: &egui::Ui, rect: egui::Rect) {
+        if let Some(player) = &self.player {
+            player.mpv.paint(ui, rect);
+        }
+    }
+
     pub fn position_video(&mut self, rect: egui::Rect, ppp: f32) {
         // Playback may start before the first player frame positions this child
         // HWND. Explicitly reset the cached rect on play() so the first frame
@@ -2944,6 +2983,8 @@ impl App {
         self.last_video_rect = Some(r);
         if let Some(pl) = &self.player {
             pl.surface.position(x, y, w, h);
+            #[cfg(windows)]
+            pl.mpv.set_video_size(w.max(0) as u32, h.max(0) as u32);
         }
         if let Some(path) = qa_state_log_path() {
             use std::io::Write;
@@ -3087,20 +3128,24 @@ impl App {
         } else {
             (String::new(), 0.0)
         };
-        if let Some(pl) = &self.player {
+        if let Some(pl) = &mut self.player {
             pl.mpv.stop();
+            pl.current_key.clear();
             pl.surface.hide();
         }
         self.last_video_rect = None;
         // `hide()` drops the native region; forget the cache so the next play
         // re-applies it instead of assuming it is still installed.
         self.last_video_cutouts = None;
-        if !key.is_empty() {
-            self.progress.insert(key, pos as u64);
+        if !self.untracked_playback {
+            if !key.is_empty() {
+                self.progress.insert(key, pos as u64);
+            }
+            self.save_user_data();
+            self.queue_desktop_player_return();
         }
-        self.save_user_data();
+        self.untracked_playback = false;
         self.reset_track_state();
-        self.queue_desktop_player_return();
         self.current_play = None;
         self.view = self.previous_view;
         if self.fullscreen {
@@ -3109,6 +3154,46 @@ impl App {
     }
 
     // ---- images ----
+
+    pub(crate) fn cancel_episode_frame(&self) {
+        if let Some(token) = &self.episode_frame_request {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn request_episode_frame(&mut self, key: &str, episode: &Episode) {
+        if self.episode_frame_request.is_some()
+            || self.current_play.is_some()
+            || self.parental.open
+            || self.pending_resume.is_some()
+            || episode.stream_url.is_empty()
+            || self.images.textures.contains_key(key)
+            || self.images.failed.contains(key)
+            || self
+                .images
+                .pending
+                .iter()
+                .any(|(pending, _)| pending == key)
+        {
+            return;
+        }
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let key = key.to_owned();
+        self.episode_frame_request = Some(cancel.clone());
+        let settings = self.settings.clone();
+        let url = episode.stream_url.clone();
+        let sender = self.tx.clone();
+        let generation = self.login_generation;
+        self.rt.spawn_blocking(move || {
+            #[cfg(any(target_os = "windows", target_os = "android"))]
+            let frame = crate::mpv::episode_frame::frame(&url, &settings, &cancel);
+            #[cfg(target_os = "ios")]
+            let frame = crate::platform::ios::bridge::episode_frame(&url, &settings, &cancel);
+            #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
+            let frame = None;
+            let _ = sender.send(AppEvent::EpisodeFrame(generation, key, frame));
+        });
+    }
 
     pub fn request_image(&mut self, key: String, url: String) {
         if url.is_empty() {
@@ -3176,28 +3261,43 @@ impl App {
         *self.progress.get(key).unwrap_or(&0)
     }
 
-    /// Format seconds as h:mm:ss (used by the resume dialog).
-    pub fn fmt_hms(&self, secs: u64) -> String {
-        let h = secs / 3600;
-        let m = (secs % 3600) / 60;
-        let s = secs % 60;
-        if h > 0 {
-            format!("{}:{:02}:{:02}", h, m, s)
-        } else {
-            format!("{:02}:{:02}", m, s)
+    pub(crate) fn resume_position(&self, key: &str) -> Option<u64> {
+        let position = self.get_progress(key);
+        let duration = self.durations.get(key).copied().unwrap_or_default();
+        (position >= crate::release_info::RESUME_MINIMUM_SECONDS
+            && (duration == 0
+                || duration.saturating_sub(position)
+                    > crate::release_info::RESUME_END_MARGIN_SECONDS))
+            .then_some(position)
+    }
+
+    pub fn ask_resume(&mut self, key: &str) {
+        if let Some(item) = self.resolve_play(key) {
+            self.offer_resume(item);
         }
     }
 
-    /// Offer to resume this item: stores the progress key + item + position so
-    /// the UI can render the "Fortsetzen?" modal before anything starts.
-    /// Only offered when there is actually a saved position (> 1 s).
-    pub fn ask_resume(&mut self, key: &str) {
-        let pos = self.get_progress(key);
-        if pos <= 1 {
-            return;
+    fn offer_resume(&mut self, item: PlayItem) -> bool {
+        if item.kind == PlayKind::Live {
+            return false;
         }
-        if let Some(item) = self.resolve_play(key) {
-            self.pending_resume = Some((key.to_string(), item, pos));
+        let Some(position) = self.resume_position(&item.progress_key) else {
+            return false;
+        };
+        self.pending_resume = Some((item.progress_key.clone(), item, position));
+        true
+    }
+
+    pub fn play_selected(&mut self, item: PlayItem) {
+        if !self.offer_resume(item.clone()) {
+            if item.kind != PlayKind::Live
+                && self.get_progress(&item.progress_key)
+                    >= crate::release_info::RESUME_MINIMUM_SECONDS
+            {
+                self.play_from_beginning(item);
+            } else {
+                self.play(item);
+            }
         }
     }
 
@@ -3208,9 +3308,13 @@ impl App {
 
     /// Play `item` from the very beginning: drop any saved progress first.
     pub fn play_from_beginning(&mut self, item: PlayItem) {
+        if !self.parental_gate(&item, false) {
+            self.parental.restart = true;
+            return;
+        }
         self.progress.remove(&item.progress_key);
         self.save_user_data();
-        self.play(item);
+        self.play_authorized(item, false);
     }
 
     pub fn set_progress(&mut self, key: &str, secs: u64) {
@@ -3378,6 +3482,7 @@ impl App {
         self.series_season = 0;
         self.series_open_revision = self.series_open_revision.wrapping_add(1);
         self.selected_series = Some(series_id);
+        self.catalog_resume_series = Some(series_id);
         self.request_series(series_id);
         if self.tv {
             self.tv_goto(2);
@@ -3561,11 +3666,6 @@ fn qa_state_snapshot(app: &App) -> String {
 }
 
 impl eframe::App for App {
-    #[cfg(target_os = "windows")]
-    fn raw_input_hook(&mut self, ctx: &Context, raw: &mut egui::RawInput) {
-        crate::platform::windows::player_overlay::read_input(ctx, raw, self.view == View::Player);
-    }
-
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
         if cfg!(target_os = "ios") {
             [0.0; 4]
@@ -3573,6 +3673,55 @@ impl eframe::App for App {
             visuals.window_fill().to_normalized_gamma_f32()
         }
     }
+    #[cfg(windows)]
+    fn raw_input_hook(&mut self, ctx: &Context, input: &mut egui::RawInput) {
+        use crate::platform::RemoteKey;
+        crate::platform::windows::player_overlay::read_input(ctx, input, self.view == View::Player);
+        if self.view == View::Player
+            || !self.shared_remote_navigation()
+            || (crate::licensing::enabled() && !crate::licensing::allowed())
+        {
+            return;
+        }
+        let focused = ctx.memory(|memory| memory.focused());
+        let editing = focused.is_some()
+            && focused
+                == ctx
+                    .data(|data| data.get_temp::<egui::Id>(egui::Id::new("desktop-search-editor")));
+        let mut keys = Vec::new();
+        input.events.retain(|event| {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            else {
+                return true;
+            };
+            if !modifiers.is_none() {
+                return true;
+            }
+            let key = match key {
+                egui::Key::ArrowUp => RemoteKey::Up,
+                egui::Key::ArrowDown => RemoteKey::Down,
+                egui::Key::ArrowLeft if !editing => RemoteKey::Left,
+                egui::Key::ArrowRight if !editing => RemoteKey::Right,
+                egui::Key::Enter if !editing => RemoteKey::Ok,
+                _ => return true,
+            };
+            keys.push(key);
+            false
+        });
+        if !keys.is_empty() {
+            if let Some(id) = focused {
+                ui::mobile::focus::adopt_id(id);
+                ctx.memory_mut(|memory| memory.surrender_focus(id));
+            }
+            ctx.data_mut(|data| data.insert_temp(egui::Id::new("desktop-remote-keys"), keys));
+        }
+    }
+
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         #[cfg(target_os = "ios")]
         if std::env::var_os("DADO_LAYOUT_SMOKE").is_some() {
@@ -4056,6 +4205,7 @@ mod tests {
                     .map(|n| crate::types::Episode {
                         id: n,
                         series_id: 42,
+                        preview: String::new(),
                         season: 1,
                         episode: n,
                         title: "provider.file.name".into(),
@@ -4546,6 +4696,7 @@ mod tests {
         let episode = Episode {
             id: 1,
             series_id: 9,
+            preview: String::new(),
             season: 1,
             episode: 1,
             title: "Old episode".to_string(),
@@ -4747,6 +4898,72 @@ mod tests {
         assert!(!app.library.series.is_empty());
     }
     #[test]
+    fn parental_dialog_is_centered_over_the_current_screen() {
+        for (width, height) in [(1280.0, 720.0), (760.0, 360.0)] {
+            let mut app = App::test_app();
+            app.active_profile = Some(Profile::new("Dialog fixture", ProfileKind::M3u));
+            app.library = crate::demo::library();
+            app.view = View::Home;
+            app.parental = Default::default();
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            crate::theme::apply(&ctx, true);
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
+            let draw = |app: &mut App| {
+                ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        ..Default::default()
+                    },
+                    |ctx| app.draw(ctx),
+                )
+            };
+            let background = draw(&mut app);
+            assert!(background.shapes.len() > 20);
+            app.parental.open = true;
+            for _ in 0..3 {
+                draw(&mut app);
+            }
+            let frame = draw(&mut app);
+            let dialog = ctx
+                .memory(|memory| memory.area_rect(egui::Id::new("parental-dialog")))
+                .unwrap();
+            assert!(
+                dialog.center().distance(screen.center()) <= 2.0,
+                "{dialog:?} in {screen:?}"
+            );
+            assert!(screen.contains_rect(dialog));
+            assert!(frame.shapes.len() > background.shapes.len());
+            assert!(frame.shapes.iter().any(|shape| {
+                matches!(&shape.shape, egui::Shape::Rect(rect)
+                    if rect.rect == screen && rect.fill == egui::Color32::from_black_alpha(138))
+            }));
+        }
+    }
+
+    #[test]
+    fn opening_a_movie_offers_resume_only_for_a_meaningful_position() {
+        let mut app = App::test_app();
+        app.library = crate::demo::library();
+        let key = format!("vod:{}", app.library.movies[0].id);
+        app.durations.insert(key.clone(), 4200);
+        app.set_progress(&key, 59);
+        app.ask_resume(&key);
+        assert!(app.pending_resume.is_none());
+
+        app.set_progress(&key, 60);
+        app.ask_resume(&key);
+        assert_eq!(app.pending_resume.as_ref().map(|entry| entry.2), Some(60));
+        assert!(app.mobile_back());
+        assert_eq!(app.get_progress(&key), 60);
+        assert!(app.current_play.is_none());
+
+        app.set_progress(&key, 4140);
+        app.ask_resume(&key);
+        assert!(app.pending_resume.is_none());
+    }
+
+    #[test]
     fn series_resume_advances_at_sixty_seconds_across_seasons() {
         let mut app = App::test_app();
         app.history.clear();
@@ -4755,6 +4972,7 @@ mod tests {
         let episode = |id, season, number| Episode {
             id,
             series_id: 77,
+            preview: String::new(),
             season,
             episode: number,
             title: "avx.provider.raw.filename".into(),
@@ -4790,6 +5008,44 @@ mod tests {
         );
     }
     #[test]
+    fn untracked_series_playback_preserves_the_continue_target() {
+        let mut app = App::test_app();
+        app.view = View::Series;
+        app.history = vec![crate::types::HistEntry {
+            key: "ep:77:1".into(),
+            title: "Saved episode".into(),
+            sub: String::new(),
+            ts: 1,
+        }];
+        app.progress =
+            std::collections::HashMap::from([("ep:77:1".into(), 213), ("ep:77:2".into(), 121)]);
+        let episode = |id, season| Episode {
+            id,
+            series_id: 77,
+            preview: String::new(),
+            season,
+            episode: 1,
+            title: String::new(),
+            container_extension: "mp4".into(),
+            stream_url: String::new(),
+        };
+        app.series_episodes
+            .insert(77, vec![episode(1, 1), episode(2, 2)]);
+        let target = app.series_resume_target(77).map(|(e, pos)| (e.id, pos));
+        let item = app.resolve_play("ep:77:2").unwrap();
+        app.play_untracked(item);
+        assert!(app.untracked_playback);
+        app.stop_play();
+        assert_eq!(
+            app.series_resume_target(77).map(|(e, pos)| (e.id, pos)),
+            target
+        );
+        assert_eq!(app.history.len(), 1);
+        assert_eq!(app.get_progress("ep:77:2"), 121);
+        assert!(app.view == View::Series);
+    }
+
+    #[test]
     fn continue_waits_for_episode_details_and_explicit_other_play_cancels_it() {
         let mut app = App::test_app();
         app.active_profile = None;
@@ -4800,6 +5056,7 @@ mod tests {
         let episode = Episode {
             id: 2,
             series_id: 77,
+            preview: String::new(),
             season: 1,
             episode: 2,
             title: "provider.filename".into(),
@@ -5200,6 +5457,7 @@ mod tests {
                     (1..=20).map(move |episode| Episode {
                         id: season * 100 + episode,
                         series_id: 77,
+                        preview: String::new(),
                         season,
                         episode,
                         title: "avx.raw.provider.filename".into(),

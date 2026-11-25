@@ -1,3 +1,4 @@
+import AVFoundation
 //
 //  HostBridge.swift
 //  Dado Player — the Swift half of the C ABI declared in DadoBridge.h.
@@ -411,4 +412,63 @@ private final class PlaybackController: AVPlayerViewController {
         super.viewDidDisappear(animated)
         if isBeingDismissed || presentingViewController == nil { onClose?(); onClose=nil }
     }
+}
+
+
+private final class EpisodeStill: @unchecked Sendable {
+    private var image: CGImage?
+    private let lock = NSLock()
+
+    func receive(_ image: CGImage?) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.image = image
+    }
+
+    func read() -> CGImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        return image
+    }
+}
+
+@_cdecl("dado_host_episode_frame")
+public func dado_host_episode_frame(
+    _ source: UnsafePointer<CChar>,
+    _ bytes: UnsafeMutableRawPointer,
+    _ width: Int32,
+    _ height: Int32
+) -> Int32 {
+    guard width == 320, height == 180,
+          let url = URL(string: String(cString: source)),
+          let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+        return 0
+    }
+    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: Int(width), height: Int(height))
+    let finished = DispatchSemaphore(value: 0)
+    let still = EpisodeStill()
+    generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: CMTime(seconds: 5, preferredTimescale: 600))]) {
+        _, image, _, _, _ in
+        still.receive(image)
+        finished.signal()
+    }
+    guard finished.wait(timeout: .now() + 5) == .success, let image = still.read() else {
+        generator.cancelAllCGImageGeneration()
+        return 0
+    }
+    let w = Int(width), h = Int(height)
+    guard let context = CGContext(data: bytes, width: w, height: h, bitsPerComponent: 8,
+        bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
+        return 0
+    }
+    context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+    context.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    let scale = min(CGFloat(w) / CGFloat(image.width), CGFloat(h) / CGFloat(image.height))
+    let fittedWidth = CGFloat(image.width) * scale, fittedHeight = CGFloat(image.height) * scale
+    context.draw(image, in: CGRect(x: (CGFloat(w) - fittedWidth) / 2, y: (CGFloat(h) - fittedHeight) / 2,
+        width: fittedWidth, height: fittedHeight))
+    return 1
 }

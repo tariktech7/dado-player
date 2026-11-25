@@ -486,3 +486,39 @@ pub extern "C" fn dado_app_player_closed() {
 pub fn take_player_closed() -> bool {
     PLAYER_CLOSED.swap(false, Ordering::Relaxed)
 }
+
+#[cfg(target_os = "ios")]
+pub(crate) fn episode_frame(
+    url: &str,
+    _settings: &crate::types::Settings,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Option<egui::ColorImage> {
+    unsafe extern "C" {
+        fn dado_host_episode_frame(
+            source: *const std::ffi::c_char,
+            bytes: *mut u8,
+            width: i32,
+            height: i32,
+        ) -> i32;
+    }
+    let source = std::ffi::CString::new(url).ok()?;
+    let size = [320, 180];
+    let mut bytes = vec![0; size[0] * size[1] * 4];
+    if cancel.load(std::sync::atomic::Ordering::Relaxed)
+        || unsafe {
+            dado_host_episode_frame(
+                source.as_ptr(),
+                bytes.as_mut_ptr(),
+                size[0] as i32,
+                size[1] as i32,
+            )
+        } != 1
+    {
+        return None;
+    }
+    let pixels = bytes
+        .chunks_exact(4)
+        .map(|pixel| egui::Color32::from_rgb(pixel[0], pixel[1], pixel[2]))
+        .collect();
+    Some(egui::ColorImage { size, pixels })
+}

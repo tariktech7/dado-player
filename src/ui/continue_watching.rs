@@ -19,21 +19,25 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         ContinueTab::Movies => movies_tab(app, ui),
         ContinueTab::Series => series_tab(app, ui),
     }
-    resume_dialog(app, ui);
 }
 
-fn resume_dialog(app: &mut App, ui: &mut Ui) {
-    let Some((key, item, pos)) = app.pending_resume.clone() else {
+pub fn resume_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some((_, item, pos)) = app.pending_resume.clone() else {
+        ctx.data_mut(|data| data.remove::<bool>(egui::Id::new("resume-dialog-focused")));
         return;
     };
-    let screen = ui.ctx().screen_rect();
+    ui::mobile::focus::begin_modal(0);
+    let screen = ctx.screen_rect();
+    let language = app.settings.language;
+    let t = |de, en| language.text(de, en);
+    let timestamp = format!("{:02}:{:02}:{:02}", pos / 3600, pos / 60 % 60, pos % 60);
     let mut resume = false;
     let mut restart = false;
     let mut cancel = false;
     egui::Area::new(egui::Id::new("continue-resume-dialog"))
         .order(egui::Order::Foreground)
         .fixed_pos(screen.min)
-        .show(ui.ctx(), |ui| {
+        .show(ctx, |ui| {
             ui.set_min_size(screen.size());
             let scrim = ui.interact(screen, ui.id().with("resume-scrim"), Sense::click());
             ui.painter()
@@ -59,7 +63,9 @@ fn resume_dialog(app: &mut App, ui: &mut Ui) {
                 .show(&mut child, |ui| {
                     ui.set_width(w - 40.0);
                     ui.add(egui::Label::new(
-                        RichText::new("Wiedergabe fortsetzen?").size(18.0).strong(),
+                        RichText::new(t("Wiedergabe fortsetzen?", "Resume playback?"))
+                            .size(18.0)
+                            .strong(),
                     ));
                     ui.add_space(8.0);
                     ui.add(
@@ -67,44 +73,49 @@ fn resume_dialog(app: &mut App, ui: &mut Ui) {
                     );
                     ui.add_space(2.0);
                     ui.add(egui::Label::new(
-                        RichText::new(format!("Zuletzt gesehen bei {}", ui::fmt_time(pos as f64)))
-                            .size(12.5)
-                            .color(crate::theme::muted(ui)),
+                        RichText::new(format!(
+                            "{} {timestamp}",
+                            t("Zuletzt gesehen bei", "Last watched at")
+                        ))
+                        .size(12.5)
+                        .color(crate::theme::muted(ui)),
                     ));
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
                         let btn_w = (ui.available_width() - 10.0) / 2.0;
-                        if ui
-                            .add_sized(
-                                [btn_w, 36.0],
-                                egui::Button::new("Fortsetzen").fill(crate::theme::accent_fill(ui)),
-                            )
-                            .clicked()
-                        {
-                            resume = true;
-                        }
-                        if ui
-                            .add_sized([btn_w, 36.0], egui::Button::new("Von vorne beginnen"))
-                            .clicked()
-                        {
-                            restart = true;
+                        let resume_button = ui.add_sized(
+                            [btn_w, 40.0],
+                            egui::Button::new(t("Fortsetzen", "Resume"))
+                                .fill(crate::theme::accent_fill(ui)),
+                        );
+                        resume = ui::mobile::focus::clicked(ui, &resume_button);
+                        let restart_button = ui.add_sized(
+                            [btn_w, 40.0],
+                            egui::Button::new(t("Von vorne anfangen", "Start from beginning")),
+                        );
+                        restart = ui::mobile::focus::clicked(ui, &restart_button);
+                        let focus_id = egui::Id::new("resume-dialog-focused");
+                        if !ctx.data(|data| data.get_temp::<bool>(focus_id).unwrap_or(false)) {
+                            ctx.data_mut(|data| data.insert_temp(focus_id, true));
+                            ui::mobile::focus::request_id(resume_button.id);
+                            resume_button.request_focus();
                         }
                     });
+                    let dismiss = ui.button(t("Abbrechen", "Cancel"));
+                    cancel |= ui::mobile::focus::clicked(ui, &dismiss);
                 });
 
             if scrim.clicked() {
                 cancel = true;
             }
         });
-    let escape = ui.ctx().input(|i| i.key_pressed(egui::Key::Escape));
+    let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     if resume {
         app.pending_resume = None;
         app.play(item);
     } else if restart {
         app.pending_resume = None;
-        app.progress.remove(&key);
-        let _ = crate::store::save_progress(&app.progress);
-        app.play(item);
+        app.play_from_beginning(item);
     } else if cancel || escape {
         app.pending_resume = None;
     }
@@ -359,7 +370,7 @@ pub fn category_tabs(app: &mut App, ui: &mut Ui) {
             (ContinueTab::Movies, "Filme"),
         ] {
             let r = ui.selectable_label(app.continue_tab == tab, label);
-            let hit = if app.tv {
+            let hit = if app.shared_remote_navigation() {
                 crate::ui::mobile::focus::clicked(ui, &r)
             } else {
                 r.clicked()
