@@ -2241,6 +2241,13 @@ test("rail motion keeps layout widths fixed while only transform offsets animate
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole("button", {name:"▣ Live TV",exact:true}).click();
+  await expect(page.locator(".shell")).toHaveClass(/nav-collapsed/);
+  await page.getByRole("button", {name:"▣ Live TV",exact:true}).evaluate(button =>
+    (button as HTMLButtonElement).focus({preventScroll:true}));
+  await expect(page.locator(".shell")).not.toHaveClass(/nav-collapsed/);
+  await page.locator(".shell > .categories").evaluate(async column => {
+    await Promise.all(column.getAnimations().map(animation => animation.finished.catch(() => {})));
+  });
   const samples = await page.evaluate(async () => {
     const shell = document.querySelector<HTMLElement>('.shell')!;
     const column = document.querySelector<HTMLElement>('.shell > .categories')!;
