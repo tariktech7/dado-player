@@ -2528,7 +2528,7 @@ test('poster navigation does not measure hundreds of unrelated category buttons 
   expect(result.reads).toBeLessThan(200);
 });
 
-test('profiles have independent add, select and refresh actions', async ({page}) => {
+test('profiles have independent add, select and refresh actions', async ({page}, testInfo) => {
   await fixture(page, true, true);
   await page.goto('/');
   await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
@@ -2564,10 +2564,12 @@ test('profiles have independent add, select and refresh actions', async ({page})
     expect(Math.abs(first.height - second.height)).toBeLessThan(1);
     expect(second.x - first.x - first.width).toBeGreaterThanOrEqual(16);
   }
+  await page.screenshot({path: testInfo.outputPath('profile-xtream.png'), animations:'disabled'});
   const m3u = dialog.getByRole('button', {name:'M3U', exact:true});
   await m3u.click();
   await expect(m3u).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog.getByLabel('M3U-Adresse', {exact:true})).toBeVisible();
+  await page.screenshot({path: testInfo.outputPath('profile-m3u.png'), animations:'disabled'});
   await dialog.getByRole('button', {name:'Abbrechen', exact:true}).click();
   await expect(dialog).toHaveCount(0);
   const addProfile = page.getByRole('button', {name:'Profil hinzufügen', exact:true});
