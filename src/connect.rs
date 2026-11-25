@@ -467,7 +467,14 @@ mod tests {
                 |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         let right = ui.max_rect().right();
-                        show(ui, &mut state, rt.handle(), &mut profiles, false, false);
+                        show(
+                            ui,
+                            &mut state,
+                            rt.handle(),
+                            &mut profiles,
+                            false,
+                            Some(48.0),
+                        );
                         assert!(
                             ui.min_rect().right() <= right + 1.0,
                             "Cloud panel overflowed a phone viewport"
