@@ -1730,7 +1730,7 @@ hr {
 .settings-sections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 2vh, 24px); padding: 5px; }
 .settings-sections button {
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-  min-height: clamp(100px, calc((100vh - 365px) / 4), 220px); gap: clamp(10px, 1.6vh, 20px);
+  min-height: clamp(100px, calc((100vh - 425px) / 4), 220px); gap: clamp(10px, 1.6vh, 20px);
   padding: clamp(12px, 1.7vh, 24px) clamp(12px, 1.8vw, 36px); white-space: normal;
   background: linear-gradient(150deg, var(--card), var(--panel)); font-size: clamp(21px, 3.1vh, 38px); font-weight: 650;
 }

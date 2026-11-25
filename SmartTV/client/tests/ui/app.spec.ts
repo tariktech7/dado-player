@@ -2076,11 +2076,14 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
       verticalOffset: Math.abs(box.top + box.height / 2 - parent.top - parent.height / 2),
       width: box.width / parent.width,
       height: box.height / parent.height,
+      lastTileFits: [...element.querySelectorAll("button")].every(tile =>
+        tile.getBoundingClientRect().bottom <= element.closest("main")!.getBoundingClientRect().bottom),
     };
   });
   expect(coverage.verticalOffset).toBeLessThan(3);
   expect(coverage.width).toBeGreaterThan(.9);
   expect(coverage.height).toBeGreaterThan(.8);
+  expect(coverage.lastTileFits).toBe(true);
   const back = page.locator('.classic-header .classic-back');
   const backTop = (await back.boundingBox())!.y;
   const keys = await page.locator('.settings-sections button').evaluateAll(nodes =>
