@@ -340,7 +340,7 @@ fn request(ctx: &Context, mode: RequestMode) {
     });
 }
 pub fn settings(ui: &mut Ui) {
-    license_controls(ui);
+    license_controls(ui, true);
 }
 
 pub fn trial_badge(ui: &mut Ui, compact: bool) {
@@ -369,7 +369,14 @@ pub fn trial_badge(ui: &mut Ui, compact: bool) {
     }
 }
 
-fn license_controls(ui: &mut Ui) {
+fn license_controls(ui: &mut Ui, in_settings: bool) {
+    let clicked = |ui: &Ui, response: &egui::Response| {
+        if in_settings {
+            crate::ui::settings::activate(ui, response)
+        } else {
+            response.clicked()
+        }
+    };
     let (text, code, macs, error, busy, started, permanent) = {
         let s = state().lock().unwrap();
         (
@@ -392,8 +399,7 @@ fn license_controls(ui: &mut Ui) {
         ui.label("Geräte-ID");
         ui.label(egui::RichText::new(&code).monospace());
         let copy = ui.small_button("ID kopieren");
-        crate::ui::settings::focus_option(ui, &copy);
-        if copy.clicked() {
+        if clicked(ui, &copy) {
             ui.output_mut(|o| o.copied_text = code.clone());
         }
     });
@@ -401,7 +407,8 @@ fn license_controls(ui: &mut Ui) {
         ui.label("MAC-Adresse");
         if let Some(mac) = macs.first() {
             ui.label(egui::RichText::new(mac).monospace());
-            if ui.small_button("MAC kopieren").clicked() {
+            let copy = ui.small_button("MAC kopieren");
+            if clicked(ui, &copy) {
                 ui.output_mut(|o| o.copied_text = mac.clone());
             }
         } else {
@@ -415,28 +422,26 @@ fn license_controls(ui: &mut Ui) {
     if !enabled() {
         ui.label("Lizenzdienst wird eingerichtet. Noch keine Testzeit gestartet.");
     }
-    if ui
-        .add_enabled(
-            enabled() && !busy,
-            egui::Button::new(
-                egui::RichText::new(if busy {
-                    "Wird abgerufen …"
+    let request_license = ui.add_enabled(
+        enabled() && !busy,
+        egui::Button::new(
+            egui::RichText::new(if busy {
+                "Wird abgerufen …"
+            } else {
+                if permanent {
+                    "Lizenz wiederherstellen"
+                } else if started {
+                    "Freischaltung abrufen"
                 } else {
-                    if permanent {
-                        "Lizenz wiederherstellen"
-                    } else if started {
-                        "Freischaltung abrufen"
-                    } else {
-                        "7 Tage kostenlos testen"
-                    }
-                })
-                .color(egui::Color32::WHITE),
-            )
-            .min_size(egui::vec2(0.0, 42.0))
-            .fill(crate::theme::accent_fill(ui)),
+                    "7 Tage kostenlos testen"
+                }
+            })
+            .color(egui::Color32::WHITE),
         )
-        .clicked()
-    {
+        .min_size(egui::vec2(0.0, 42.0))
+        .fill(crate::theme::accent_fill(ui)),
+    );
+    if clicked(ui, &request_license) {
         request(
             ui.ctx(),
             if started {
@@ -446,15 +451,14 @@ fn license_controls(ui: &mut Ui) {
             },
         );
     }
-    if !started
-        && ui
-            .add_enabled(
-                !busy && enabled(),
-                egui::Button::new("Bereits freigeschaltet? Lizenz abrufen"),
-            )
-            .clicked()
-    {
-        refresh(ui.ctx());
+    if !started {
+        let refresh_license = ui.add_enabled(
+            !busy && enabled(),
+            egui::Button::new("Bereits freigeschaltet? Lizenz abrufen"),
+        );
+        if clicked(ui, &refresh_license) {
+            refresh(ui.ctx());
+        }
     }
     ui.add_space(8.0);
     ui.label(egui::RichText::new("Nach der Freigabe einmal abrufen. Danach Unlimited – ohne automatische Lizenz-Serverabfragen.").small().color(crate::theme::muted(ui)));
@@ -499,7 +503,7 @@ pub fn blocked_screen(ctx: &Context) {
                             ui.add_space(20.0);
                             ui.separator();
                             ui.add_space(12.0);
-                            license_controls(ui);
+                            license_controls(ui, false);
                             ui.label(egui::RichText::new("Für die manuelle Freigabe genügt deine Geräte-ID oder die angezeigte MAC-Adresse. Profile und Favoriten bleiben erhalten.").small().color(crate::theme::muted(ui)));
                         });
                     });

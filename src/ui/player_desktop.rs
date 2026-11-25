@@ -156,7 +156,7 @@ fn button(
             )
         });
     }
-    crate::ui::mobile::focus::clicked_player(ui, &response)
+    crate::ui::mobile::focus::clicked_with_custom_ring(ui, &response)
 }
 
 fn live_back(

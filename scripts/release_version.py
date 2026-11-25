@@ -42,6 +42,13 @@ def updates():
         raise ValueError("Expected exactly one shared download link in README.md")
     cargo = ROOT / "Cargo.toml"
     result[cargo] = re.sub(r'(?m)^version = "[^"]+"', f'version = "{version}"', cargo.read_text(encoding="utf-8"), count=1)
+    lock = ROOT / "Cargo.lock"
+    result[lock] = re.sub(
+        r'(?m)(^name = "dado-player"\nversion = ")[^"]+',
+        lambda match: match[1] + version,
+        lock.read_text(encoding="utf-8"),
+        count=1,
+    )
     result[ROOT / "windows/VERSION"] = version + "\n"
     for name in ("package.json", "package-lock.json"):
         file = ROOT / "SmartTV/client" / name

@@ -684,6 +684,21 @@ pub(crate) fn color_shortcut(app: &mut App, ctx: &Context, key: egui::Key) -> bo
         }
         return true;
     }
+    if key == egui::Key::Escape && app.view == View::Settings {
+        if ui::settings::editing(ctx) {
+            if let Some(id) = ctx.memory(|memory| memory.focused()) {
+                ui::mobile::focus::adopt_id(id);
+                ctx.memory_mut(|memory| memory.surrender_focus(id));
+            }
+            crate::platform::set_text_focus(false);
+            ctx.request_repaint();
+            return true;
+        }
+        if ui::settings::close_dropdown(ctx) || app.close_settings_section() {
+            ctx.request_repaint();
+            return true;
+        }
+    }
     match key {
         egui::Key::F1 => super::parental::open_management(app),
         egui::Key::Escape => {

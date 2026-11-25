@@ -143,7 +143,8 @@ pub(super) fn enabled(app: &App) -> bool {
 }
 
 pub(super) fn back(app: &mut App, ctx: &egui::Context) {
-    if app.view == View::Settings && app.close_settings_section() {
+    if app.view == View::Settings && (settings::close_dropdown(ctx) || app.close_settings_section())
+    {
         ctx.request_repaint();
         return;
     }
@@ -403,38 +404,24 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         let [top_color, bottom_color, accent, icon_ink, icon_light, icon_shade] = tile_color(view);
         let radius = (22.0 * scale).max(10.0);
         let painter = ui.painter();
-        let focused = response.has_focus() || focus::focused_id() == Some(response.id);
-        let active = focused || response.hovered();
-        let lift = ui.ctx().animate_bool_with_time(
-            response.id.with("tile-lift"),
-            active,
-            if desktop::reduced_motion(ui.ctx()) {
-                0.0
-            } else {
-                0.15
-            },
-        ) * (6.0 * scale);
-        let raised = rect.translate(vec2(0.0, -lift));
-        painter.rect_filled(raised, radius, bottom_color);
-        tile_surface(ui, raised, radius, top_color, bottom_color);
-        let rect = raised;
+        let remote = app.shared_remote_navigation();
+        let focused = if remote && focus::active() {
+            focus::focused_id() == Some(response.id)
+        } else {
+            response.has_focus()
+        };
+        tile_surface(ui, rect, radius, top_color, bottom_color);
         painter.rect_stroke(
             rect.shrink(0.7),
             radius - 0.7,
             Stroke::new((1.6 * scale).max(0.8), Color32::from_white_alpha(95)),
         );
-        if active {
+        if focused || response.hovered() {
+            let width = if focused { (4.0 * scale).max(2.0) } else { 1.5 };
             painter.rect_stroke(
-                rect.shrink(1.3),
-                radius - 1.0,
-                Stroke::new(
-                    if focused {
-                        (4.0 * scale).max(2.0)
-                    } else {
-                        (2.0 * scale).max(1.5)
-                    },
-                    accent,
-                ),
+                rect.shrink(width * 0.5),
+                radius - width * 0.5,
+                Stroke::new(width, if focused { Color32::WHITE } else { accent }),
             );
         }
         let label_size = label_size.min(rect.height() * 0.24);
@@ -478,7 +465,11 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         if view == View::Live {
             focus::prefer_next_when_inactive();
         }
-        if activate(ui, &response, app.shared_remote_navigation()) {
+        if if remote {
+            focus::clicked_with_custom_ring(ui, &response)
+        } else {
+            response.clicked()
+        } {
             next = Some(view);
         }
     }

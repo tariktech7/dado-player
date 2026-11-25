@@ -89,7 +89,7 @@ def validate_asset(asset, data, label):
 
 def publish(release, notes, folder=ROOT / "Releases"):
     tag = github_release_tag(release)
-    if release["channel"] != "beta" or release["betaNumber"] < 2:
+    if release["channel"] != "beta" or release["betaNumber"] < 1:
         raise ValueError("Only new numbered betas can be published here")
     files = deliveries(release, folder)
     source = git("rev-parse", "HEAD")

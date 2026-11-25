@@ -717,14 +717,7 @@ impl App {
     }
 
     pub(crate) fn shared_remote_navigation(&self) -> bool {
-        self.parental.open
-            || self.tv
-            || (self.active_profile.is_some()
-                && !self.palette_open
-                && (self.view != View::Settings
-                    || self
-                        .settings_section
-                        .is_none_or(ui::settings::uses_ordered_focus)))
+        self.parental.open || self.tv || (self.active_profile.is_some() && !self.palette_open)
     }
 
     pub fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
@@ -894,7 +887,15 @@ impl App {
             }
 
             if jni_bridge::take_back() {
-                if crate::platform::text_focus() || ctx.wants_keyboard_input() {
+                if self.view == View::Settings && ui::settings::close_dropdown(ctx) {
+                    ctx.request_repaint();
+                } else if crate::platform::text_focus()
+                    || if self.view == View::Settings {
+                        ui::settings::editing(ctx)
+                    } else {
+                        ctx.wants_keyboard_input()
+                    }
+                {
                     // BACK while editing ends text entry; it must not fall
                     // through to mobile_back() -> "leave the app". On a TV
                     // this is the only way out of a focused field with a D-pad.
@@ -1121,7 +1122,11 @@ impl App {
                 )
             });
         }
-        if (self.tv || self.view == View::Player) && keys.is_empty() {
+        if (self.tv
+            || self.view == View::Player
+            || (cfg!(not(windows)) && self.view == View::Settings))
+            && keys.is_empty()
+        {
             use crate::platform::RemoteKey;
             for (key, remote) in [
                 (egui::Key::ArrowUp, RemoteKey::Up),
@@ -1130,10 +1135,18 @@ impl App {
                 (egui::Key::ArrowRight, RemoteKey::Right),
                 (egui::Key::Enter, RemoteKey::Ok),
             ] {
-                if ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, key)) {
+                let is_editing = self.view == View::Settings && ui::settings::editing(ctx);
+                if (!is_editing || matches!(remote, RemoteKey::Up | RemoteKey::Down))
+                    && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, key))
+                {
                     keys.push(remote);
                 }
             }
+        }
+        if self.view == View::Settings {
+            ui::settings::dropdown_keys(ctx, &mut keys);
+        } else {
+            ui::settings::close_dropdown(ctx);
         }
         if self.view == View::Player
             && self

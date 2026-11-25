@@ -87,24 +87,31 @@ pub fn show(ui: &mut egui::Ui) {
     };
     let mut state = state().lock().unwrap();
     ui.add_enabled_ui(!state.busy, |ui| {
-        let access = ui.collapsing("Zugang zum privaten GitHub-Release", |ui| {
+        let id = ui.id().with("update-access-expanded");
+        let mut expanded = ui
+            .data(|data| data.get_temp::<bool>(id))
+            .unwrap_or_default();
+        let access = ui.button("Zugang zum privaten GitHub-Release");
+        if crate::ui::settings::activate(ui, &access) {
+            expanded = !expanded;
+            ui.data_mut(|data| data.insert_temp(id, expanded));
+        }
+        if expanded {
             ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
-            ui.add(crate::ui::text_field(
+            let response = ui.add(crate::ui::text_field(
                 &mut state.token,
                 "GitHub-Token mit Leserecht",
                 None,
                 |edit| edit.password(true),
             ));
-        });
-        crate::ui::settings::focus_option(ui, &access.header_response);
+            crate::ui::settings::edit_option(ui, &response);
+        }
     });
     if state.busy {
         ui.spinner();
     } else if let Some(update) = state.available.clone() {
-        if ui
-            .button(format!("{} installieren und neu starten", update.version))
-            .clicked()
-        {
+        let install = ui.button(format!("{} installieren und neu starten", update.version));
+        if crate::ui::settings::activate(ui, &install) {
             state.busy = true;
             state.message = "Update wird geladen und geprüft …".into();
             let token = state.token.clone();
@@ -127,10 +134,14 @@ pub fn show(ui: &mut egui::Ui) {
             });
             return;
         }
-        if ui.button("Erneut auf Updates prüfen").clicked() {
+        let retry = ui.button("Erneut auf Updates prüfen");
+        if crate::ui::settings::activate(ui, &retry) {
             state.available = None;
         }
-    } else if ui.button("Auf GitHub-Updates prüfen").clicked() {
+    } else if {
+        let check = ui.button("Auf GitHub-Updates prüfen");
+        crate::ui::settings::activate(ui, &check)
+    } {
         state.busy = true;
         state.message = "GitHub wird abgefragt …".into();
         let token = state.token.clone();

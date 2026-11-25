@@ -1464,10 +1464,13 @@ function App() {
       <div class="settings-choices" role="group" aria-label={active?.[saved.settings.language]}>
         {choices.map(([value, label]) => <button key={value}
           data-current={value === current ? "" : undefined}
+          data-draft={settingsDraft === value && current !== value ? "" : undefined}
           aria-pressed={(settingsDraft ?? current) === value}
           onClick={() => setSettingsDraft(value)}>
           <span class="settings-choice-check" aria-hidden="true">{value === current ? "✓" : ""}</span>
           {label}
+          {settingsDraft === value && current !== value &&
+            <span class="settings-choice-pending" aria-hidden="true">{t("Noch nicht gespeichert", "Not saved yet")}</span>}
         </button>)}
       </div>
       <button class="primary" onClick={() => { commit(settingsDraft ?? current); closeSettingsSection(); }}>

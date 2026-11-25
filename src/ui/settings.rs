@@ -84,15 +84,6 @@ fn sections() -> &'static [Section] {
     })
 }
 
-pub(crate) fn uses_ordered_focus(index: usize) -> bool {
-    sections().get(index).is_some_and(|section| {
-        matches!(
-            section.id.as_str(),
-            "clock" | "stream" | "player" | "profiles"
-        )
-    })
-}
-
 pub(crate) fn focus_option(ui: &Ui, response: &egui::Response) {
     let pending = egui::Id::new("settings-option-entry");
     if response.enabled() && ui.data_mut(|data| data.remove_temp::<bool>(pending)) == Some(true) {
@@ -101,12 +92,22 @@ pub(crate) fn focus_option(ui: &Ui, response: &egui::Response) {
     }
 }
 
-fn activate(ui: &Ui, response: &egui::Response) -> bool {
+pub(crate) fn activate(ui: &Ui, response: &egui::Response) -> bool {
     focus_option(ui, response);
-    if super::mobile::active(ui.ctx()) {
-        super::mobile::focus::clicked(ui, response)
-    } else {
-        response.clicked()
+    super::mobile::focus::clicked(ui, response)
+}
+
+pub(crate) fn editing(ctx: &egui::Context) -> bool {
+    let editor = ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new("desktop-search-editor")));
+    editor.is_some() && editor == ctx.memory(|memory| memory.focused())
+}
+
+pub(crate) fn edit_option(ui: &Ui, response: &egui::Response) {
+    if super::mobile::focus::clicked(ui, response) {
+        response.request_focus();
+    }
+    if response.has_focus() {
+        ui.data_mut(|data| data.insert_temp(egui::Id::new("desktop-search-editor"), response.id));
     }
 }
 
@@ -123,43 +124,140 @@ fn choice_label(label: &str, current: bool) -> egui::RichText {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Dropdown {
+    id: egui::Id,
+    index: usize,
+    count: usize,
+    accept: bool,
+}
+
+fn dropdown_key() -> egui::Id {
+    egui::Id::new("settings-dropdown")
+}
+
+pub(crate) fn close_dropdown(ctx: &egui::Context) -> bool {
+    if ctx.data_mut(|data| {
+        let existed = data.get_temp::<Dropdown>(dropdown_key()).is_some();
+        data.remove::<Dropdown>(dropdown_key());
+        existed
+    }) {
+        ctx.memory_mut(|memory| memory.close_popup());
+        ctx.request_repaint();
+        true
+    } else {
+        false
+    }
+}
+
+pub(crate) fn dropdown_keys(ctx: &egui::Context, keys: &mut Vec<crate::platform::RemoteKey>) {
+    use crate::platform::RemoteKey;
+    let Some(mut menu) = ctx.data(|data| data.get_temp::<Dropdown>(dropdown_key())) else {
+        return;
+    };
+    let mut close = false;
+    keys.retain(|key| match key {
+        RemoteKey::Up => {
+            menu.index = menu.index.saturating_sub(1);
+            false
+        }
+        RemoteKey::Down => {
+            menu.index = (menu.index + 1).min(menu.count - 1);
+            false
+        }
+        RemoteKey::Ok => {
+            menu.accept = true;
+            false
+        }
+        RemoteKey::Back => {
+            close = true;
+            false
+        }
+        RemoteKey::Left | RemoteKey::Right => false,
+        _ => true,
+    });
+    if close {
+        close_dropdown(ctx);
+    } else {
+        ctx.data_mut(|data| data.insert_temp(dropdown_key(), menu));
+    }
+}
+
 fn select<T: Copy + PartialEq>(
     ui: &mut Ui,
     label: &str,
     value: &mut T,
     options: &[(T, &str)],
 ) -> bool {
-    let mut changed = false;
+    let current = options
+        .iter()
+        .position(|(option, _)| option == value)
+        .unwrap_or(0);
     ui.label(label);
-    if !super::mobile::active(ui.ctx()) {
-        let selected = options
-            .iter()
-            .find(|(option, _)| option == value)
-            .map_or("–", |(_, label)| *label);
-        let combo = egui::ComboBox::from_id_source(("setting-option", label))
-            .selected_text(selected)
-            .width(ui.available_width().min(360.0))
-            .show_ui(ui, |ui| {
-                for &(option, text) in options {
-                    changed |= ui
-                        .selectable_value(value, option, choice_label(text, *value == option))
-                        .changed();
+    let response = ui.add_sized(
+        [
+            ui.available_width().min(450.0),
+            ui.spacing().interact_size.y,
+        ],
+        egui::Button::new(format!("{}  ▾", options[current].1)),
+    );
+    let id = response.id.with("settings-dropdown");
+    if activate(ui, &response) {
+        if ui.memory(|memory| memory.is_popup_open(id)) {
+            close_dropdown(ui.ctx());
+        } else {
+            ui.memory_mut(|memory| memory.open_popup(id));
+            ui.data_mut(|data| {
+                data.insert_temp(
+                    dropdown_key(),
+                    Dropdown {
+                        id,
+                        index: current,
+                        count: options.len(),
+                        accept: false,
+                    },
+                )
+            });
+        }
+    }
+    let Some(menu) = ui.data(|data| {
+        data.get_temp::<Dropdown>(dropdown_key())
+            .filter(|menu| menu.id == id)
+    }) else {
+        return false;
+    };
+    let chosen = egui::popup_below_widget(ui, id, &response, |ui| {
+        let mut clicked = None;
+        egui::ScrollArea::vertical()
+            .max_height((ui.ctx().screen_rect().height() * 0.44).max(80.0))
+            .show(ui, |ui| {
+                for (index, &(_, text)) in options.iter().enumerate() {
+                    let row = ui.selectable_label(
+                        index == menu.index,
+                        choice_label(text, index == current),
+                    );
+                    if row.clicked() {
+                        clicked = Some(index);
+                    }
+                    if index == menu.index && !ui.clip_rect().contains_rect(row.rect) {
+                        row.scroll_to_me(None);
+                    }
                 }
             });
-        focus_option(ui, &combo.response);
+        clicked
+    })
+    .flatten();
+    if let Some(index) = chosen.or_else(|| menu.accept.then_some(menu.index)) {
+        close_dropdown(ui.ctx());
+        let next = options[index].0;
+        let changed = *value != next;
+        *value = next;
         return changed;
     }
-    ui.horizontal_wrapped(|ui| {
-        for &(option, text) in options {
-            let response =
-                ui.selectable_label(*value == option, choice_label(text, *value == option));
-            if activate(ui, &response) && *value != option {
-                *value = option;
-                changed = true;
-            }
-        }
-    });
-    changed
+    if !ui.memory(|memory| memory.is_popup_open(id)) {
+        close_dropdown(ui.ctx());
+    }
+    false
 }
 
 fn switch(ui: &mut Ui, label: &str, value: &mut bool) -> bool {
@@ -200,12 +298,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         .show(ui, |ui| {
             if let Some(index) = app.settings_section {
                 let section = &sections()[index];
-                let ordered = uses_ordered_focus(index);
-                if ordered {
-                    focus::set_ordered_zone(1);
-                } else {
-                    focus::set_zone(1);
-                }
+                focus::set_ordered_zone(1);
                 let mobile = super::mobile::active(ui.ctx());
                 centered_contents(
                     ui,
@@ -443,23 +536,37 @@ fn quick_choice<T: Copy + PartialEq>(
     options: &[(T, &str)],
     save_label: &str,
 ) -> Option<T> {
-    let mut index = ui
-        .ctx()
-        .data(|data| data.get_temp::<usize>(key))
-        .or_else(|| options.iter().position(|(value, _)| *value == current))
+    let saved_index = options
+        .iter()
+        .position(|(value, _)| *value == current)
         .unwrap_or(0);
+    let mut index = ui
+        .data(|data| data.get_temp::<usize>(key))
+        .unwrap_or(saved_index);
+    let rounding = ui.visuals().widgets.inactive.rounding;
     ui.add_space(8.0);
     for (slot, (value, label)) in options.iter().enumerate() {
         let response = ui.add_sized(
             [ui.available_width(), ui.spacing().interact_size.y.max(40.0)],
-            egui::SelectableLabel::new(slot == index, choice_label(label, *value == current)),
+            egui::Button::new(choice_label(label, *value == current))
+                .selected(slot == index)
+                .rounding(rounding),
         );
         focus_option(ui, &response);
         if super::mobile::focus::clicked(ui, &response) {
             index = slot;
             ui.ctx().data_mut(|data| data.insert_temp(key, index));
+            ui.ctx().request_repaint();
         }
         ui.add_space(10.0);
+    }
+    if index != saved_index {
+        let status = if save_label == "Save changes" {
+            "Selected, not saved"
+        } else {
+            "Ausgewählt, noch nicht gespeichert"
+        };
+        ui.label(format!("{status}: {}", options[index].1));
     }
     ui.add_space(10.0);
     let save = ui.button(save_label);
@@ -988,12 +1095,13 @@ fn panel(
                             if before != app.settings.live_format {
                                 app.apply_live_format();
                             }
-                            ui.add(super::text_field(
+                            let filter = ui.add(super::text_field(
                                 &mut app.settings_q,
                                 t("Option suchen …", "Find an option …"),
                                 None,
                                 |edit| edit,
                             ));
+                            edit_option(ui, &filter);
                             let query = app.settings_q.trim().to_lowercase();
                             expert(app, ui, &query, playback_changed);
                         }
@@ -1046,20 +1154,21 @@ fn language_field(ui: &mut Ui, label: &str, value: &mut String, language: AppLan
     if selected == languages.len() {
         let custom_label = language.text("Eigener Sprachcode", "Custom language code");
         if super::mobile::active(ui.ctx()) {
-            changed |= super::mobile::components::field(
+            let response = super::mobile::components::field(
                 ui,
                 custom_label,
                 value,
                 "ISO 639",
                 super::mobile::components::Kb::Text,
                 &mut false,
-            )
-            .changed();
+            );
+            edit_option(ui, &response);
+            changed |= response.changed();
         } else {
             ui.label(custom_label);
-            changed |= ui
-                .add(super::text_field(value, "ISO 639", None, |edit| edit))
-                .changed();
+            let response = ui.add(super::text_field(value, "ISO 639", None, |edit| edit));
+            edit_option(ui, &response);
+            changed |= response.changed();
         }
     }
     changed
@@ -1069,23 +1178,21 @@ fn expert(app: &mut App, ui: &mut Ui, q: &str, changed: &mut bool) {
     // ---------- presets ----------
     if sec(ui, q, "Schnellauswahl") {
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Standard").clicked() {
+            if action(ui, "Standard") {
                 app.settings.preset_standard();
                 *changed = true;
             }
-            if ui
+            let light = ui
                 .button("Schonmodus (schwacher PC)")
-                .on_hover_text("Wenig GPU-Last, kleiner Puffer")
-                .clicked()
-            {
+                .on_hover_text("Wenig GPU-Last, kleiner Puffer");
+            if activate(ui, &light) {
                 app.settings.preset_light();
                 *changed = true;
             }
-            if ui
+            let quality = ui
                 .button("Maximale Qualität")
-                .on_hover_text("Interpolation + Debanding, größerer Puffer")
-                .clicked()
-            {
+                .on_hover_text("Interpolation + Debanding, größerer Puffer");
+            if activate(ui, &quality) {
                 app.settings.preset_quality();
                 *changed = true;
             }
@@ -1094,189 +1201,117 @@ fn expert(app: &mut App, ui: &mut Ui, q: &str, changed: &mut bool) {
 
     // ---------- picture / decoder ----------
     if sec(ui, q, "Bild & Decoder") {
-        combo_row(ui, "Hardware-Dekodierung", "hwdec", |ui| {
-            egui::ComboBox::from_id_source("hwdec")
-                .selected_text(app.settings.hwdec.label())
-                .width(230.0)
-                .show_ui(ui, |cb| {
-                    for v in [
-                        HwDec::AutoSafe,
-                        HwDec::Auto,
-                        HwDec::Off,
-                        HwDec::D3d11va,
-                        HwDec::Nvdec,
-                        HwDec::Vulkan,
-                    ] {
-                        if cb
-                            .selectable_value(&mut app.settings.hwdec, v, v.label())
-                            .clicked()
-                        {
-                            *changed = true;
-                        }
-                    }
-                });
-        });
-        ui.add(egui::Label::new(
-            RichText::new(
-                "Bei Problemen: „Aus (nur CPU)“ ist am kompatibelsten, braucht aber mehr Leistung.",
-            )
-            .size(10.5)
-            .weak(),
-        ));
+        let decoders = [
+            HwDec::AutoSafe,
+            HwDec::Auto,
+            HwDec::Off,
+            HwDec::D3d11va,
+            HwDec::Nvdec,
+            HwDec::Vulkan,
+        ];
+        *changed |= select(
+            ui,
+            "Hardware-Dekodierung",
+            &mut app.settings.hwdec,
+            &decoders.map(|mode| (mode, mode.label())),
+        );
+        ui.small("Bei Problemen ist „Aus (nur CPU)“ am kompatibelsten.");
+        let outputs = [VideoOut::Gpu, VideoOut::GpuNext, VideoOut::Direct3d];
+        *changed |= select(
+            ui,
+            "Video-Ausgabe",
+            &mut app.settings.vo,
+            &outputs.map(|mode| (mode, mode.label())),
+        );
+        let syncs = [VideoSync::Audio, VideoSync::DisplayResample];
+        *changed |= select(
+            ui,
+            "Bildsynchronisation",
+            &mut app.settings.video_sync,
+            &syncs.map(|mode| (mode, mode.label())),
+        );
 
-        combo_row(ui, "Video-Ausgabe", "vo", |ui| {
-            egui::ComboBox::from_id_source("vo")
-                .selected_text(app.settings.vo.label())
-                .width(230.0)
-                .show_ui(ui, |cb| {
-                    for v in [VideoOut::Gpu, VideoOut::GpuNext, VideoOut::Direct3d] {
-                        if cb
-                            .selectable_value(&mut app.settings.vo, v, v.label())
-                            .clicked()
-                        {
-                            *changed = true;
-                        }
-                    }
-                });
-        });
-
-        combo_row(ui, "Bildsynchronisation", "vsync", |ui| {
-            egui::ComboBox::from_id_source("vsync")
-                .selected_text(app.settings.video_sync.label())
-                .width(230.0)
-                .show_ui(ui, |cb| {
-                    for v in [VideoSync::Audio, VideoSync::DisplayResample] {
-                        if cb
-                            .selectable_value(&mut app.settings.video_sync, v, v.label())
-                            .clicked()
-                        {
-                            *changed = true;
-                        }
-                    }
-                });
-        });
-
-        *changed |= ui
-            .checkbox(
-                &mut app.settings.interpolation,
-                "Interpolation (flüssigere Bewegung, mehr GPU-Last)",
-            )
-            .changed();
-        *changed |= ui
-            .checkbox(&mut app.settings.deband, "Debanding (weniger Farbstufen)")
-            .changed();
+        *changed |= switch(
+            ui,
+            "Interpolation (flüssigere Bewegung, mehr GPU-Last)",
+            &mut app.settings.interpolation,
+        );
+        *changed |= switch(
+            ui,
+            "Debanding (weniger Farbstufen)",
+            &mut app.settings.deband,
+        );
     }
 
-    // ---------- audio ----------
     if sec(ui, q, "Ton") {
-        *changed |= ui
-            .checkbox(
-                &mut app.settings.audio_exclusive,
-                "Exklusiver Audio-Modus (WASAPI)",
-            )
-            .on_hover_text("Direkter Zugriff auf die Soundkarte. Kann besser klingen, aber andere Apps verlieren den Ton.")
-            .changed();
-        *changed |= ui
-            .checkbox(
-                &mut app.settings.audio_passthrough,
-                "Surround durchreichen (AC3/DTS/TrueHD)",
-            )
-            .on_hover_text("Nur sinnvoll mit AV-Receiver über HDMI.")
-            .changed();
-        *changed |= ui
-            .checkbox(
-                &mut app.settings.audio_normalize,
-                "Lautstärke normalisieren",
-            )
-            .on_hover_text("Gleicht leise und laute Sender an.")
-            .changed();
+        *changed |= switch(
+            ui,
+            "Exklusiver Audio-Modus (WASAPI)",
+            &mut app.settings.audio_exclusive,
+        );
+        *changed |= switch(
+            ui,
+            "Surround durchreichen (AC3/DTS/TrueHD)",
+            &mut app.settings.audio_passthrough,
+        );
+        *changed |= switch(
+            ui,
+            "Lautstärke normalisieren",
+            &mut app.settings.audio_normalize,
+        );
     }
 
-    // ---------- subtitles ----------
+    use super::mobile::components::stepper_row;
     if sec(ui, q, "Untertitel") {
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                [170.0, 24.0],
-                egui::Label::new(RichText::new("Schriftgröße").size(13.0)),
-            );
-            *changed |= ui
-                .add(egui::Slider::new(&mut app.settings.sub_size, 20.0..=120.0))
-                .changed();
-        });
-    }
-
-    // ---------- network ----------
-    if sec(ui, q, "Netzwerk & Puffer") {
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                [170.0, 24.0],
-                egui::Label::new(RichText::new("Puffer (Sekunden)").size(13.0)),
-            );
-            if ui
-                .add(egui::Slider::new(&mut app.settings.cache_secs, 5..=180))
-                .on_hover_text(
-                    "Mehr Puffer = stabiler bei schwacher Leitung, aber langsamerer Start.",
-                )
-                .changed()
-            {
-                *changed = true;
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                [170.0, 24.0],
-                egui::Label::new(RichText::new("Netzwerk-Timeout").size(13.0)),
-            );
-            *changed |= ui
-                .add(egui::Slider::new(&mut app.settings.network_timeout_s, 5..=60).suffix(" s"))
-                .changed();
-        });
-        ui.add_space(4.0);
-        ui.add(egui::Label::new(
-            RichText::new("User-Agent (leer = Standard)")
-                .size(11.5)
-                .weak(),
-        ));
-        if ui
-            .add(super::text_field(
-                &mut app.settings.user_agent,
-                "z.B. VLC/3.0.20 LibVLC/3.0.20",
-                None,
-                |edit| edit.desired_width(360.0),
-            ))
-            .changed()
-        {
+        let mut size = app.settings.sub_size.round() as u64;
+        if stepper_row(ui, "Schriftgröße", &mut size, 1, 20, 120, "") {
+            app.settings.sub_size = size as f32;
             *changed = true;
         }
-        *changed |= ui
-            .checkbox(
-                &mut app.settings.tls_verify,
-                "TLS-Zertifikat des Anbieters streng prüfen",
-            )
-            .on_hover_text(
-                "Standardmäßig aus: viele IPTV-Anbieter nutzen selbstsignierte \
-                 Zertifikate auf ihrem Stream-Port. Mit aktivierter Prüfung bleibt \
-                 der Player dann schwarz. Nur einschalten, wenn der Anbieter ein \
-                 gültiges Zertifikat hat.",
-            )
-            .changed();
-        ui.add(egui::Label::new(
-            RichText::new(
-                "Bei selbstsignierten Anbieter-Zertifikaten (häufig bei IPTV) muss diese Option aus bleiben.",
-            )
-            .size(10.5)
-            .weak(),
-        ));
     }
 
-    // ---------- general ----------
+    if sec(ui, q, "Netzwerk & Puffer") {
+        *changed |= stepper_row(
+            ui,
+            "Puffer (Sekunden)",
+            &mut app.settings.cache_secs,
+            1,
+            5,
+            180,
+            "s",
+        );
+        *changed |= stepper_row(
+            ui,
+            "Netzwerk-Timeout",
+            &mut app.settings.network_timeout_s,
+            1,
+            5,
+            60,
+            "s",
+        );
+        ui.label("User-Agent (leer = Standard)");
+        let response = ui.add(super::text_field(
+            &mut app.settings.user_agent,
+            "z.B. VLC/3.0.20 LibVLC/3.0.20",
+            None,
+            |edit| edit.desired_width(360.0),
+        ));
+        edit_option(ui, &response);
+        *changed |= response.changed();
+        *changed |= switch(
+            ui,
+            "TLS-Zertifikat des Anbieters streng prüfen",
+            &mut app.settings.tls_verify,
+        );
+        ui.small("Bei selbstsignierten Anbieter-Zertifikaten kann die Prüfung die Wiedergabe verhindern.");
+    }
+
     if sec(ui, q, "Allgemein")
-        && ui
-            .checkbox(
-                &mut app.settings.auto_play_last,
-                "Letzten Kanal beim Start automatisch abspielen",
-            )
-            .changed()
+        && switch(
+            ui,
+            "Letzten Kanal beim Start automatisch abspielen",
+            &mut app.settings.auto_play_last,
+        )
     {
         app.save_settings_now();
     }
@@ -1292,15 +1327,4 @@ fn section(ui: &mut Ui, title: &str) {
             .color(color),
     ));
     ui.add_space(6.0);
-}
-
-fn combo_row(ui: &mut Ui, label: &str, id: &str, add: impl FnOnce(&mut Ui)) {
-    ui.horizontal(|ui| {
-        ui.add_sized(
-            [170.0, 22.0],
-            egui::Label::new(RichText::new(label).size(13.0)),
-        );
-        ui.push_id(id, add);
-    });
-    ui.add_space(2.0);
 }

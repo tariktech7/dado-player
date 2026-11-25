@@ -1964,6 +1964,22 @@ test("settings tiles support spatial navigation and return to the originating ti
   await expect(player).toBeFocused();
 });
 
+test("classic dashboard moves a single focus ring without transitioning the tiles", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto("/");
+  const tiles = page.locator('.classic-primary button');
+  await tiles.first().focus();
+  const positions = () => tiles.evaluateAll(elements => elements.map(tile => tile.getBoundingClientRect().y));
+  const before = await positions();
+  for (const [key, index] of [['ArrowRight', 1], ['ArrowRight', 2], ['ArrowRight', 2], ['ArrowLeft', 1], ['ArrowLeft', 0]] as const) {
+    await page.keyboard.press(key);
+    await expect(tiles.nth(index)).toBeFocused();
+    expect(await positions()).toEqual(before);
+    expect(await tiles.evaluateAll(elements => elements.map(tile => getComputedStyle(tile, '::after').content !== 'none')))
+      .toEqual([0, 1, 2].map(tile => tile === index));
+  }
+});
+
 test("remote moves through each player choice before reaching save", async ({page}) => {
   await fixture(page, true, true, 'permanent', true);
   await page.goto("/");
@@ -1992,6 +2008,9 @@ test("remote moves through each player choice before reaching save", async ({pag
   await expect(choices.last()).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(choices.last()).toHaveAttribute('aria-pressed', 'true');
+  await expect(choices.last()).toHaveAttribute('data-draft', '');
+  await expect(choices.last()).toContainText('Noch nicht gespeichert');
+  await expect(panel.locator('[data-current]')).toHaveCount(1);
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(tile).toBeFocused();

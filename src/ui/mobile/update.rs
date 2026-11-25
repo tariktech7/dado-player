@@ -99,7 +99,16 @@ pub fn show(ui: &mut egui::Ui) {
     let mut s = state().lock().unwrap();
     ui.label(format!("Installierter Build {}", PACKAGE.2));
     ui.add_enabled_ui(!s.busy, |ui| {
-        let access = ui.collapsing("GitHub-Zugang für private Releases", |ui| {
+        let id = ui.id().with("update-access-expanded");
+        let mut expanded = ui
+            .data(|data| data.get_temp::<bool>(id))
+            .unwrap_or_default();
+        let access = ui.button("GitHub-Zugang für private Releases");
+        if crate::ui::settings::activate(ui, &access) {
+            expanded = !expanded;
+            ui.data_mut(|data| data.insert_temp(id, expanded));
+        }
+        if expanded {
             ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
             let State { token, visible, .. } = &mut *s;
             let r = field(
@@ -110,11 +119,11 @@ pub fn show(ui: &mut egui::Ui) {
                 Kb::Password,
                 visible,
             );
+            crate::ui::settings::edit_option(ui, &r);
             if r.gained_focus() {
                 crate::platform::seed_ime(token);
             }
-        });
-        crate::ui::settings::focus_option(ui, &access.header_response);
+        }
     });
     if s.busy {
         ui.spinner();

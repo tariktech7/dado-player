@@ -112,15 +112,16 @@ pub fn advanced(app: &mut App, ui: &mut Ui, changed: &mut bool) {
 
     {
         components::section(ui, "Netzwerk");
-        *changed |= components::field(
+        let response = components::field(
             ui,
             "Player-User-Agent",
             &mut app.settings.user_agent,
             "Leer = Standard",
             components::Kb::Text,
             &mut reveal,
-        )
-        .changed();
+        );
+        crate::ui::settings::edit_option(ui, &response);
+        *changed |= response.changed();
         #[cfg(target_os = "ios")]
         ui.small("Ein eigener Player-User-Agent wird ab iOS 16 unterstützt.");
     }

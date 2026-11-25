@@ -245,7 +245,6 @@ pub fn prefer_next_when_inactive() {
     });
 }
 
-#[cfg(windows)]
 pub fn adopt_id(id: egui::Id) {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
@@ -272,7 +271,11 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
     let local = |i| s.zones.get(i) == Some(&Some(zone));
     if !horizontal && s.ordered_zone == Some(zone) {
         return if matches!(dir, Dir::Up) {
-            (0..from).rev().find(|i| local(*i))
+            (0..from).rev().find(|i| local(*i)).or_else(|| {
+                s.header
+                    .then(|| s.zones.iter().position(|zone| *zone == Some(0)))
+                    .flatten()
+            })
         } else {
             (from + 1..rects.len()).find(|i| local(*i))
         };
@@ -285,6 +288,11 @@ fn zoned_next(s: &State, rects: &[Rect], from: usize, dir: Dir) -> Option<usize>
             return find_next_where(rects, from, dir, |i| s.zones.get(i) == Some(&Some(0)));
         }
         if matches!(dir, Dir::Down) && zone == 0 {
+            if let Some(ordered) = s.ordered_zone {
+                if let Some(first) = s.zones.iter().position(|zone| *zone == Some(ordered)) {
+                    return Some(first);
+                }
+            }
             return find_next_where(rects, from, dir, |i| s.zones.get(i) != Some(&Some(0)));
         }
         if zone == 0 {
@@ -416,7 +424,7 @@ pub fn clicked(ui: &Ui, resp: &Response) -> bool {
     register_click(ui, resp, true)
 }
 
-pub fn clicked_player(ui: &Ui, resp: &Response) -> bool {
+pub fn clicked_with_custom_ring(ui: &Ui, resp: &Response) -> bool {
     register_click(ui, resp, false)
 }
 

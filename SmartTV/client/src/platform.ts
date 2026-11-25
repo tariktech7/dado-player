@@ -115,7 +115,7 @@ export function moveFocus(
   const horizontal = direction === "ArrowLeft" || direction === "ArrowRight",
     sign = direction === "ArrowLeft" || direction === "ArrowUp" ? -1 : 1;
   const rail = horizontal
-    ? current.closest<HTMLElement>(".card-rail,.series-rail,.kind-tabs")
+    ? current.closest<HTMLElement>(".card-rail,.series-rail,.kind-tabs,.classic-primary")
     : null;
   if (rail) {
     let next: HTMLElement | undefined;
@@ -132,7 +132,7 @@ export function moveFocus(
       scrollFocused(next);
       return;
     }
-    if (rail.matches(".series-rail")) return;
+    if (rail.matches(".series-rail,.classic-primary")) return;
   }
   const grid = current.closest<HTMLElement>("[data-focus-grid]");
   if (grid) {
@@ -161,7 +161,7 @@ export function moveFocus(
     if (first) scrollFocused(first);
     return;
   }
-  if (!horizontal && zone?.matches(".settings-options") && zone.querySelector(".settings-choices,[data-settings-ordered]")) {
+  if (!horizontal && zone?.matches(".settings-options")) {
     const controls = focusables(zone);
     const index = controls.indexOf(current);
     const next = index === 0 && sign < 0
