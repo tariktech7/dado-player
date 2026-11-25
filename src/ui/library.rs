@@ -56,6 +56,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     let image_key = format!("detail:{key}");
     let base = Color32::from_rgb(12, 27, 44);
     ui.painter().rect_filled(bounds, 12.0, base);
+    crate::theme::ambient(ui, bounds);
     if !entry.cover.is_empty() {
         app.request_image(image_key.clone(), entry.cover.clone());
         if let Some(texture) = app.image(&image_key) {
@@ -217,10 +218,19 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     };
     let caption = t("▶ Abspielen", "▶ Play");
     let tv = app.shared_remote_navigation();
+    let retry = series && app.series_failed(entry.id);
     let mut random = false;
-    let play = bottom
-        .horizontal(|ui| {
-            let play_text = RichText::new(caption)
+    let play = egui::ScrollArea::horizontal()
+        .id_source(("title-actions-rail", entry.id, series))
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .show(&mut bottom, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = (14.0 * scale).max(8.0);
+                let play_text = RichText::new(if retry {
+                    t("Folgen erneut laden", "Reload episodes")
+                } else {
+                    caption
+                })
                 .size(if series {
                     super::desktop::handheld_type((27.0 * scale).max(16.0), 16.0)
                 } else {
@@ -228,53 +238,61 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 })
                 .strong()
                 .color(Color32::WHITE);
-            let primary = egui::Button::new(play_text)
-                .min_size(play_size)
-                .rounding(egui::Rounding::same(12.0))
-                .fill(crate::theme::accent_fill(ui))
-                .stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(154, 201, 243)));
-            let play = if !series || target.is_some() {
-                play_button(app, ui, primary, tv)
-            } else {
-                ui.add_enabled(false, primary);
-                false
-            };
-            if series && target.is_some() {
-                let shuffle = ui.add(
-                    egui::Button::new(t("Zufällige Folge", "Random episode"))
-                        .min_size(vec2(0.0, play_size.y)),
-                );
-                random = hit(ui, &shuffle, tv);
-            }
-            let marked = app.is_favorite(&key);
-            let heart = ui
-                .add(
-                    egui::Button::new(
-                        RichText::new(if marked { "♥" } else { "♡" })
-                            .size(if touch { 20.0 } else { 25.0 })
-                            .color(if marked {
-                                Color32::from_rgb(255, 135, 157)
-                            } else {
-                                Color32::WHITE
-                            }),
-                    )
-                    .min_size(vec2(play_size.y * 0.85, play_size.y)),
-                )
-                .on_hover_text(t("Favorit", "Favorite"));
-            super::desktop::remember_favorite_target(&heart, &key);
-            if hit(ui, &heart, tv) {
-                app.toggle_favorite(&key);
-            }
-            if series && !entry.plot.is_empty() {
-                let description = ui.add(
-                    egui::Button::new(t("Mehr lesen", "Read more"))
-                        .min_size(vec2(0.0, play_size.y)),
-                );
-                if hit(ui, &description, tv) {
-                    app.description_open = Some((entry.name.clone(), entry.plot.clone()));
+                let primary = egui::Button::new(play_text)
+                    .min_size(play_size)
+                    .rounding(egui::Rounding::same(12.0))
+                    .fill(crate::theme::accent_fill(ui))
+                    .stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(154, 201, 243)));
+                let play = if retry {
+                    let response = ui.add(primary);
+                    if hit(ui, &response, tv) {
+                        app.retry_series(entry.id);
+                    }
+                    false
+                } else if !series || target.is_some() {
+                    play_button(app, ui, primary, tv)
+                } else {
+                    ui.add_enabled(false, primary);
+                    false
+                };
+                if series && target.is_some() {
+                    let shuffle = ui.add(
+                        egui::Button::new(t("Zufällige Folge", "Random episode"))
+                            .min_size(vec2(0.0, play_size.y)),
+                    );
+                    random = hit(ui, &shuffle, tv);
                 }
-            }
-            play
+                let marked = app.is_favorite(&key);
+                let heart = ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(if marked { "♥" } else { "♡" })
+                                .size(if touch { 20.0 } else { 25.0 })
+                                .color(if marked {
+                                    Color32::from_rgb(255, 135, 157)
+                                } else {
+                                    Color32::WHITE
+                                }),
+                        )
+                        .min_size(vec2(play_size.y * 0.85, play_size.y)),
+                    )
+                    .on_hover_text(t("Favorit", "Favorite"));
+                super::desktop::remember_favorite_target(&heart, &key);
+                if hit(ui, &heart, tv) {
+                    app.toggle_favorite(&key);
+                }
+                if series && !entry.plot.is_empty() {
+                    let description = ui.add(
+                        egui::Button::new(t("Mehr lesen", "Read more"))
+                            .min_size(vec2(0.0, play_size.y)),
+                    );
+                    if hit(ui, &description, tv) {
+                        app.description_open = Some((entry.name.clone(), entry.plot.clone()));
+                    }
+                }
+                play
+            })
+            .inner
         })
         .inner;
     if series {
@@ -1074,11 +1092,7 @@ fn episode_rows(
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
     let Some(source) = app.series_episodes_for(sid) else {
-        if app.series_failed(sid) {
-            if button(ui, t("Folgen erneut laden", "Reload episodes"), tv) {
-                app.retry_series(sid);
-            }
-        } else {
+        if !app.series_failed(sid) {
             ui.label(t("Folgen werden geladen …", "Loading episodes…"));
         }
         return;

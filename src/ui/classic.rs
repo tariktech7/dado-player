@@ -43,20 +43,32 @@ fn tile_color(view: View) -> [Color32; 3] {
 fn tile_surface(ui: &Ui, rect: Rect, radius: f32, top: Color32, bottom: Color32) {
     let radius = radius.min(rect.height() * 0.5).min(rect.width() * 0.5);
     let mut mesh = Mesh::default();
-    let strips = 20;
-    for step in 0..=strips {
-        let fraction = step as f32 / strips as f32;
-        let y = egui::lerp(rect.top()..=rect.bottom(), fraction);
+    let mut rows: Vec<_> = (0..=8)
+        .map(|step| egui::lerp(rect.top()..=rect.bottom(), step as f32 / 8.0))
+        .collect();
+    for step in 1..=12 {
+        let angle = step as f32 * std::f32::consts::FRAC_PI_2 / 12.0;
+        let offset = radius * (1.0 - angle.cos());
+        rows.extend([rect.top() + offset, rect.bottom() - offset]);
+    }
+    rows.sort_by(f32::total_cmp);
+    rows.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+    for (step, y) in rows.into_iter().enumerate() {
+        let fraction = (y - rect.top()) / rect.height();
         let corner = (radius - (y - rect.top()).min(rect.bottom() - y)).max(0.0);
         let inset = radius - (radius * radius - corner * corner).max(0.0).sqrt();
-        let fill =
-            Color32::from(Rgba::from(top) * (1.0 - fraction) + Rgba::from(bottom) * fraction);
-        mesh.colored_vertex(pos2(rect.left() + inset, y), fill);
-        mesh.colored_vertex(pos2(rect.right() - inset, y), fill);
+        let fill = Rgba::from(top) * (1.0 - fraction) + Rgba::from(bottom) * fraction;
+        let glow = (1.0 - fraction).powi(3) * 0.14;
+        let highlight = fill * (1.0 - glow) + Rgba::from_white_alpha(fill.a()) * glow;
+        mesh.colored_vertex(pos2(rect.left() + inset, y), Color32::from(fill));
+        mesh.colored_vertex(pos2(rect.center().x, y), Color32::from(highlight));
+        mesh.colored_vertex(pos2(rect.right() - inset, y), Color32::from(fill));
         if step > 0 {
-            let index = (step - 1) * 2;
-            mesh.add_triangle(index, index + 1, index + 2);
-            mesh.add_triangle(index + 1, index + 2, index + 3);
+            let index = ((step - 1) * 3) as u32;
+            for left in [index, index + 1] {
+                mesh.add_triangle(left, left + 1, left + 3);
+                mesh.add_triangle(left + 1, left + 4, left + 3);
+            }
         }
     }
     ui.painter().add(egui::Shape::mesh(mesh));
@@ -120,6 +132,10 @@ pub(super) fn enabled(app: &App) -> bool {
 }
 
 pub(super) fn back(app: &mut App, ctx: &egui::Context) {
+    if app.view == View::Settings && app.close_settings_section() {
+        ctx.request_repaint();
+        return;
+    }
     if app.close_catalog_detail() {
         return;
     }
@@ -134,18 +150,25 @@ pub(super) fn back(app: &mut App, ctx: &egui::Context) {
 pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, classic: bool) {
     let header_height = header.height();
     let control_height = (header_height * 0.82).max(28.0);
-    if classic {
-        focus::set_header_zone();
-    }
+    focus::set_header_zone();
     desktop::column(ui, header, "classic-header", 0.0, |ui| {
         let language = app.settings.language;
         ui.horizontal_centered(|ui| {
-            if classic && app.view != View::Home {
+            if app.view != View::Home {
+                let in_settings = app.view == View::Settings && app.settings_section.is_some();
                 let response = desktop::compact_back_button(
                     ui,
-                    language.text("‹ Zurück", "‹ Back"),
+                    if in_settings {
+                        language.text("‹ Alle Einstellungen", "‹ All settings")
+                    } else {
+                        language.text("‹ Zurück", "‹ Back")
+                    },
                     header_height - 8.0,
                 );
+                if in_settings && app.settings_return_tile.take().is_some() {
+                    response.request_focus();
+                    focus::request_id(response.id);
+                }
                 if activate(ui, &response, app.shared_remote_navigation()) {
                     back(app, ui.ctx());
                 }
@@ -156,6 +179,7 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                 crate::licensing::trial_badge(ui, false);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut search_editor = None;
                 ui.label(
                     app.settings
                         .clock_format
@@ -211,6 +235,7 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                             response.request_focus();
                             focus::request_id(response.id);
                         }
+                        search_editor = Some(response);
                     }
                     let size = control_height;
                     let (rect, response) = ui.allocate_exact_size(vec2(size, size), Sense::click());
@@ -237,20 +262,23 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                     }
                     response
                         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, label));
-                    if activate(ui, &response, app.shared_remote_navigation()) {
-                        if icon == Icon::Refresh {
+                    if icon == Icon::Refresh {
+                        if activate(ui, &response, app.shared_remote_navigation()) {
                             app.refresh_catalog();
-                        } else {
-                            if app.view == View::Home {
-                                app.navigate(View::Search);
-                            }
+                        }
+                        response.on_hover_text(label);
+                    } else if response.clicked() {
+                        if app.view == View::Home {
+                            app.navigate(View::Search);
                             ui.data_mut(|data| {
                                 data.insert_temp(Id::new("header-search-request"), true)
                             });
-                            ui.ctx().request_repaint();
+                        } else if let Some(input) = &search_editor {
+                            input.request_focus();
+                            focus::request_id(input.id);
                         }
+                        ui.ctx().request_repaint();
                     }
-                    response.on_hover_text(label);
                 }
             });
         });
@@ -367,24 +395,37 @@ fn dashboard(app: &mut App, ui: &mut Ui, gap: f32, scale: f32) {
         let radius = (22.0 * scale).max(10.0);
         let painter = ui.painter();
         let focused = response.has_focus() || focus::focused_id() == Some(response.id);
+        let active = focused || response.hovered();
+        let lift = ui.ctx().animate_bool_with_time(
+            response.id.with("tile-lift"),
+            active,
+            if desktop::reduced_motion(ui.ctx()) {
+                0.0
+            } else {
+                0.15
+            },
+        ) * (6.0 * scale);
         let depth = (9.0 * scale).max(3.0);
         painter.rect_filled(
             rect.translate(vec2(0.0, depth * 1.7)),
             radius,
             Color32::from_black_alpha(45),
         );
+        let raised = rect.translate(vec2(0.0, -lift));
         painter.rect_filled(
-            rect.translate(vec2(0.0, depth)),
+            rect.translate(vec2(0.0, depth - lift * 0.4)),
             radius,
             bottom_color.gamma_multiply(0.58),
         );
-        tile_surface(ui, rect, radius, top_color, bottom_color);
+        painter.rect_filled(raised, radius, bottom_color);
+        tile_surface(ui, raised, radius, top_color, bottom_color);
+        let rect = raised;
         painter.rect_stroke(
             rect.shrink(0.7),
-            radius,
+            radius - 0.7,
             Stroke::new((1.6 * scale).max(0.8), Color32::from_white_alpha(95)),
         );
-        if focused || response.hovered() {
+        if active {
             painter.rect_stroke(
                 rect.shrink(1.3),
                 radius - 1.0,

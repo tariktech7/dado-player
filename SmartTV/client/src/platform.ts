@@ -48,7 +48,7 @@ export function exitApp(): void {
   }
 }
 const selector =
-  'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]';
+  'button:not([disabled]):not([tabindex="-1"]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]';
 export function focusables(root: ParentNode = document): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(selector)].filter((el) => {
     const r = el.getBoundingClientRect();
@@ -154,9 +154,19 @@ export function moveFocus(
     if (!horizontal && sign > 0) return;
   }
   const zone = current.closest<HTMLElement>("[data-focus-zone]");
+  if (!horizontal && sign > 0 && current.matches(".classic-header .settings-back")) {
+    const options = document.querySelector<HTMLElement>(".settings-options");
+    const first = options && focusables(options)[0];
+    first?.focus({preventScroll:true});
+    if (first) scrollFocused(first);
+    return;
+  }
   if (!horizontal && zone?.matches(".settings-options") && zone.querySelector(".settings-choices,[data-settings-ordered]")) {
     const controls = focusables(zone);
-    const next = controls[controls.indexOf(current) + sign];
+    const index = controls.indexOf(current);
+    const next = index === 0 && sign < 0
+      ? document.querySelector<HTMLElement>(".classic-header .settings-back")
+      : controls[index + sign];
     if (next) {
       next.focus({ preventScroll: true });
       scrollFocused(next);

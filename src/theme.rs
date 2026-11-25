@@ -419,28 +419,36 @@ pub fn ambient(ui: &egui::Ui, rect: egui::Rect) {
 }
 
 pub fn ambient_shape(ui: &egui::Ui, rect: egui::Rect, cutout: Option<egui::Rect>) -> egui::Shape {
-    let dark = ui.visuals().dark_mode;
-    let base = ui.visuals().panel_fill;
-    let mut mesh = egui::Mesh::default();
-    let colors = if warm(ui) {
-        [normal_color("glow"), normal_color("background"), base, base]
-    } else if crate::ui::desktop::active(ui.ctx()) && dark {
-        [base; 4]
-    } else if dark {
-        [
-            Color32::from_rgb(19, 42, 52),
-            Color32::from_rgb(23, 32, 49),
-            base,
-            base,
-        ]
+    static LIGHTS: std::sync::OnceLock<std::collections::HashMap<String, [egui::Rgba; 2]>> =
+        std::sync::OnceLock::new();
+    let lights = LIGHTS.get_or_init(|| {
+        let colors: std::collections::HashMap<String, std::collections::HashMap<String, String>> =
+            serde_json::from_str(include_str!("../shared/ambient-palette.json"))
+                .expect("bundled ambient palette");
+        colors
+            .into_iter()
+            .map(|(theme, pair)| {
+                let colors = ["near", "far"].map(|name| {
+                    egui::Rgba::from(Color32::from_hex(&pair[name]).expect("valid ambient color"))
+                });
+                (theme, colors)
+            })
+            .collect()
+    });
+    let theme = if warm(ui) {
+        "blue"
+    } else if ui.visuals().dark_mode {
+        "dark"
     } else {
-        [
-            Color32::from_rgb(221, 238, 243),
-            Color32::from_rgb(227, 236, 247),
-            base,
-            base,
-        ]
+        "light"
     };
+    let [near, far] = lights[theme];
+    let base = egui::Rgba::from(ui.visuals().panel_fill);
+    let light = |x: f32, y: f32, cx: f32, cy: f32, rx: f32, ry: f32| {
+        let distance = ((x - cx) / rx).powi(2) + ((y - cy) / ry).powi(2);
+        (1.0 - distance.sqrt()).clamp(0.0, 1.0).powi(2)
+    };
+    let mut mesh = egui::Mesh::default();
     let hole = cutout.unwrap_or(egui::Rect::NOTHING).intersect(rect);
     let patches = if hole.is_positive() {
         [
@@ -457,23 +465,30 @@ pub fn ambient_shape(ui: &egui::Ui, rect: egui::Rect, cutout: Option<egui::Rect>
             egui::Rect::NOTHING,
         ]
     };
-    let [tl, tr, br, bl] = colors.map(egui::Rgba::from);
     for patch in patches.into_iter().filter(egui::Rect::is_positive) {
         let index = mesh.vertices.len() as u32;
-        for pos in [
-            patch.left_top(),
-            patch.right_top(),
-            patch.right_bottom(),
-            patch.left_bottom(),
-        ] {
-            let x = (pos.x - rect.left()) / rect.width();
-            let y = (pos.y - rect.top()) / rect.height();
-            let top = tl * (1.0 - x) + tr * x;
-            let bottom = bl * (1.0 - x) + br * x;
-            mesh.colored_vertex(pos, (top * (1.0 - y) + bottom * y).into());
+        const COLUMNS: u32 = 14;
+        const ROWS: u32 = 10;
+        for row in 0..=ROWS {
+            for column in 0..=COLUMNS {
+                let pos = egui::pos2(
+                    egui::lerp(patch.left()..=patch.right(), column as f32 / COLUMNS as f32),
+                    egui::lerp(patch.top()..=patch.bottom(), row as f32 / ROWS as f32),
+                );
+                let x = (pos.x - rect.left()) / rect.width();
+                let y = (pos.y - rect.top()) / rect.height();
+                let warm = light(x, y, 0.14, 0.08, 0.87, 1.1);
+                let cool = light(x, y, 0.91, 0.30, 0.63, 0.86);
+                let under = base * (1.0 - cool) + far * cool;
+                mesh.colored_vertex(pos, (under * (1.0 - warm) + near * warm).into());
+                if row > 0 && column > 0 {
+                    let bottom_right = index + row * (COLUMNS + 1) + column;
+                    let top_right = bottom_right - COLUMNS - 1;
+                    mesh.add_triangle(top_right - 1, top_right, bottom_right);
+                    mesh.add_triangle(top_right - 1, bottom_right, bottom_right - 1);
+                }
+            }
         }
-        mesh.add_triangle(index, index + 1, index + 2);
-        mesh.add_triangle(index, index + 2, index + 3);
     }
     egui::Shape::mesh(mesh)
 }

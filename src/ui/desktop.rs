@@ -379,6 +379,8 @@ pub(super) fn compact_back_button(ui: &mut Ui, label: &str, height: f32) -> egui
             let scale = scale(ui.ctx());
             ui.spacing_mut().button_padding = vec2((12.0 * scale).max(8.0), 2.0);
             ui.spacing_mut().interact_size.y = height;
+            ui.visuals_mut().widgets.hovered.expansion = 0.0;
+            ui.visuals_mut().widgets.active.expansion = 0.0;
             ui.add(
                 egui::Button::new(
                     egui::RichText::new(label)
@@ -393,8 +395,8 @@ pub(super) fn compact_back_button(ui: &mut Ui, label: &str, height: f32) -> egui
         .inner;
     if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
         ui.painter().rect_stroke(
-            response.rect.expand(2.0),
-            8.0,
+            response.rect.shrink(1.5),
+            (appearance().control_radius * scale(ui.ctx()) - 1.5).max(8.5),
             egui::Stroke::new(2.5, theme::accent(ui)),
         );
     }
@@ -429,7 +431,12 @@ pub fn column<R>(
         } else {
             rect
         };
-    let clip = rect.intersect(ui.clip_rect());
+    let paint_bounds = if name == "classic-header" {
+        rect.expand(5.0)
+    } else {
+        rect
+    };
+    let clip = paint_bounds.intersect(ui.clip_rect());
     if handheld() {
         // Touch columns stay in one hit-test layer. An Area can retain a
         // previous frame's bounds after the navigation width changes.

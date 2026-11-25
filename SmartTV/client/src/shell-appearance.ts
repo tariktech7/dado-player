@@ -1,8 +1,13 @@
 import appearance from '../../../shared/shell-appearance.json' with {type:'json'};
 import palette from '../../../shared/normal-palette.json' with {type:'json'};
 import classicTilePalette from '../../../shared/classic-tile-palette.json' with {type:'json'};
+import ambient from '../../../shared/ambient-palette.json' with {type:'json'};
 export function installShellAppearance() {
   const style=document.documentElement.style;
+  for (const [theme, lights] of Object.entries(ambient)) {
+    style.setProperty(`--ambient-${theme}-near`, lights.near);
+    style.setProperty(`--ambient-${theme}-far`, lights.far);
+  }
   for(const [key,value] of Object.entries(palette))style.setProperty('--normal-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value);
   for (const [tile, colors] of Object.entries(classicTilePalette)) {
     for (const [position, color] of Object.entries(colors)) style.setProperty(`--classic-${tile}-${position}`, color);

@@ -1973,7 +1973,7 @@ test("remote moves through each player choice before reaching save", async ({pag
   await page.keyboard.press('Enter');
 
   const panel = page.locator('[data-settings-section="player"]');
-  const back = panel.getByRole('button', {name: '‹ Alle Einstellungen'});
+  const back = page.locator('.classic-header').getByRole('button', {name: '‹ Alle Einstellungen'});
   const choices = panel.locator('.settings-choices button');
   const save = panel.getByRole('button', {name: 'Änderungen speichern'});
   await expect(back).toBeFocused();
@@ -2061,10 +2061,20 @@ test("turning off watch history hides continue and the saved progress prompts", 
   await expect(page.locator('.category-list').getByRole('button',{name:/Fortsetzen/})).toHaveCount(0);
 });
 
-test("all settings submenus keep their controls inside a shared content column", async ({page}, testInfo) => {
-  await fixture(page, true, true);
+for (const classic of [false, true]) test(`all settings submenus stay centered in the ${classic ? "Classic" : "Modern"} layout`, async ({page}, testInfo) => {
+  await fixture(page, true, true, 'permanent', classic);
   await page.goto("/");
-  await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  if (classic) await page.locator('.classic-actions').getByRole('button', {name:'Einstellungen',exact:true}).click();
+  else await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
+  const overview = page.locator('.settings-overview');
+  await expect(overview.getByRole('heading', {name:'Einstellungen'})).toBeVisible();
+  const overviewOffset = await overview.evaluate(element => {
+    const box = element.getBoundingClientRect(), parent = element.parentElement!.getBoundingClientRect();
+    return Math.abs(box.top + box.height / 2 - parent.top - parent.height / 2);
+  });
+  expect(overviewOffset).toBeLessThan(3);
+  const back = page.locator('.classic-header .classic-back');
+  const backTop = (await back.boundingBox())!.y;
   const keys = await page.locator('.settings-sections button').evaluateAll(nodes =>
     nodes.map(node => (node as HTMLElement).dataset.focusKey!));
   expect(keys).toHaveLength(12);
@@ -2072,6 +2082,9 @@ test("all settings submenus keep their controls inside a shared content column",
     await openSettingsSection(page, key);
     const panel = page.locator(`[data-settings-section="${key}"]`);
     await expect(panel.getByRole('heading', {level:2})).toBeVisible();
+    await expect(back).toHaveAccessibleName('‹ Alle Einstellungen');
+    expect(Math.abs((await back.boundingBox())!.y - backTop)).toBeLessThan(2);
+    await expect(panel.getByRole('button', {name:'‹ Alle Einstellungen'})).toHaveCount(0);
     const alignment = await panel.evaluate(element => {
       const panel = element.getBoundingClientRect();
       const page = element.closest('.settings-page')!.getBoundingClientRect();
@@ -2091,8 +2104,43 @@ test("all settings submenus keep their controls inside a shared content column",
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
     if (key === 'playback') await page.screenshot({path: testInfo.outputPath('settings-playback.png')});
-    await panel.getByRole('button', {name:'‹ Alle Einstellungen'}).click();
+    await page.locator('.classic-header').getByRole('button', {name:'‹ Alle Einstellungen'}).click();
   }
+});
+
+for (const classic of [false, true]) test(`menu positions and header controls in ${classic ? "Classic" : "Modern"}`, async ({page}) => {
+  await fixture(page, true, true, 'permanent', classic);
+  await page.setViewportSize({width: 960, height: 540});
+  await page.goto('/');
+  const shell = page.locator('.shell');
+  await expect(shell).toHaveAttribute('data-focus-scope', 'home');
+  const header = page.locator('.classic-header');
+  const searchButton = header.getByRole('button', {name:'Suche',exact:true});
+  await expect(searchButton).toHaveAttribute('tabindex', '-1');
+  for (const [view, body] of [
+    ['live', '.channel-list'], ['vod', '.catalog-title-list'], ['series', '.catalog-title-list'],
+    ['favorites', '.personal-main'], ['history', '.personal-main'], ['settings', '.settings-overview'],
+  ]) {
+    await shell.locator(`button[data-focus-key="${view}"]`).first().click();
+    await expect(shell).toHaveAttribute('data-focus-scope', view);
+    await expect(page.locator(body)).toBeVisible();
+    await expect(header.getByRole('searchbox')).toHaveCount(1);
+    const back = header.getByRole('button', {name:'‹ Zurück'});
+    await back.hover();
+    const placement = await back.evaluate(element => {
+      const button = element.getBoundingClientRect();
+      const bar = element.closest('header')!.getBoundingClientRect();
+      return {gap: button.left - bar.left, inside: bar.top <= button.top && bar.bottom >= button.bottom};
+    });
+    expect(placement.gap).toBeGreaterThan(5);
+    expect(placement.inside).toBe(true);
+    await back.click();
+    await expect(shell).toHaveAttribute('data-focus-scope', 'home');
+  }
+  await searchButton.click();
+  await expect(shell).toHaveAttribute('data-focus-scope', 'search');
+  await expect(header.getByRole('searchbox')).toBeFocused();
+  await expect(page.locator('.personal-main h1')).toBeVisible();
 });
 
 test("app updates separates actions and explains read-only GitHub access", async ({page}) => {
@@ -2251,6 +2299,28 @@ test('OK focuses the movie/series play action, including episodes that arrive la
   await expect(nextEpisode).toHaveAccessibleName('Nächste Folge');
   await nextEpisode.click();
   await expect(page.locator('.player-top')).toContainText('Staffel 1 · Folge 2');
+});
+
+test('failed episode loading keeps retry and the other title actions on one row', async ({page}) => {
+  await fixture(page, true, true);
+  await page.route(url => url.searchParams.get('action') === 'get_series_info',
+    route => route.fulfill({status: 503}), {times: 1});
+  await page.goto('/');
+  await page.getByRole('button', {name:'▤ Serien', exact:true}).click();
+  await page.getByRole('button', {name:'Demo Serie', exact:true}).click();
+  const actions = page.locator('.series-actions');
+  const retry = actions.getByRole('button', {name:'Folgen erneut laden'});
+  await expect(retry).toBeEnabled();
+  await expect(actions.getByRole('button', {name:/Abspielen/})).toHaveCount(0);
+  const centers = await actions.getByRole('button').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    }));
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(2);
+  await retry.click();
+  await expect(actions.getByRole('button', {name:/Abspielen/})).toBeEnabled();
+  await expect(page.getByRole('group', {name:'Staffeln'})).toBeVisible();
 });
 
 test('remote scrolling progresses through intermediate positions and honors reduced motion',async({page})=>{

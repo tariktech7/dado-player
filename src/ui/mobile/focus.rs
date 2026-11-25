@@ -457,15 +457,7 @@ fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
             }
         }
         if focused && show_focus {
-            // A clearly visible ring plus a translucent accent wash. The wash
-            // uses accent_soft's RGB but a low alpha so content stays readable
-            // (and a full-screen scrim can never wash out the whole page).
             let r = resp.rect.shrink(1.0);
-            let soft = tokens::accent_soft(ui);
-            let wash_alpha = if s.spatial { 112 } else { 76 };
-            let wash = Color32::from_rgba_unmultiplied(soft.r(), soft.g(), soft.b(), wash_alpha);
-            ui.painter()
-                .rect_filled(r, Rounding::same(tokens::RADIUS_SM), wash);
             // Two strokes: an accent halo for dark surfaces plus a crisp,
             // theme-aware high-contrast line that stays visible on a filled
             // accent button (where accent-on-accent would vanish). Compact TV
@@ -481,12 +473,6 @@ fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
                 tokens::SEL_RING + 1.0
             };
             let rounding = Rounding::same(tokens::RADIUS_SM);
-            let marker = egui::Rect::from_min_size(
-                r.left_top() + egui::vec2(2.0, r.height() * 0.22),
-                egui::vec2(3.0, r.height() * 0.56),
-            );
-            ui.painter()
-                .rect_filled(marker, 1.5, tokens::focus_ring(ui));
             ui.painter()
                 .rect_stroke(r, rounding, Stroke::new(halo, tokens::accent(ui)));
             ui.painter()

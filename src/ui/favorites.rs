@@ -6,18 +6,10 @@ use egui::{Align, Color32, Layout, RichText, Rounding, Sense, Stroke, Ui, Vec2};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        ui.add(egui::Label::new(
-            RichText::new("Favoriten").size(22.0).strong(),
-        ));
-        ui.add_space(8.0);
-        ui.add(egui::Label::new(
-            RichText::new(format!("{} gespeichert", app.favorites.len()))
-                .size(11.0)
-                .weak(),
-        ));
+    ui.vertical_centered(|ui| {
+        ui.heading(app.settings.language.text("Favoriten", "Favorites"));
     });
-    ui.add_space(6.0);
+    ui.add_space(14.0);
 
     category_tabs(app, ui);
     let favs = app.favorites.clone();

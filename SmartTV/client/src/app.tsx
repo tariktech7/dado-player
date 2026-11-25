@@ -25,7 +25,7 @@ import { Provider, hostUrl, httpUrl, liveExtension } from "./api";
 import { Player } from "./player";
 import { TVSelect } from "./select";
 import { TVInput } from "./input";
-import { CatalogBrowser, TitleDetail, resumeEpisode } from "./library";
+import { CatalogBrowser, TitleDetail, resumeEpisode, type EpisodeLoad } from "./library";
 import playbackLanguages from "../../../shared/playback-languages.json" with { type: "json" };
 import settingsSections from "../../../shared/settings-sections.json" with { type: "json" };
 import policy from '../../../shared/product-policy.json' with { type: 'json' };
@@ -297,6 +297,7 @@ function App() {
     [full, setFull] = useState(false),
     [detail, setDetail] = useState<Item | null>(null),
     [episodes, setEpisodes] = useState<Item[]>([]);
+  const [episodeLoad, setEpisodeLoad] = useState<EpisodeLoad>("loading");
   const memories = useRef<
     Partial<
       Record<
@@ -306,6 +307,7 @@ function App() {
           query: string;
           detail: Item | null;
           episodes: Item[];
+          episodeLoad: EpisodeLoad;
           scroll: number[];
         }
       >
@@ -721,8 +723,8 @@ function App() {
       if (origin?.isConnected) origin.focus({preventScroll: true});
     });
   };
-  async function openDetail(item: Item, promptForResume = false) {
-    if (view !== "vod" && view !== "series") {
+  async function openDetail(item: Item, promptForResume = false, retry = false) {
+    if (!retry && view !== "vod" && view !== "series") {
       const focus = document.activeElement;
       externalTitleOrigin.current = focus instanceof HTMLElement ? focus : null;
     }
@@ -733,6 +735,7 @@ function App() {
     detailRef.current = item;
     setDetail(cached?.item || item);
     setEpisodes(cached ? [...cached.episodes] : []);
+    if (item.kind === "series") setEpisodeLoad(cached ? "ready" : "loading");
     function offerSeriesResume(rows: Item[]) {
       if (promptForResume && item.kind === "series") {
         const target = resumeEpisode(rows, history);
@@ -761,10 +764,13 @@ function App() {
       if (token === detailRequest.current) {
         setDetail(value.item);
         setEpisodes(rows);
+        if (item.kind === "series") setEpisodeLoad("ready");
         offerSeriesResume(rows);
       }
     } catch (e) {
-      if (token === detailRequest.current) setMessage((e as Error).message);
+      if (token !== detailRequest.current) return;
+      if (item.kind === "series") setEpisodeLoad("failed");
+      else setMessage((e as Error).message);
     }
   }
   const go = (next: View) => {
@@ -780,6 +786,7 @@ function App() {
       query,
       detail: selectedTitle || detail,
       episodes,
+      episodeLoad,
       scroll,
     };
     stop();
@@ -792,6 +799,7 @@ function App() {
     setSelectedTitle(memory?.detail || null);
     setDetail(memory?.detail || null);
     setEpisodes(memory?.episodes || []);
+    setEpisodeLoad(memory?.episodeLoad || "loading");
     if (next === "live" || next === "vod" || next === "series") {
       requestAnimationFrame(() => {
         const content = document.querySelector<HTMLElement>(`.shell[data-focus-scope="${next}"] .category-list button`);
@@ -1773,23 +1781,22 @@ function App() {
     };
     return (
       <div class={`settings-page${active ? " has-setting" : ""}`}>
-        {!active ? <><h1>{t("Einstellungen", "Settings")}</h1>
+        {!active ? <section class="settings-overview"><h1>{t("Einstellungen", "Settings")}</h1>
         <nav class="settings-sections" data-focus-zone="settings-sections" aria-label={t("Bereiche", "Sections")}>
           {settingsSections.filter(section => !query.trim() || section[saved.settings.language].toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(section => (
             <button key={section.id} data-focus-key={section.id} onClick={() => {
               setSettingsDraft(null);
               setCacheCleared(false);
               setSettingsSection(section.id);
-              requestAnimationFrame(() => document.querySelector<HTMLElement>(".settings-options button")?.focus());
+              requestAnimationFrame(() => document.querySelector<HTMLElement>(".classic-header .settings-back")?.focus());
             }}>
               <SettingsTileIcon section={section.id} />
               <span>{section[saved.settings.language]}</span>
             </button>
           ))}
-        </nav></> : <section key={active.id} id="settings-options" class="glass settings-options"
+        </nav></section> : <section key={active.id} id="settings-options" class="glass settings-options"
             data-focus-zone="settings-options" data-settings-section={active.id}
             data-license-status={active.id === "license" ? "" : undefined}>
-          <button class="settings-back menu-back" onClick={closeSettingsSection}>{t("‹ Alle Einstellungen", "‹ All settings")}</button>
           <h2>{active[saved.settings.language]}</h2>
           <div class="settings-content">{renderSection(active.id)}</div>
         </section>}
@@ -2055,12 +2062,20 @@ function App() {
           >
             <header class={classic ? "classic-header" : "classic-header modern-header"}
               data-focus-zone={classic ? "navigation" : undefined}>
-              {classic && view !== "home" && <button class="menu-back classic-back" onClick={back}>{t("‹ Zurück", "‹ Back")}</button>}
+              {view !== "home" && <button
+                class={`menu-back classic-back${view === "settings" && settingsSection ? " settings-back" : ""}`}
+                onClick={() => {
+                  if (view === "settings" && closeSettingsSection()) return;
+                  if (classic) back(); else go("home");
+                }}
+              >{view === "settings" && settingsSection
+                ? t("‹ Alle Einstellungen", "‹ All settings")
+                : t("‹ Zurück", "‹ Back")}</button>}
               {classic && <><img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
               <strong>Dado Player</strong></>}
               {classic && license.claims?.kind === 'trial' && <small class="trial-badge" data-trial-badge>Testversion · {license.text.replace(' Testzeit', '').replace('Noch', 'noch')}</small>}
               <div class="header-search">
-                <button type="button" aria-label={t("Suche", "Search")} onClick={() => {
+                <button type="button" tabIndex={-1} aria-label={t("Suche", "Search")} onClick={() => {
                   if (view === "home") goShortcut("search");
                   else document.querySelector<HTMLElement>(".header-search-field")?.focus({preventScroll:true});
                 }}>⌕</button>
@@ -2272,7 +2287,8 @@ function App() {
                     : "content"
                 }
                 class={
-                  view === "vod" || view === "series" ? "catalog-main" : ""
+                  view === "vod" || view === "series" ? "catalog-main" :
+                    ["favorites", "history", "search"].includes(view) ? "personal-main" : ""
                 }
               >
                 {view === "home" && classic ? (
@@ -2478,6 +2494,8 @@ function App() {
                     favorites={favorites}
                     detail={detail}
                     episodes={episodes}
+                    episodeLoad={episodeLoad}
+                    reloadEpisodes={(item) => void openDetail(item, true, true)}
                     history={history}
                     watchHistory={saved.settings.watchHistory}
                     toggle={toggleFavorite}
@@ -2498,6 +2516,7 @@ function App() {
             )}
             {externalTitle && <TitleDetail item={externalTitle} t={t} panel={externalTitlePanel}
               close={closeExternalTitle} episodes={episodes} history={history}
+              episodeLoad={episodeLoad} reloadEpisodes={() => void openDetail(externalTitle, true, true)}
               marked={isFavorite(externalTitle)} toggle={toggleFavorite} play={playTitle} playDirect={playDirect}
               previews={allowEpisodePreviews(externalTitle)} />}
           </div>

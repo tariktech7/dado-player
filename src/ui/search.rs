@@ -6,8 +6,10 @@ use egui::{Align, Color32, Layout, RichText, Rounding, Sense, Ui, Vec2};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
-    ui.add(egui::Label::new(RichText::new("Suche").size(22.0).strong()));
-    ui.add_space(6.0);
+    ui.vertical_centered(|ui| {
+        ui.heading(app.settings.language.text("Suche", "Search"));
+    });
+    ui.add_space(14.0);
     let remote = app.shared_remote_navigation();
     if !super::desktop::active(ui.ctx()) {
         ui.horizontal(|ui| {

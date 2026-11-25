@@ -168,12 +168,8 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     let language = app.settings.language;
     let t = |de, en| language.text(de, en);
     let scale = super::desktop::scale(ui.ctx());
-    let width = ui.available_width();
     let mut changed = false;
     let mut playback_changed = false;
-    if app.settings_section.is_none() {
-        ui.heading(t("Einstellungen", "Settings"));
-    }
     let draft = ui.id().with("settings-draft");
     egui::ScrollArea::vertical()
         .id_source(("settings-page", app.settings_section))
@@ -188,172 +184,159 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     focus::set_zone(1);
                 }
                 let mobile = super::mobile::active(ui.ctx());
-                let width = (ui.available_width() - 16.0)
-                    .min((super::desktop::appearance().settings_panel_width * scale).max(520.0))
-                    .max(1.0);
-                let inset = ((ui.available_width() - width) / 2.0).max(0.0);
-                let height_key = draft.with((index, "section-height"));
-                let height = ui
-                    .data(|data| data.get_temp::<f32>(height_key))
-                    .unwrap_or(320.0 * scale);
-                let top = ((ui.available_height() - height) / 2.0).max(12.0);
-                ui.add_space(top);
-                let row = ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.add_space(inset);
-                    ui.push_id(draft.with(index), |ui| {
-                        ui.vertical(|ui| {
-                            ui.set_width(width);
-                            let back = super::desktop::back_button(
-                                ui,
-                                t("‹ Alle Einstellungen", "‹ All settings"),
-                            );
-                            if app.settings_return_tile.take().is_some() {
-                                back.request_focus();
-                                focus::request_id(back.id);
-                            }
-                            let go_back = if ordered {
-                                focus::clicked(ui, &back)
-                            } else {
-                                activate(ui, &back)
-                            };
-                            if go_back {
-                                app.close_settings_section();
-                                return;
-                            }
-                            ui.add_space(8.0);
-                            ui.heading(t(&section.de, &section.en));
-                            ui.add_space(8.0);
-                            panel(
-                                app,
-                                ui,
-                                &section.id,
-                                draft.with(index).with("choice"),
-                                mobile,
-                                &mut changed,
-                                &mut playback_changed,
-                            );
-                        });
-                    });
-                });
-                let actual_height = row.response.rect.height();
-                if (height - actual_height).abs() > 1.0 {
-                    ui.data_mut(|data| data.insert_temp(height_key, actual_height));
-                    ui.ctx().request_repaint();
-                }
-                ui.add_space(12.0);
+                centered_contents(
+                    ui,
+                    super::desktop::appearance().settings_panel_width * scale,
+                    draft.with(index),
+                    300.0 * scale,
+                    |ui| {
+                        ui.vertical_centered(|ui| ui.heading(t(&section.de, &section.en)));
+                        ui.add_space(14.0);
+                        panel(
+                            app,
+                            ui,
+                            &section.id,
+                            draft.with(index).with("choice"),
+                            mobile,
+                            &mut changed,
+                            &mut playback_changed,
+                        );
+                    },
+                );
             } else {
-                let columns = if width < 580.0 { 2 } else { 3 };
-                let gap = (18.0 * scale).max(10.0);
-                let tile_width =
-                    ((width - (columns - 1) as f32 * gap) / columns as f32 - 2.0).max(1.0);
-                let tile_height = (150.0 * scale).max(73.0);
-                let tiles: Vec<_> = sections()
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, section)| section.id != "license" || cfg!(windows))
-                    .filter(|(_, section)| {
-                        t(&section.de, &section.en)
-                            .to_lowercase()
-                            .contains(&app.settings_q.trim().to_lowercase())
-                    })
-                    .collect();
-                focus::set_zone(1);
-                for row in tiles.chunks(columns) {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = gap;
-                        for &(index, section) in row {
-                            let label = t(&section.de, &section.en);
-                            let icon = match section.id.as_str() {
-                                "clock" => Icon::Clock,
-                                "updates" => Icon::Refresh,
-                                "player" | "playback" => Icon::Play,
-                                "stream" => Icon::Tv,
-                                "audio" => Icon::Volume,
-                                "profiles" => Icon::User,
-                                "cache" => Icon::Trash,
-                                "parental" => Icon::EyeOff,
-                                "license" => Icon::Info,
-                                _ => Icon::Settings,
-                            };
-                            let (rect, response) = ui.allocate_exact_size(
-                                egui::vec2(tile_width, tile_height),
-                                egui::Sense::click(),
-                            );
-                            if app.settings_return_tile == Some(index) {
-                                app.settings_return_tile = None;
-                                response.request_focus();
-                                focus::request_id(response.id);
-                            }
-                            let style = ui.style().interact(&response);
-                            let focused =
-                                response.has_focus() || focus::focused_id() == Some(response.id);
-                            ui.painter().rect(
-                                rect,
-                                14.0,
-                                style.bg_fill,
-                                if focused {
-                                    egui::Stroke::new(3.0, crate::theme::accent(ui))
-                                } else {
-                                    style.bg_stroke
-                                },
-                            );
-                            let icon_size = (tile_height * 0.30).min(tile_width * 0.28);
-                            components::icon(
-                                ui,
-                                egui::Rect::from_center_size(
-                                    egui::pos2(rect.center().x, rect.top() + tile_height * 0.34),
-                                    egui::Vec2::splat(icon_size),
-                                ),
-                                icon,
-                                crate::theme::accent(ui),
-                            );
-                            let font_size = (31.0 * scale).max(16.0);
-                            let font = tokens::bold(font_size);
-                            let label_width = ui
-                                .painter()
-                                .layout_no_wrap(
-                                    label.into(),
-                                    font.clone(),
-                                    ui.visuals().text_color(),
-                                )
-                                .size()
-                                .x;
-                            let font = tokens::bold(
-                                font_size * ((tile_width - 12.0).max(1.0) / label_width).min(1.0),
-                            );
-                            ui.painter().text(
-                                egui::pos2(rect.center().x, rect.top() + tile_height * 0.73),
-                                egui::Align2::CENTER_CENTER,
-                                label,
-                                font,
-                                ui.visuals().text_color(),
-                            );
-                            response.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::Button, label)
-                            });
-                            let clicked = if app.shared_remote_navigation() {
-                                focus::clicked(ui, &response)
-                            } else {
-                                response.clicked()
-                            };
-                            if clicked {
-                                app.settings_section = Some(index);
-                                app.settings_return_tile = Some(index);
-                                if section.id == "cache" {
-                                    ui.ctx().data_mut(|data| {
-                                        data.remove::<bool>(egui::Id::new("settings-cache-cleared"))
+                centered_contents(
+                    ui,
+                    1380.0 * scale,
+                    draft.with("overview"),
+                    640.0 * scale,
+                    |ui| {
+                        ui.vertical_centered(|ui| ui.heading(t("Einstellungen", "Settings")));
+                        ui.add_space((24.0 * scale).max(12.0));
+                        let width = ui.available_width();
+                        let columns = if width < 580.0 { 2 } else { 3 };
+                        let gap = (18.0 * scale).max(10.0);
+                        let tile_width =
+                            ((width - (columns - 1) as f32 * gap) / columns as f32 - 2.0).max(1.0);
+                        let tile_height = (128.0 * scale).max(64.0);
+                        let tiles: Vec<_> = sections()
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, section)| section.id != "license" || cfg!(windows))
+                            .filter(|(_, section)| {
+                                t(&section.de, &section.en)
+                                    .to_lowercase()
+                                    .contains(&app.settings_q.trim().to_lowercase())
+                            })
+                            .collect();
+                        focus::set_zone(1);
+                        for row in tiles.chunks(columns) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = gap;
+                                for &(index, section) in row {
+                                    let label = t(&section.de, &section.en);
+                                    let icon = match section.id.as_str() {
+                                        "clock" => Icon::Clock,
+                                        "updates" => Icon::Refresh,
+                                        "player" | "playback" => Icon::Play,
+                                        "stream" => Icon::Tv,
+                                        "audio" => Icon::Volume,
+                                        "profiles" => Icon::User,
+                                        "cache" => Icon::Trash,
+                                        "parental" => Icon::EyeOff,
+                                        "license" => Icon::Info,
+                                        _ => Icon::Settings,
+                                    };
+                                    let (rect, response) = ui.allocate_exact_size(
+                                        egui::vec2(tile_width, tile_height),
+                                        egui::Sense::click(),
+                                    );
+                                    if app.settings_return_tile == Some(index) {
+                                        app.settings_return_tile = None;
+                                        response.request_focus();
+                                        focus::request_id(response.id);
+                                    }
+                                    let style = ui.style().interact(&response);
+                                    let focused = response.has_focus()
+                                        || focus::focused_id() == Some(response.id);
+                                    ui.painter().rect(
+                                        rect,
+                                        (super::desktop::appearance().settings_panel_radius
+                                            * scale)
+                                            .max(14.0),
+                                        style.bg_fill,
+                                        if focused {
+                                            egui::Stroke::new(3.0, crate::theme::accent(ui))
+                                        } else {
+                                            style.bg_stroke
+                                        },
+                                    );
+                                    let icon_size = (tile_height * 0.30).min(tile_width * 0.28);
+                                    components::icon(
+                                        ui,
+                                        egui::Rect::from_center_size(
+                                            egui::pos2(
+                                                rect.center().x,
+                                                rect.top() + tile_height * 0.34,
+                                            ),
+                                            egui::Vec2::splat(icon_size),
+                                        ),
+                                        icon,
+                                        crate::theme::accent(ui),
+                                    );
+                                    let font_size = (31.0 * scale).max(16.0);
+                                    let font = tokens::bold(font_size);
+                                    let label_width = ui
+                                        .painter()
+                                        .layout_no_wrap(
+                                            label.into(),
+                                            font.clone(),
+                                            ui.visuals().text_color(),
+                                        )
+                                        .size()
+                                        .x;
+                                    let font = tokens::bold(
+                                        font_size
+                                            * ((tile_width - 12.0).max(1.0) / label_width).min(1.0),
+                                    );
+                                    ui.painter().text(
+                                        egui::pos2(
+                                            rect.center().x,
+                                            rect.top() + tile_height * 0.73,
+                                        ),
+                                        egui::Align2::CENTER_CENTER,
+                                        label,
+                                        font,
+                                        ui.visuals().text_color(),
+                                    );
+                                    response.widget_info(|| {
+                                        egui::WidgetInfo::labeled(egui::WidgetType::Button, label)
                                     });
+                                    let clicked = if app.shared_remote_navigation() {
+                                        focus::clicked(ui, &response)
+                                    } else {
+                                        response.clicked()
+                                    };
+                                    if clicked {
+                                        app.settings_section = Some(index);
+                                        app.settings_return_tile = Some(index);
+                                        if section.id == "cache" {
+                                            ui.ctx().data_mut(|data| {
+                                                data.remove::<bool>(egui::Id::new(
+                                                    "settings-cache-cleared",
+                                                ))
+                                            });
+                                        }
+                                        ui.ctx().data_mut(|data| {
+                                            data.remove::<usize>(draft.with(index).with("choice"))
+                                        });
+                                        ui.ctx().request_repaint();
+                                    }
                                 }
-                                ui.ctx().data_mut(|data| {
-                                    data.remove::<usize>(draft.with(index).with("choice"))
-                                });
-                                ui.ctx().request_repaint();
-                            }
+                            });
+                            ui.add_space(gap);
                         }
-                    });
-                    ui.add_space(gap);
-                }
+                    },
+                );
             }
         });
     if changed || playback_changed {
@@ -363,6 +346,40 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     if playback_changed && !super::mobile::active(ui.ctx()) {
         app.reset_player();
     }
+}
+
+fn centered_contents(
+    ui: &mut Ui,
+    max_width: f32,
+    id: egui::Id,
+    estimate: f32,
+    draw: impl FnOnce(&mut Ui),
+) {
+    let width = (ui.available_width() - 16.0)
+        .min(max_width.max(520.0))
+        .max(1.0);
+    let inset = ((ui.available_width() - width) * 0.5).max(0.0);
+    let height_key = id.with("height");
+    let height = ui
+        .data(|data| data.get_temp::<f32>(height_key))
+        .unwrap_or(estimate);
+    ui.add_space(((ui.available_height() - height) * 0.5).max(12.0));
+    let row = ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(inset);
+        ui.push_id(id, |ui| {
+            ui.vertical(|ui| {
+                ui.set_width(width);
+                draw(ui);
+            })
+        });
+    });
+    let actual_height = row.response.rect.height();
+    if (height - actual_height).abs() > 1.0 {
+        ui.data_mut(|data| data.insert_temp(height_key, actual_height));
+        ui.ctx().request_repaint();
+    }
+    ui.add_space(12.0);
 }
 
 pub(super) fn open_profiles(app: &mut App) {

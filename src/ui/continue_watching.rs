@@ -5,14 +5,16 @@ use egui::{RichText, Sense, Ui, Vec2};
 
 pub fn show(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        ui.add(egui::Label::new(
-            RichText::new("Fortsetzen").size(22.0).strong(),
-        ));
-        ui.add_space(14.0);
-        category_tabs(app, ui);
+    ui.vertical_centered(|ui| {
+        ui.heading(
+            app.settings
+                .language
+                .text("Fortsetzen", "Continue watching"),
+        );
     });
-    ui.add_space(6.0);
+    ui.add_space(14.0);
+    category_tabs(app, ui);
+    ui.add_space(8.0);
 
     match app.continue_tab {
         ContinueTab::Live => live_tab(app, ui),

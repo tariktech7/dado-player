@@ -1,0 +1,5 @@
+{
+  "blue": { "near": "#305878", "far": "#263856" },
+  "dark": { "near": "#223a53", "far": "#29283c" },
+  "light": { "near": "#dbeafa", "far": "#e9e4f3" }
+}

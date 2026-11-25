@@ -37,7 +37,9 @@ export function resumeEpisode(episodes: Item[], history: Watched[]) {
   return { item: ordered[index], position: watched?.position || 0 };
 }
 
-export function EpisodePicker({episodes, history, play, playDirect, t, actions, previews, seriesCover}: {
+export type EpisodeLoad = "loading" | "ready" | "failed";
+
+export function EpisodePicker({episodes, history, play, playDirect, t, actions, previews, seriesCover, episodeLoad, reloadEpisodes}: {
   episodes: Item[];
   history: Watched[];
   play: (item: Item, position: number) => void;
@@ -46,6 +48,8 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
   actions?: ComponentChildren;
   previews: boolean;
   seriesCover: string;
+  episodeLoad: EpisodeLoad;
+  reloadEpisodes: () => void;
 }) {
   const ordered = useMemo(() => [...episodes].sort((a, b) =>
     (a.season ?? 1) - (b.season ?? 1) || (a.episode ?? 1) - (b.episode ?? 1) || a.id.localeCompare(b.id)
@@ -78,14 +82,17 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
   return (
     <div class="series-episodes">
       <div class="movie-actions series-actions">
-        <button class="primary movie-play series-play" disabled={!target}
-          onClick={() => { if (target) { frames.stop(); playDirect(target.item, target.position); } }}>
-          ▶ {t("Abspielen", "Play")}
+        <button class="primary movie-play series-play" disabled={!target && episodeLoad !== "failed"}
+          onClick={() => {
+            if (episodeLoad === "failed") reloadEpisodes();
+            else if (target) { frames.stop(); playDirect(target.item, target.position); }
+          }}>
+          {episodeLoad === "failed" ? t("Folgen erneut laden", "Reload episodes") : `▶ ${t("Abspielen", "Play")}`}
         </button>
-        <button class="series-random" disabled={!ordered.length} onClick={() => {
+        {!!ordered.length && <button class="series-random" onClick={() => {
           const episode = ordered[Math.floor(Math.random() * ordered.length)];
           if (episode) { frames.stop(); playDirect(episode, 0, true); }
-        }}>{t("Zufällige Folge", "Random episode")}</button>
+        }}>{t("Zufällige Folge", "Random episode")}</button>}
         {actions}
       </div>
       {ordered.length ? <>
@@ -118,7 +125,9 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
             );
           })}
         </div>
-      </> : <p role="status">{t("Folgen werden geladen …", "Loading episodes…")}</p>}
+      </> : episodeLoad !== "failed" && <p role="status">{episodeLoad === "ready"
+        ? t("Keine Folgen verfügbar.", "No episodes available.")
+        : t("Folgen werden geladen …", "Loading episodes…")}</p>}
     </div>
   );
 }
@@ -306,6 +315,8 @@ export function CatalogBrowser({
   favorites,
   detail,
   episodes,
+  episodeLoad,
+  reloadEpisodes,
   history,
   watchHistory,
   toggle,
@@ -328,6 +339,8 @@ export function CatalogBrowser({
   favorites: Item[];
   detail: Item | null;
   episodes: Item[];
+  episodeLoad: EpisodeLoad;
+  reloadEpisodes: (item: Item) => void;
   history: Watched[];
   watchHistory: boolean;
   toggle: (i: Item) => void;
@@ -432,6 +445,7 @@ export function CatalogBrowser({
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
       {item && <TitleDetail item={item} t={t} panel={preview} close={close}
+        episodeLoad={episodeLoad} reloadEpisodes={() => reloadEpisodes(item)}
         episodes={episodes} history={history} marked={favoriteKeys.has(itemKey(item))}
         toggle={toggle} play={play} playDirect={playDirect} previews={allowEpisodePreviews(item)} />}
     </div>
@@ -439,7 +453,7 @@ export function CatalogBrowser({
 }
 
 
-export function TitleDetail({item, t, panel, close, episodes, history, marked, toggle, play, playDirect, previews}: {
+export function TitleDetail({item, t, panel, close, episodes, history, marked, toggle, play, playDirect, previews, episodeLoad, reloadEpisodes}: {
   item: Item;
   t: (de: string, en: string) => string;
   panel: RefObject<HTMLElement>;
@@ -448,6 +462,8 @@ export function TitleDetail({item, t, panel, close, episodes, history, marked, t
   history: Watched[];
   marked: boolean;
   previews: boolean;
+  episodeLoad: EpisodeLoad;
+  reloadEpisodes: () => void;
   toggle: (item: Item) => void;
   play: (item: Item, position: number) => void;
   playDirect: (item: Item, position: number, untracked?: boolean) => void;
@@ -480,6 +496,7 @@ export function TitleDetail({item, t, panel, close, episodes, history, marked, t
         ) : (
           <div class="series-controls" key={itemKey(item)}>
             <EpisodePicker episodes={episodes} history={history} play={play} playDirect={playDirect} t={t} previews={previews} seriesCover={item.logo}
+              episodeLoad={episodeLoad} reloadEpisodes={reloadEpisodes}
               actions={<>{favorite}{item.description && <Description text={item.description}
                 action={t("Mehr lesen", "Read more")} />}</>} />
           </div>
