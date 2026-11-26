@@ -39,7 +39,7 @@ export function resumeEpisode(episodes: Item[], history: Watched[]) {
 
 export type EpisodeLoad = "loading" | "ready" | "failed";
 
-export function EpisodePicker({episodes, history, play, playDirect, t, actions, previews, seriesCover, episodeLoad, reloadEpisodes}: {
+export function EpisodePicker({episodes, history, play, playDirect, t, actions, previews, seriesCover, profileId, episodeLoad, reloadEpisodes}: {
   episodes: Item[];
   history: Watched[];
   play: (item: Item, position: number) => void;
@@ -47,6 +47,7 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
   t: (de: string, en: string) => string;
   actions?: ComponentChildren;
   previews: boolean;
+  profileId: string;
   seriesCover: string;
   episodeLoad: EpisodeLoad;
   reloadEpisodes: () => void;
@@ -61,7 +62,7 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
   const tabs = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => ordered.filter(e => (e.season ?? 1) === season), [ordered, season]);
-  const frames = useEpisodeFrames(rows, list, previews);
+  const frames = useEpisodeFrames(rows, list, previews, profileId);
   const watched = useMemo(() => new Map(history.map(h => [itemKey(h.item), h])), [history]);
 
   useLayoutEffect(() => {
@@ -108,7 +109,7 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
         <div ref={list} class="episode-list series-rail" role="group" aria-label={t("Folgen", "Episodes")}>
           {rows.map((e, index) => {
             const saved = watched.get(itemKey(e));
-            const image = previews ? frames.image(e.id) || (e.preview !== seriesCover ? e.preview : "") : "";
+            const image = previews ? frames.image(e) || (e.preview !== seriesCover ? e.preview : "") : "";
             const active = target && itemKey(target.item) === itemKey(e);
             const progress = saved && saved.duration > 0
               ? Math.max(0, Math.min(1, saved.position / saved.duration)) : 0;
@@ -300,6 +301,7 @@ function PosterGrid({
 }
 
 export function CatalogBrowser({
+  profileId,
   legend,
   kind,
   t,
@@ -324,6 +326,7 @@ export function CatalogBrowser({
   playDirect,
   allowEpisodePreviews,
 }: {
+  profileId: string;
   legend: import("preact").ComponentChildren;
   kind: "series" | "vod";
   t: (de: string, en: string) => string;
@@ -444,7 +447,7 @@ export function CatalogBrowser({
           resetKey={JSON.stringify([category, query, alphabetic])}
           emptyMessage={t("Keine passenden Titel.", "No matching titles.")} />
       </section>
-      {item && <TitleDetail item={item} t={t} panel={preview} close={close}
+      {item && <TitleDetail item={item} profileId={profileId} t={t} panel={preview} close={close}
         episodeLoad={episodeLoad} reloadEpisodes={() => reloadEpisodes(item)}
         episodes={episodes} history={history} marked={favoriteKeys.has(itemKey(item))}
         toggle={toggle} play={play} playDirect={playDirect} previews={allowEpisodePreviews(item)} />}
@@ -453,7 +456,8 @@ export function CatalogBrowser({
 }
 
 
-export function TitleDetail({item, t, panel, close, episodes, history, marked, toggle, play, playDirect, previews, episodeLoad, reloadEpisodes}: {
+export function TitleDetail({item, profileId, t, panel, close, episodes, history, marked, toggle, play, playDirect, previews, episodeLoad, reloadEpisodes}: {
+  profileId: string;
   item: Item;
   t: (de: string, en: string) => string;
   panel: RefObject<HTMLElement>;
@@ -471,7 +475,10 @@ export function TitleDetail({item, t, panel, close, episodes, history, marked, t
   const position = item.kind === "vod" ? history.find(h => itemKey(h.item) === itemKey(item))?.position || 0 : 0;
   const favorite = <button class="favorite-toggle" aria-label={t("Favorit", "Favorite")}
     aria-pressed={marked} onClick={() => toggle(item)}>
-    <span aria-hidden="true">{marked ? "♥" : "♡"}</span>
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill={marked ? "currentColor" : "none"}
+      stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M12 20.5 3.7 12a5 5 0 0 1 7.1-7L12 6.2 13.2 5a5 5 0 0 1 7.1 7Z" />
+    </svg>
   </button>;
   return (
       <aside ref={panel} class={`catalog-details movie-detail${item.kind === "series" ? " series-detail" : ""}`} data-focus-zone="details">
@@ -495,7 +502,7 @@ export function TitleDetail({item, t, panel, close, episodes, history, marked, t
           </div>
         ) : (
           <div class="series-controls" key={itemKey(item)}>
-            <EpisodePicker episodes={episodes} history={history} play={play} playDirect={playDirect} t={t} previews={previews} seriesCover={item.logo}
+            <EpisodePicker episodes={episodes} history={history} play={play} playDirect={playDirect} t={t} previews={previews} seriesCover={item.logo} profileId={profileId}
               episodeLoad={episodeLoad} reloadEpisodes={reloadEpisodes}
               actions={<>{favorite}{item.description && <Description text={item.description}
                 action={t("Mehr lesen", "Read more")} />}</>} />

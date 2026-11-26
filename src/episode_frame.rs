@@ -1,5 +1,5 @@
 use super::{load_fns, load_library, Mpv};
-use crate::types::Settings;
+use crate::{release_info::EPISODE_PREVIEW_SECONDS, types::Settings};
 use std::{
     ffi::{c_int, c_void},
     ptr,
@@ -58,7 +58,6 @@ pub(crate) fn frame(
         ("audio", "no"),
         ("sid", "no"),
         ("pause", "yes"),
-        ("start", "5"),
         ("osd-level", "0"),
         ("network-timeout", "4"),
     ] {
@@ -109,22 +108,46 @@ pub(crate) fn frame(
         Param(0, ptr::null_mut()),
     ];
     let deadline = Instant::now() + Duration::from_secs(6);
+    let mut candidates = EPISODE_PREVIEW_SECONDS.into_iter();
+    let mut target: Option<f64> = None;
     while Instant::now() < deadline && !cancel.load(Ordering::Relaxed) {
-        if unsafe { update(surface.context) } & 1 == 1
-            && player.width() > 0
-            && unsafe { render(surface.context, params.as_mut_ptr()) } >= 0
-        {
-            let pixels = pixels
-                .into_iter()
-                .map(|pixel| {
+        if player.width() > 0 && player.get_flag("seeking") != Some(true) {
+            if target.is_none() {
+                let mut next = candidates.next()?;
+                let duration = player.duration();
+                if duration > 0.0 && duration <= next + 0.2 {
+                    if next != EPISODE_PREVIEW_SECONDS[0] {
+                        return None;
+                    }
+                    next = duration * 0.5;
+                }
+                if player.command(&["seek", &next.to_string(), "absolute+exact"]) < 0 {
+                    return None;
+                }
+                target = Some(next);
+            } else if (player.position() - target?).abs() <= 0.5
+                && unsafe { update(surface.context) } & 1 == 1
+                && unsafe { render(surface.context, params.as_mut_ptr()) } >= 0
+            {
+                if !pixels.iter().step_by(37).any(|pixel| {
                     let [r, g, b, _] = pixel.to_ne_bytes();
-                    egui::Color32::from_rgb(r, g, b)
-                })
-                .collect();
-            return Some(egui::ColorImage {
-                size: [WIDTH, HEIGHT],
-                pixels,
-            });
+                    r.max(g).max(b) > 28
+                }) {
+                    target = None;
+                    continue;
+                }
+                let pixels = pixels
+                    .into_iter()
+                    .map(|pixel| {
+                        let [r, g, b, _] = pixel.to_ne_bytes();
+                        egui::Color32::from_rgb(r, g, b)
+                    })
+                    .collect();
+                return Some(egui::ColorImage {
+                    size: [WIDTH, HEIGHT],
+                    pixels,
+                });
+            }
         }
         std::thread::sleep(Duration::from_millis(25));
     }

@@ -1445,7 +1445,7 @@ hr {
   overflow: hidden;
   margin: 0 0 6px;
 }
-.shell.has-title-detail { position: relative; }
+.shell.has-title-detail { position: relative; width: 100%; }
 .shell.has-title-detail > .navigation,
 .shell.has-title-detail > .classic-header,
 .shell.external-title-detail > main,
@@ -1464,6 +1464,8 @@ hr {
   z-index: 12;
   background: var(--bg);
   padding: 36px 52px;
+  border: 0;
+  border-radius: 0;
 }
 .catalog-detail-header { margin-bottom: 20px; }
 .catalog-detail-scroll { width: 100%; max-width: 1350px; align-self: center; overflow: auto; }
@@ -1583,12 +1585,21 @@ hr {
 }
 .series-episodes { display: flex; flex-direction: column; min-width: 0; }
 .series-controls { flex: 0 0 auto; }
-.series-actions { margin: 0 0 14px -6px; padding: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.series-actions { --series-action-height: 72px; margin: 0 0 14px -6px; padding: 6px; gap: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .series-actions::-webkit-scrollbar { display: none; }
 .series-actions button { flex: 0 0 auto; white-space: nowrap; }
 .series-detail .series-play { min-width: 228px; }
-.series-detail .series-actions > button { min-height: 62px; font-size: 26px; }
-.movie-detail .favorite-toggle { min-width: 72px; min-height: 62px; font-size: 34px; }
+.series-detail .series-actions > button {
+  display: flex; align-items: center; justify-content: center; align-self: center;
+  height: var(--series-action-height); min-height: var(--series-action-height);
+  padding: 0 20px; font-size: 26px; line-height: 1;
+}
+.series-actions > button:not(:last-child) { margin-right: 18px; }
+.movie-detail .favorite-toggle {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 72px; min-height: 72px; padding: 0;
+}
+.movie-detail .favorite-toggle svg { display: block; width: 32px; height: 32px; }
 .movie-detail button.favorite-toggle[aria-pressed="true"] { color: #ff879d; }
 .series-episodes h3 { margin: 0 0 5px; font-size: 27px; }
 .series-episodes .series-rail {
@@ -1599,18 +1610,23 @@ hr {
   overflow-y: hidden;
   scrollbar-width: none;
   width: 100%;
-  gap: 16px;
   margin: 0 0 8px;
   padding: 7px;
 }
 .series-rail::-webkit-scrollbar { display: none; }
 .series-rail button { flex: 0 0 auto; white-space: nowrap; }
-.series-episodes .season-buttons button { min-width: 178px; min-height: 50px; font-size: 20px; }
+.series-episodes .series-rail > button:not(:last-child) { margin-right: 16px; }
+.series-episodes .season-buttons button {
+  flex-basis: calc((100% - 48px) / 4);
+  height: 74px; min-width: 0; font-size: 25px; text-align: center;
+}
+.series-episodes .episode-list { margin-top: 12px; }
 .series-episodes .episode-list button {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: 260px;
+  flex-basis: calc((100% - 32px) / 3);
+  min-width: 0;
   margin: 0;
   padding: 4px;
   gap: 5px;
@@ -1621,14 +1637,14 @@ hr {
   display: grid;
   place-items: center;
   width: 100%;
-  height: 137px;
+  height: 310px;
   overflow: hidden;
   border-radius: 8px;
   background: #0c1b2c;
 }
 .episode-art img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
 .episode-art progress { position: absolute; left: 4%; right: 4%; bottom: 5px; width: 92%; height: 5px; }
-.episode-list button strong { font-size: 19px; padding: 2px 7px; text-align: left; }
+.episode-list button strong { font-size: 23px; padding: 2px 7px; text-align: left; }
 .episode-list [aria-current="true"] { border-color: var(--accent); background: var(--select); }
 
 /* Fatal decoder errors must never reveal the still-mounted home screen. */

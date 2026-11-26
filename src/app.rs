@@ -266,6 +266,7 @@ pub struct App {
     pub continue_tab: ContinueTab,
     pub settings: Settings,
     pub settings_section: Option<usize>,
+    pub profiles_from_home: bool,
     pub adding_profile: bool,
     pub settings_return_tile: Option<usize>,
 
@@ -493,6 +494,7 @@ impl App {
             continue_tab: ContinueTab::Movies,
             settings: store::load_settings(),
             settings_section: None,
+            profiles_from_home: false,
             adding_profile: false,
             settings_return_tile: None,
             images: ImageState::default(),
@@ -1193,9 +1195,11 @@ impl App {
         // remote would hide the controls once and never be able to reveal them
         // again (the old Android workaround pinned the chrome forever, which
         // is exactly the "menu never goes away" report).
-        if self.view == View::Player
-            && (!keys.is_empty() || ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down()))
-        {
+        // Handheld taps belong to player_gestures. Waking the chrome on
+        // press here would make the delayed single tap toggle it off again.
+        let pointer_wakes_player = !ui::desktop::handheld()
+            && ctx.input(|i| i.pointer.any_pressed() || i.pointer.any_down());
+        if self.view == View::Player && (!keys.is_empty() || pointer_wakes_player) {
             // Chrome was already gone before this input: the key/tap may only
             // reveal it. The player drops the activation for that one frame.
             if !self.player_chrome {
@@ -1807,6 +1811,7 @@ impl App {
             self.adding_profile = false;
             self.settings_section = None;
             self.settings_return_tile = None;
+            self.profiles_from_home = false;
         }
         if self.tv {
             self.tv_goto(Self::tv_section(view));
@@ -1875,6 +1880,10 @@ impl App {
             self.f_pass.clear();
             return true;
         }
+        if self.profiles_from_home {
+            self.navigate(View::Home);
+            return true;
+        }
         self.settings_return_tile = self.settings_section.take();
         self.settings_return_tile.is_some()
     }
@@ -1904,6 +1913,11 @@ impl App {
 
     pub(crate) fn clear_app_cache(&mut self) -> bool {
         if self.busy || self.catalog_refreshing {
+            return false;
+        }
+        self.cancel_episode_frame();
+        if store::clear_episode_previews().is_err() {
+            self.info = Some("Episodenvorschauen konnten nicht gelöscht werden.".into());
             return false;
         }
         // Reject outstanding image, EPG and episode responses from before the clear.
@@ -3255,7 +3269,7 @@ impl App {
 
     pub(crate) fn cancel_episode_frame(&self) {
         if let Some(token) = &self.episode_frame_request {
-            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            token.store(true, std::sync::atomic::Ordering::Release);
         }
     }
 
@@ -3280,15 +3294,46 @@ impl App {
         self.episode_frame_request = Some(cancel.clone());
         let settings = self.settings.clone();
         let url = episode.stream_url.clone();
+        let profile = self
+            .active_profile
+            .as_ref()
+            .map(|profile| profile.id.as_str())
+            .unwrap_or("");
+        let path = store::episode_preview_path(&format!("{profile}\0{key}\0{url}"));
         let sender = self.tx.clone();
         let generation = self.login_generation;
         self.rt.spawn_blocking(move || {
-            #[cfg(any(target_os = "windows", target_os = "android"))]
-            let frame = crate::mpv::episode_frame::frame(&url, &settings, &cancel);
-            #[cfg(target_os = "ios")]
-            let frame = crate::platform::ios::bridge::episode_frame(&url, &settings, &cancel);
-            #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
-            let frame = None;
+            let cached = std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| decode_image(&bytes, 320).ok());
+            let frame = cached.or_else(|| {
+                #[cfg(any(target_os = "windows", target_os = "android"))]
+                let frame = crate::mpv::episode_frame::frame(&url, &settings, &cancel);
+                #[cfg(target_os = "ios")]
+                let frame = crate::platform::ios::bridge::episode_frame(&url, &settings, &cancel);
+                #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
+                let frame: Option<egui::ColorImage> = None;
+                if let Some(frame) = &frame {
+                    let rgb: Vec<u8> = frame
+                        .pixels
+                        .iter()
+                        .flat_map(|pixel| [pixel.r(), pixel.g(), pixel.b()])
+                        .collect();
+                    let mut jpeg = Vec::new();
+                    if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85)
+                        .encode(
+                            &rgb,
+                            frame.width() as u32,
+                            frame.height() as u32,
+                            image::ExtendedColorType::Rgb8,
+                        )
+                        .is_ok()
+                    {
+                        let _ = store::save_episode_preview(&path, &jpeg, &cancel);
+                    }
+                }
+                frame
+            });
             let _ = sender.send(AppEvent::EpisodeFrame(generation, key, frame));
         });
     }

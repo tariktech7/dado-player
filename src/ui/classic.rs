@@ -166,13 +166,13 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
     desktop::column(ui, header, "classic-header", 0.0, |ui| {
         let language = app.settings.language;
         ui.horizontal_centered(|ui| {
-            if app.view != View::Home {
-                let in_settings = app.view == View::Settings && app.settings_section.is_some();
+            let in_settings = app.view == View::Settings && app.settings_section.is_some();
+            if (classic && app.view != View::Home) || in_settings {
                 let response = desktop::compact_back_button(
                     ui,
                     if in_settings && app.adding_profile {
                         language.text("‹ Profile", "‹ Profiles")
-                    } else if in_settings {
+                    } else if in_settings && !app.profiles_from_home {
                         language.text("‹ Alle Einstellungen", "‹ All settings")
                     } else {
                         language.text("‹ Zurück", "‹ Back")

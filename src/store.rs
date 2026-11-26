@@ -62,6 +62,45 @@ fn app_dir() -> PathBuf {
 pub fn license_path() -> PathBuf {
     app_dir().join("device-license.json")
 }
+static EPISODE_PREVIEWS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+pub(crate) fn episode_preview_path(identity: &str) -> PathBuf {
+    let hash = ring::digest::digest(&ring::digest::SHA256, identity.as_bytes());
+    let name: String = hash
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    app_dir()
+        .join("episode-previews")
+        .join(format!("{name}.jpg"))
+}
+
+pub(crate) fn save_episode_preview(
+    path: &std::path::Path,
+    bytes: &[u8],
+    cancel: &AtomicBool,
+) -> std::io::Result<()> {
+    let _lock = EPISODE_PREVIEWS.lock().unwrap();
+    if cancel.load(Ordering::Acquire) || path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pending = path.with_extension("tmp");
+    std::fs::write(&pending, bytes)?;
+    std::fs::rename(pending, path)
+}
+
+pub(crate) fn clear_episode_previews() -> std::io::Result<()> {
+    let _lock = EPISODE_PREVIEWS.lock().unwrap();
+    match std::fs::remove_dir_all(app_dir().join("episode-previews")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
 pub fn load_parental() -> crate::parental::Policy {
     let path = app_dir().join("parental.json");
     if !path.exists() {

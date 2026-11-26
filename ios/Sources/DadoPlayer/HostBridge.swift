@@ -419,10 +419,24 @@ private final class EpisodeStill: @unchecked Sendable {
     private var image: CGImage?
     private let lock = NSLock()
 
-    func receive(_ image: CGImage?) {
+    func receive(_ candidate: CGImage?) {
+        guard let candidate else { return }
+        var pixels = [UInt8](repeating: 0, count: 16 * 9 * 4)
+        let lit = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: 16, height: 9,
+                bitsPerComponent: 8, bytesPerRow: 16 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
+                return false
+            }
+            context.draw(candidate, in: CGRect(x: 0, y: 0, width: 16, height: 9))
+            return stride(from: 0, to: bytes.count, by: 4).contains {
+                max(bytes[$0], bytes[$0 + 1], bytes[$0 + 2]) > 28
+            }
+        }
+        if !lit { return }
         lock.lock()
         defer { lock.unlock() }
-        self.image = image
+        if image == nil { image = candidate }
     }
 
     func read() -> CGImage? {
@@ -437,27 +451,45 @@ public func dado_host_episode_frame(
     _ source: UnsafePointer<CChar>,
     _ bytes: UnsafeMutableRawPointer,
     _ width: Int32,
-    _ height: Int32
+    _ height: Int32,
+    _ moments: UnsafePointer<Double>,
+    _ count: Int32
 ) -> Int32 {
-    guard width == 320, height == 180,
+    guard width == 320, height == 180, count > 0,
           let url = URL(string: String(cString: source)),
           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
         return 0
     }
-    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+    let asset = AVURLAsset(url: url)
+    let generator = AVAssetImageGenerator(asset: asset)
     generator.appliesPreferredTrackTransform = true
     generator.maximumSize = CGSize(width: Int(width), height: Int(height))
-    let finished = DispatchSemaphore(value: 0)
+    let tolerance = CMTime(seconds: 0.4, preferredTimescale: 600)
+    generator.requestedTimeToleranceBefore = tolerance
+    generator.requestedTimeToleranceAfter = tolerance
+    let deadline = DispatchTime.now() + 5
+    let durationReady = DispatchSemaphore(value: 0)
+    asset.loadValuesAsynchronously(forKeys: ["duration"]) { durationReady.signal() }
+    guard durationReady.wait(timeout: deadline) == .success else { return 0 }
+    let duration = asset.duration.seconds
     let still = EpisodeStill()
-    generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: CMTime(seconds: 5, preferredTimescale: 600))]) {
-        _, image, _, _, _ in
-        still.receive(image)
-        finished.signal()
+    for (index, moment) in UnsafeBufferPointer(start: moments, count: Int(count)).enumerated() {
+        let shortClip = duration.isFinite && duration > 0 && moment >= duration - 0.2
+        if shortClip && index != 0 { break }
+        let time = shortClip ? duration / 2 : moment
+        let finished = DispatchSemaphore(value: 0)
+        generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: CMTime(seconds: time, preferredTimescale: 600))]) {
+            _, image, _, _, _ in
+            still.receive(image)
+            finished.signal()
+        }
+        if finished.wait(timeout: deadline) != .success {
+            generator.cancelAllCGImageGeneration()
+            break
+        }
+        if still.read() != nil || time < moment { break }
     }
-    guard finished.wait(timeout: .now() + 5) == .success, let image = still.read() else {
-        generator.cancelAllCGImageGeneration()
-        return 0
-    }
+    guard let image = still.read() else { return 0 }
     let w = Int(width), h = Int(height)
     guard let context = CGContext(data: bytes, width: w, height: h, bitsPerComponent: 8,
         bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),

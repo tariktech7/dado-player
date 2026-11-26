@@ -524,6 +524,7 @@ fn centered_contents(
 }
 
 pub(super) fn open_profiles(app: &mut App) {
+    app.profiles_from_home = true;
     app.settings_section = sections()
         .iter()
         .position(|section| section.id == "profiles");
@@ -935,6 +936,25 @@ fn panel(
                     }
                 }
                 "general" => {
+                    if switch(
+                        ui,
+                        t(
+                            "Fortsetzen und Wiedergabeverlauf",
+                            "Continue watching and watch history",
+                        ),
+                        &mut app.settings.watch_history,
+                    ) {
+                        if !app.settings.watch_history {
+                            app.clear_resume();
+                            if app.series_cat == "continue" {
+                                app.series_cat = "all".into();
+                            }
+                            if app.vod_cat == "continue" {
+                                app.vod_cat = "all".into();
+                            }
+                        }
+                        *changed = true;
+                    }
                     *changed |= select(
                         ui,
                         t("Oberfläche", "Interface layout"),
@@ -977,25 +997,6 @@ fn panel(
                     }
                 }
                 "playback" => {
-                    if switch(
-                        ui,
-                        t(
-                            "Fortsetzen und Wiedergabeverlauf",
-                            "Continue watching and watch history",
-                        ),
-                        &mut app.settings.watch_history,
-                    ) {
-                        if !app.settings.watch_history {
-                            app.clear_resume();
-                            if app.series_cat == "continue" {
-                                app.series_cat = "all".into();
-                            }
-                            if app.vod_cat == "continue" {
-                                app.vod_cat = "all".into();
-                            }
-                        }
-                        *changed = true;
-                    }
                     *changed |= switch(
                         ui,
                         t(

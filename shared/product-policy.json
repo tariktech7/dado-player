@@ -4,5 +4,10 @@
   "controlsHideMs": 2000,
   "historyLimit": 150,
   "autoplayLast": false,
-  "seekStepSeconds": 10
+  "seekStepSeconds": 10,
+  "episodePreviewSeconds": [
+    8,
+    12,
+    16
+  ]
 }

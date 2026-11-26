@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Item } from "./types";
+import policy from "../../../shared/product-policy.json" with { type: "json" };
 
 function readFrame(url: string, done: (image: string) => void): () => void {
   const video = document.createElement("video");
@@ -17,6 +18,18 @@ function readFrame(url: string, done: (image: string) => void): () => void {
     video.load();
     if (image !== undefined) done(image);
   };
+  let positioned = false;
+  let candidates: number[] = [];
+  const seekNext = () => {
+    const position = candidates.shift();
+    if (position === undefined) return finish("");
+    positioned = false;
+    try {
+      video.currentTime = position;
+    } catch {
+      finish("");
+    }
+  };
   const capture = () => {
     if (video.readyState < 2 || !video.videoWidth || video.seeking) return;
     try {
@@ -30,20 +43,24 @@ function readFrame(url: string, done: (image: string) => void): () => void {
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
-      finish(canvas.toDataURL("image/jpeg", 0.75));
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let offset = 0; offset < pixels.length; offset += 148) {
+        if (Math.max(pixels[offset], pixels[offset + 1], pixels[offset + 2]) > 28) {
+          return finish(canvas.toDataURL("image/jpeg", 0.75));
+        }
+      }
+      seekNext();
     } catch {
       finish("");
     }
   };
-  let positioned = false;
   video.onloadedmetadata = () => {
-    const position = Number.isFinite(video.duration) ? Math.min(5, video.duration / 2) : 0;
-    if (position > 0) {
-      try { video.currentTime = position; } catch { finish(""); }
-    } else {
-      positioned = true;
-      capture();
-    }
+    const duration = video.duration;
+    candidates = Number.isFinite(duration) && duration > 0
+      ? policy.episodePreviewSeconds.filter(seconds => seconds < duration - 0.2)
+      : [...policy.episodePreviewSeconds];
+    if (!candidates.length) candidates.push(duration / 2);
+    seekNext();
   };
   video.onloadeddata = () => { if (positioned) capture(); };
   video.onseeked = () => { positioned = true; capture(); };
@@ -53,38 +70,109 @@ function readFrame(url: string, done: (image: string) => void): () => void {
   return () => finish();
 }
 
-export function useEpisodeFrames(rows: Item[], rail: {current: HTMLDivElement | null}, enabled: boolean) {
-  const cache = useRef(new Map<string, string>());
+const images = new Map<string, string>();
+let epoch = 0;
+let database: Promise<IDBDatabase | undefined> | undefined;
+const STORE = "frames";
+
+function previewDatabase() {
+  database ??= new Promise(resolve => {
+    try {
+      const request = indexedDB.open("dado-episode-previews", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = request.onblocked = () => resolve(undefined);
+    } catch {
+      resolve(undefined);
+    }
+  });
+  return database;
+}
+
+async function previewStorage<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>) {
+  const db = await previewDatabase();
+  if (!db) return undefined;
+  return new Promise<T | undefined>(resolve => {
+    try {
+      const transaction = db.transaction(STORE, mode);
+      const request = action(transaction.objectStore(STORE));
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = transaction.onerror = () => resolve(undefined);
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+export async function clearEpisodeFrames() {
+  epoch++;
+  images.clear();
+  await previewStorage("readwrite", store => store.clear());
+}
+
+export function useEpisodeFrames(
+  rows: Item[], rail: {current: HTMLDivElement | null}, enabled: boolean, profileId: string,
+) {
   const stop = useRef<() => void>(() => {});
   const [, repaint] = useState(0);
+  const key = (episode: Item) => JSON.stringify([profileId, episode.seriesId, episode.id]);
+
   useEffect(() => {
     const root = rail.current;
     if (!root || !enabled || typeof IntersectionObserver === "undefined") return;
     const visible = new Set<number>();
+    const failed = new Set<string>();
+    const generation = epoch;
     let cancelled = false;
     let active = false;
     let abort: (() => void) | undefined;
+    const current = () => !cancelled && generation === epoch;
+
+    function complete(id: string, result: string) {
+      if (!current()) return;
+      if (result) {
+        if (images.size >= 64) {
+          const oldest = images.keys().next().value;
+          if (oldest !== undefined) images.delete(oldest);
+        }
+        images.set(id, result);
+        repaint(revision => revision + 1);
+      } else {
+        failed.add(id);
+      }
+      active = false;
+      pump();
+    }
+
     function pump() {
-      if (active || cancelled) return;
+      if (active || !current()) return;
       const next = [...visible].find(index => {
         const episode = rows[index];
-        return episode?.url && !cache.current.has(episode.id);
+        if (!episode?.url) return false;
+        const id = key(episode);
+        return !images.has(id) && !failed.has(id);
       });
       if (next === undefined) return;
       const episode = rows[next];
+      const id = key(episode);
       active = true;
-      abort = readFrame(episode.url, (result) => {
-        if (cancelled) return;
-        if (cache.current.size >= 48) {
-          const oldest = cache.current.keys().next().value;
-          if (oldest !== undefined) cache.current.delete(oldest);
+      void previewStorage<string>("readonly", store => store.get(id)).then(cached => {
+        if (!current()) return;
+        if (cached) {
+          complete(id, cached);
+          return;
         }
-        cache.current.set(episode.id, result);
-        active = false;
-        repaint(revision => revision + 1);
-        pump();
+        abort = readFrame(episode.url, result => {
+          if (!current()) return;
+          if (result) {
+            void previewStorage("readwrite", store => current() ? store.add(result, id) : store.get(id)).then(() => complete(id, result));
+          } else {
+            complete(id, "");
+          }
+        });
       });
     }
+
     const observer = new IntersectionObserver(entries => {
       for (const entry of entries) {
         const index = Number((entry.target as HTMLElement).dataset.episodeIndex);
@@ -101,6 +189,6 @@ export function useEpisodeFrames(rows: Item[], rail: {current: HTMLDivElement | 
     }
     stop.current = cancel;
     return cancel;
-  }, [rows, rail, enabled]);
-  return { image: (id: string) => cache.current.get(id) || "", stop: () => stop.current() };
+  }, [rows, rail, enabled, profileId]);
+  return { image: (episode: Item) => images.get(key(episode)) || "", stop: () => stop.current() };
 }

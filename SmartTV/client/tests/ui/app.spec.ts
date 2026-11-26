@@ -1280,6 +1280,26 @@ test("catalogues keep seasons, favorites and independent section positions; live
     page.locator(".catalog-browser .category-list button").first(),
   ).toHaveText("Favoriten");
   await page.getByRole("button", { name: "Demo Serie", exact: true }).click();
+  const canvas = (await page.locator("#app").boundingBox())!;
+  const detail = (await page.locator(".movie-detail").boundingBox())!;
+  expect(detail).toEqual(canvas);
+  const seasonBox = (await page.locator(".season-buttons").boundingBox())!;
+  const episodesBox = (await page.locator(".episode-list").boundingBox())!;
+  const card = (await page.locator(".episode-list button").first().boundingBox())!;
+  expect(seasonBox.y + seasonBox.height).toBeLessThan(episodesBox.y);
+  expect(card.width / episodesBox.width).toBeGreaterThan(0.30);
+  expect(episodesBox.y + episodesBox.height).toBeLessThan(detail.y + detail.height);
+  const season = (await page.locator(".season-buttons button").first().boundingBox())!;
+  expect(season.width / seasonBox.width).toBeGreaterThan(0.22);
+  const actions = await page.locator(".series-actions > button").evaluateAll(nodes =>
+    nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.height]; }));
+  expect(actions.length).toBeGreaterThanOrEqual(3);
+  expect(actions.every(box => box[0] === actions[0][0] && box[1] === actions[0][1])).toBe(true);
+  const heart = page.locator(".series-actions .favorite-toggle");
+  const heartIcon = await heart.locator("svg").boundingBox();
+  await heart.click();
+  expect(await heart.locator("svg").boundingBox()).toEqual(heartIcon);
+  await heart.click();
   await expect(page.locator(".episode-list button")).toHaveCount(2);
   await expect(page.locator(".episode-list")).not.toContainText("Der Anfang");
   await page.getByRole("button", { name: "Staffel 2", exact: true }).click();
@@ -1321,15 +1341,40 @@ test("episode cards display a frame decoded from their media", async ({page}) =>
     stream.getTracks().forEach(track => track.stop());
     return Array.from(new Uint8Array(await new Blob(pieces).arrayBuffer()));
   });
-  await page.route("https://provider.invalid/series/demo/demo/*.mp4", route => route.fulfill({
+  let loads = 0;
+  await page.route("https://provider.invalid/series/demo/demo/*.mp4", route => {
+    loads++;
+    return route.fulfill({
     body: Buffer.from(clip),
     headers: {"Access-Control-Allow-Origin": "*", "Content-Type": "video/webm"},
-  }));
+    });
+  });
   await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
   await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
   const card = page.locator(".episode-list button").first();
   await expect(card.locator("img")).toHaveAttribute("src", /^data:image\/jpeg/);
   await expect(card.getByText("Folge 1")).toBeInViewport({ratio: 1});
+
+  const frames = page.locator('.episode-list img[src^="data:image/jpeg"]');
+  await expect(frames).toHaveCount(2);
+  const requests = loads;
+  const image = await frames.first().getAttribute("src");
+  await page.reload();
+  await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
+  await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
+  await expect(frames).toHaveCount(2);
+  await expect(frames.first()).toHaveAttribute("src", image!);
+  expect(loads).toBe(requests);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", {name: "⚙ Einstellungen", exact: true}).click();
+  await openSettingsSection(page, "cache");
+  await page.getByRole("button", {name: "Jetzt leeren", exact: true}).click();
+  await expect(page.getByText("Cache geleert.")).toBeVisible();
+  await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
+  await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
+  await expect(frames).toHaveCount(2);
+  expect(loads).toBeGreaterThan(requests);
 });
 
 test("series favorites open the same detail page and restore the original card", async ({page}) => {
@@ -2066,11 +2111,26 @@ test("header search follows the current catalogue and opens it at the first cate
   await expect(page.locator('.media-grid')).toContainText('Demo Film');
 });
 
+test("profile Back follows the entry point", async ({page}) => {
+  await fixture(page, true, true, 'permanent', true);
+  await page.goto("/");
+  const home = page.locator('.classic-dashboard');
+  const profiles = home.getByRole('button', {name: 'Profile', exact: true});
+  await profiles.click();
+  await expect(page.locator('[data-settings-section="profiles"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(profiles).toBeFocused();
+  await home.getByRole('button', {name: 'Einstellungen', exact: true}).click();
+  await openSettingsSection(page, 'profiles');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.settings-sections [data-focus-key="profiles"]')).toBeFocused();
+});
+
 test("turning off watch history hides continue and the saved progress prompts", async ({page}) => {
   await fixture(page, true, true, 'permanent', true);
   await page.goto("/");
   await page.locator('.classic-actions').getByRole('button',{name:'Einstellungen',exact:true}).click();
-  await openSettingsSection(page, 'playback');
+  await openSettingsSection(page, 'general');
   const history = page.getByRole('checkbox',{name:'Fortsetzen und Wiedergabeverlauf'});
   await expect(history).toBeChecked();
   await history.click();
@@ -2107,7 +2167,8 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
   expect(coverage.height).toBeGreaterThan(.8);
   expect(coverage.lastTileFits).toBe(true);
   const back = page.locator('.classic-header .classic-back');
-  const backTop = (await back.boundingBox())!.y;
+  if (!classic) await expect(back).toHaveCount(0);
+  const backTop = (await page.locator('.classic-header').boundingBox())!.y;
   const keys = await page.locator('.settings-sections button').evaluateAll(nodes =>
     nodes.map(node => (node as HTMLElement).dataset.focusKey!));
   expect(keys).toHaveLength(12);
@@ -2117,7 +2178,7 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     await expect(panel.getByRole('heading', {level:2})).toBeVisible();
     await expect(panel.locator('button:not([disabled]):not([tabindex="-1"]):visible, input:not([disabled]):visible, select:not([disabled]):visible').first()).toBeFocused();
     await expect(back).toHaveAccessibleName('‹ Alle Einstellungen');
-    expect(Math.abs((await back.boundingBox())!.y - backTop)).toBeLessThan(2);
+    expect((await back.boundingBox())!.y - backTop).toBeGreaterThanOrEqual(0);
     await expect(panel.getByRole('button', {name:'‹ Alle Einstellungen'})).toHaveCount(0);
     const alignment = await panel.evaluate(element => {
       const panel = element.getBoundingClientRect();
@@ -2144,12 +2205,12 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     });
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
-    if (key === 'playback') {
+    if (key === 'general' || key === 'playback') {
       const gaps = await panel.locator('.settings-content > .field').evaluateAll(fields =>
         fields.slice(1).map((field, i) => field.getBoundingClientRect().top - fields[i].getBoundingClientRect().bottom));
-      expect(gaps).toHaveLength(2);
+      expect(gaps).toHaveLength(key === 'general' ? 4 : 1);
       expect(Math.min(...gaps)).toBeGreaterThan(30);
-      await page.screenshot({path: testInfo.outputPath('settings-playback.png')});
+      await page.screenshot({path: testInfo.outputPath('settings-' + key + '.png')});
     }
     await page.locator('.classic-header').getByRole('button', {name:'‹ Alle Einstellungen'}).click();
   }
@@ -2178,6 +2239,12 @@ for (const classic of [false, true]) test(`menu positions and header controls in
     await expect(shell.locator(entry).first()).toBeFocused();
     await expect(header.getByRole('searchbox')).toHaveCount(1);
     const back = header.getByRole('button', {name:'‹ Zurück'});
+    if (!classic) {
+      await expect(back).toHaveCount(0);
+      await shell.locator('.navigation [data-focus-key="home"]').click();
+      await expect(shell).toHaveAttribute('data-focus-scope', 'home');
+      continue;
+    }
     await back.hover();
     const placement = await back.evaluate(element => {
       const button = element.getBoundingClientRect();

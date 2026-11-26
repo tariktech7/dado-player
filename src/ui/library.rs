@@ -55,7 +55,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     let key = format!("{}:{}", if series { "series" } else { "vod" }, entry.id);
     let image_key = format!("detail:{key}");
     let base = Color32::from_rgb(12, 27, 44);
-    ui.painter().rect_filled(bounds, 12.0, base);
+    ui.painter().rect_filled(bounds, 0.0, base);
     crate::theme::ambient(ui, bounds);
     if !entry.cover.is_empty() {
         app.request_image(image_key.clone(), entry.cover.clone());
@@ -123,7 +123,9 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     );
     let scale = super::desktop::scale(ui.ctx());
     let inset = super::desktop::handheld_size(24.0 * scale, 14.0);
-    let content = bounds.shrink(inset);
+    let content = bounds
+        .intersect(super::desktop::safe_rect(ui.ctx(), false))
+        .shrink(inset);
     let mut top = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), "title-back");
     focus::set_zone(1);
     let back = super::desktop::back_button(&mut top, t("‹ Zurück", "‹ Back"));
@@ -132,23 +134,9 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
         ui.ctx().request_repaint();
         return;
     }
-    let rail_height = (bounds.height() * 0.065).clamp(24.0, 54.0);
-    let gap = 8.0;
+    let gap = if touch { 9.0 } else { 12.0 };
+    let rail_height = (content.height() * 0.10).clamp(if touch { 40.0 } else { 32.0 }, 78.0);
     let season_label_height = 20.0;
-    let episode_height = (bounds.height() * 0.21).clamp(48.0, 190.0).min(
-        (content.bottom()
-            - back.rect.bottom()
-            - rail_height
-            - season_label_height
-            - 5.0 * gap
-            - 85.0)
-            .max(28.0),
-    );
-    let controls_bottom = if series {
-        content.bottom() - rail_height - episode_height - season_label_height - 3.0 * gap
-    } else {
-        content.bottom()
-    };
     let font_size = (bounds.height() * 0.069).clamp(if touch { 18.0 } else { 24.0 }, 54.0);
     let mut play_size = vec2(
         super::desktop::handheld_size((280.0 * scale).max(144.0), 174.0),
@@ -156,8 +144,23 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     );
     if series {
         play_size.x = play_size.x.min(content.width() * 0.31);
-        play_size.y = super::desktop::handheld_size((64.0 * scale).max(42.0), 44.0);
+        play_size.y = super::desktop::handheld_size((72.0 * scale).max(44.0), 48.0);
     }
+    let season_height = season_label_height + gap + rail_height;
+    let episode_budget = content.bottom()
+        - back.rect.bottom()
+        - font_size * 1.4
+        - play_size.y
+        - season_height
+        - 4.0 * gap;
+    let episode_height = (content.height() * 0.38)
+        .min(320.0)
+        .min(episode_budget.max(32.0));
+    let controls_bottom = if series {
+        content.bottom() - season_height - 2.0 * gap - episode_height
+    } else {
+        content.bottom()
+    };
     let controls = Rect::from_min_max(
         pos2(
             content.left(),
@@ -224,7 +227,9 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
         .id_source(("title-actions-rail", entry.id, series))
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
         .show(&mut bottom, |ui| {
-            ui.horizontal(|ui| {
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                ui.spacing_mut().interact_size.y = play_size.y;
+                ui.spacing_mut().button_padding.y = 0.0;
                 ui.spacing_mut().item_spacing.x = (14.0 * scale).max(8.0);
                 let play_text = RichText::new(if retry {
                     t("Folgen erneut laden", "Reload episodes")
@@ -239,6 +244,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 .strong()
                 .color(Color32::WHITE);
                 let primary = egui::Button::new(play_text)
+                    .wrap(false)
                     .min_size(play_size)
                     .rounding(egui::Rounding::same(12.0))
                     .fill(crate::theme::accent_fill(ui))
@@ -258,25 +264,33 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 if series && target.is_some() {
                     let shuffle = ui.add(
                         egui::Button::new(t("Zufällige Folge", "Random episode"))
+                            .wrap(false)
                             .min_size(vec2(0.0, play_size.y)),
                     );
                     random = hit(ui, &shuffle, tv);
                 }
                 let marked = app.is_favorite(&key);
                 let heart = ui
-                    .add(
-                        egui::Button::new(
-                            RichText::new(if marked { "♥" } else { "♡" })
-                                .size(if touch { 20.0 } else { 25.0 })
-                                .color(if marked {
-                                    Color32::from_rgb(255, 135, 157)
-                                } else {
-                                    Color32::WHITE
-                                }),
-                        )
-                        .min_size(vec2(play_size.y * 0.85, play_size.y)),
-                    )
+                    .add(egui::Button::new("").min_size(vec2(play_size.y, play_size.y)))
                     .on_hover_text(t("Favorit", "Favorite"));
+                let color = if marked {
+                    Color32::from_rgb(255, 135, 157)
+                } else {
+                    Color32::WHITE
+                };
+                let glyph = ui.painter().layout_no_wrap(
+                    if marked { "♥" } else { "♡" }.into(),
+                    tokens::reg((play_size.y * 0.57).max(18.0)),
+                    color,
+                );
+                ui.painter().galley(
+                    heart.rect.center() - glyph.mesh_bounds.center().to_vec2(),
+                    glyph,
+                    color,
+                );
+                heart.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::WidgetType::Button, t("Favorit", "Favorite"))
+                });
                 super::desktop::remember_favorite_target(&heart, &key);
                 if hit(ui, &heart, tv) {
                     app.toggle_favorite(&key);
@@ -284,6 +298,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 if series && !entry.plot.is_empty() {
                     let description = ui.add(
                         egui::Button::new(t("Mehr lesen", "Read more"))
+                            .wrap(false)
                             .min_size(vec2(0.0, play_size.y)),
                     );
                     if hit(ui, &description, tv) {
@@ -1146,9 +1161,9 @@ fn episode_rows(
         app.series_season = target.map_or(seasons[0], |e| e.season);
     }
     let tab = seasons.binary_search(&app.series_season).unwrap_or(0);
-    let card_width = super::desktop::handheld_size((height * 2.9).max(92.0), 112.0);
-    let step = card_width + gap;
     let bounds = ui.available_rect_before_wrap();
+    let card_width = ((bounds.width() - 3.0 * gap) / 4.0).max(80.0);
+    let step = card_width + gap;
     let heading = Rect::from_min_size(bounds.min, vec2(bounds.width(), heading_height));
     ui.painter().text(
         heading.left_center(),
@@ -1177,10 +1192,12 @@ fn episode_rows(
             let season = seasons[index];
             let r = ui.put(
                 rect,
-                egui::SelectableLabel::new(
-                    index == tab,
-                    format!("{} {season}", t("Staffel", "Season")),
-                ),
+                egui::Button::new(
+                    RichText::new(format!("{} {season}", t("Staffel", "Season")))
+                        .size((height * 0.38).clamp(14.0, 24.0)),
+                )
+                .wrap(false)
+                .selected(index == tab),
             );
             hit(ui, &r, tv)
         },
@@ -1195,7 +1212,7 @@ fn episode_rows(
         ..episodes.partition_point(|e| e.season <= season)];
     let target_id = target.filter(|e| e.season == season).map(|e| e.id);
     let focus_index = returning.and_then(|e| rows.iter().position(|row| row.id == e.id));
-    let episode_width = (episode_height * 1.58).max(108.0);
+    let episode_width = ((bounds.width() - 2.0 * gap) / 3.0).max(100.0);
     let episode_step = episode_width + gap;
     let offset = if let Some(index) = focus_index {
         Some(index as f32 * episode_step)
@@ -1209,12 +1226,9 @@ fn episode_rows(
     } else {
         None
     };
-    let episode_rect = Rect::from_min_max(
-        pos2(
-            bounds.left(),
-            (bounds.bottom() - episode_height).max(tab_rect.bottom()),
-        ),
-        bounds.max,
+    let episode_rect = Rect::from_min_size(
+        pos2(bounds.left(), tab_rect.bottom() + gap),
+        vec2(bounds.width(), episode_height),
     );
     let mut cards =
         ui.child_ui_with_id_source(episode_rect, Layout::top_down(Align::Min), "episode-cards");
@@ -1238,7 +1252,11 @@ fn episode_rows(
                     Color32::from_rgb(27, 50, 75)
                 };
                 ui.painter().rect_filled(rect, 8.0, fill);
-                let art = Rect::from_min_max(rect.min + vec2(3.0, 3.0), rect.max - vec2(3.0, 21.0));
+                let label_height = (rect.height() * 0.17).clamp(20.0, 34.0);
+                let art = Rect::from_min_max(
+                    rect.min + vec2(3.0, 3.0),
+                    rect.max - vec2(3.0, label_height),
+                );
                 let frame_key = format!("episode-frame:{sid}:{}", e.id);
                 let fallback = if !locked && e.preview.trim() != cover.trim() {
                     e.preview.as_str()
@@ -1249,10 +1267,13 @@ fn episode_rows(
                     app.request_episode_frame(&frame_key, e);
                 }
                 if let Some(image) = (!locked).then(|| app.image(&frame_key)).flatten() {
+                    let dimensions = image.size_vec2();
+                    let ratio = (art.width() / art.height()) / (dimensions.x / dimensions.y);
+                    let visible = vec2(ratio.min(1.0), ratio.recip().min(1.0));
                     ui.painter().image(
                         image.id(),
                         art,
-                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                        Rect::from_center_size(pos2(0.5, 0.5), visible),
                         Color32::WHITE,
                     );
                 } else {
@@ -1271,10 +1292,10 @@ fn episode_rows(
                     }
                 }
                 ui.painter().text(
-                    rect.left_bottom() + vec2(7.0, -10.0),
+                    rect.left_bottom() + vec2(7.0, -label_height * 0.5),
                     egui::Align2::LEFT_CENTER,
                     format!("{} {}", t("Folge", "Episode"), e.episode),
-                    tokens::medium(13.0),
+                    tokens::medium((label_height * 0.67).max(13.0)),
                     Color32::WHITE,
                 );
             }

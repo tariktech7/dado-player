@@ -1,3 +1,4 @@
+import { clearEpisodeFrames } from "./episode-frames";
 import { animateNavigation, animatePage } from "./navigation-motion";
 import { cancelScroll } from "./scroll-motion";
 import appearance from "./shell-appearance";
@@ -244,11 +245,18 @@ function App() {
   const [settingsDraft, setSettingsDraft] = useState<string | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
   const epgCacheEpoch = useRef(0);
+  const profilesFromHome = useRef(false);
   const closeSettingsSection = () => {
     if (!settingsSection) return false;
     const key = settingsSection;
     setSettingsSection(null);
     setSettingsDraft(null);
+    if (profilesFromHome.current) {
+      profilesFromHome.current = false;
+      go("home");
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('.classic-dashboard [data-focus-key="profiles"]')?.focus());
+      return true;
+    }
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`.settings-sections [data-focus-key="${key}"]`)?.focus());
     return true;
   };
@@ -775,7 +783,7 @@ function App() {
   }
   const go = (next: View) => {
     if (next === view || (next === "history" && !saved.settings.watchHistory)) return;
-    if (view === "settings") { setSettingsSection(null); setSettingsDraft(null); }
+    if (view === "settings") { setSettingsSection(null); setSettingsDraft(null); profilesFromHome.current = false; }
     const scroll = [
       ...document.querySelectorAll<HTMLElement>(
         ".shell main, .shell .category-list, .shell .channel-list, .shell .catalog-title-list, .shell .catalog-detail-scroll",
@@ -1506,13 +1514,14 @@ function App() {
         case "cache": return <>
           <p>{t("Temporäre Programmdaten und Episodeninfos leeren?", "Clear temporary programme data and episode details?")}</p>
           <p class="muted">{t("Profile, Favoriten, Verlauf und Lizenz bleiben erhalten.", "Profiles, favourites, history and licence are kept.")}</p>
-          <button disabled={busy || refreshing} onClick={() => {
+          <button disabled={busy || refreshing} onClick={async () => {
             epgCacheEpoch.current++;
             epgPending.current.clear();
             detailRequest.current++;
             detailCache.current.clear();
             setEpg({});
             for (const memory of Object.values(memories.current)) { memory.detail = null; memory.episodes = []; }
+            await clearEpisodeFrames();
             setCacheCleared(true);
           }}>{t("Jetzt leeren", "Clear now")}</button>
           {cacheCleared && <p role="status">{t("Cache geleert.", "Cache cleared.")}</p>}
@@ -1524,6 +1533,10 @@ function App() {
           </label>
 <Field label={t("App-Sprache", "App language")}>
             {choose(saved.settings.language, (value) => setting("language", value as Settings["language"]), [["de", "Deutsch"], ["en", "English"]], t("App-Sprache", "App language"))}
+          </Field>
+          <Field label={t("Fortsetzen und Wiedergabeverlauf", "Continue watching and watch history")}>
+            <TVInput type="checkbox" checked={saved.settings.watchHistory}
+              onChange={(event) => setting("watchHistory", event.currentTarget.checked)} />
           </Field>
           <Field label={t("Farbschema", "Appearance")}>
             {choose(
@@ -1550,10 +1563,6 @@ function App() {
 
         </>;
         case "playback": return <>
-          <Field label={t("Fortsetzen und Wiedergabeverlauf", "Continue watching and watch history")}>
-            <TVInput type="checkbox" checked={saved.settings.watchHistory}
-              onChange={(event) => setting("watchHistory", event.currentTarget.checked)} />
-          </Field>
           <Field label={t("Bildformat", "Aspect ratio")}>
             {choose(
               saved.settings.aspect,
@@ -2078,13 +2087,14 @@ function App() {
           >
             <header class={classic ? "classic-header" : "classic-header modern-header"}
               data-focus-zone={classic ? "navigation" : undefined}>
-              {view !== "home" && <button
+              {((classic && view !== "home") || (view === "settings" && settingsSection)) && <button
                 class={`menu-back classic-back${view === "settings" && settingsSection ? " settings-back" : ""}`}
                 onClick={() => {
+                  if (view === "settings" && editing) { back(); return; }
                   if (view === "settings" && closeSettingsSection()) return;
                   if (classic) back(); else go("home");
                 }}
-              >{view === "settings" && settingsSection
+              >{view === "settings" && settingsSection && !profilesFromHome.current
                 ? t("‹ Alle Einstellungen", "‹ All settings")
                 : t("‹ Zurück", "‹ Back")}</button>}
               {classic && <><img class="brand-normal" src="d7.svg" alt="" /><img class="brand-dark" src="d7-dark.svg" alt="" />
@@ -2330,7 +2340,7 @@ function App() {
                           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 2 3 6.6 7 .9-5.2 5 1.3 7.1-6.1-3.5-6.1 3.5 1.3-7.1L2 9.5l7-.9z" /></svg>
                           {t("Favoriten", "Favorites")}
                         </button>
-                        <button onClick={() => { setSettingsSection("profiles"); goShortcut("settings"); }}>
+                        <button data-focus-key="profiles" onClick={() => { profilesFromHome.current = true; setSettingsSection("profiles"); goShortcut("settings"); }}>
                           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.6" /><path d="M4 21v-1.5a8 6 0 0 1 16 0V21z" /></svg>
                           {t("Profile", "Profiles")}
                         </button>
@@ -2478,6 +2488,7 @@ function App() {
                   </>
                 ) : (
                   <CatalogBrowser
+                    profileId={pid}
                     legend={<ShortcutLegend t={t} labels={[
                       t("Elternsperre", "Parental lock"), t("Suche", "Search"),
                       t("Favorit", "Favorite"), t("Sortierung", "Sort"),
@@ -2530,7 +2541,7 @@ function App() {
                 )}
               </main>
             )}
-            {externalTitle && <TitleDetail item={externalTitle} t={t} panel={externalTitlePanel}
+            {externalTitle && <TitleDetail item={externalTitle} profileId={pid} t={t} panel={externalTitlePanel}
               close={closeExternalTitle} episodes={episodes} history={history}
               episodeLoad={episodeLoad} reloadEpisodes={() => void openDetail(externalTitle, true, true)}
               marked={isFavorite(externalTitle)} toggle={toggleFavorite} play={playTitle} playDirect={playDirect}

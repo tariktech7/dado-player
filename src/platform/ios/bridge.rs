@@ -499,8 +499,11 @@ pub(crate) fn episode_frame(
             bytes: *mut u8,
             width: i32,
             height: i32,
+            moments: *const f64,
+            count: i32,
         ) -> i32;
     }
+    let moments = crate::release_info::EPISODE_PREVIEW_SECONDS;
     let source = std::ffi::CString::new(url).ok()?;
     let size = [320, 180];
     let mut bytes = vec![0; size[0] * size[1] * 4];
@@ -511,6 +514,8 @@ pub(crate) fn episode_frame(
                 bytes.as_mut_ptr(),
                 size[0] as i32,
                 size[1] as i32,
+                moments.as_ptr(),
+                moments.len() as i32,
             )
         } != 1
     {

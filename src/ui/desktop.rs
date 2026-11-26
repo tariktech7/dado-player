@@ -130,7 +130,7 @@ pub(super) fn safe_rect(ctx: &Context, keyboard: bool) -> Rect {
         ),
     )
 }
-pub(super) fn handheld() -> bool {
+pub(crate) fn handheld() -> bool {
     cfg!(any(target_os = "android", target_os = "ios")) && !crate::platform::tv_device()
 }
 
@@ -854,14 +854,10 @@ pub fn show(app: &mut App, ctx: &Context) {
     let screen = safe_rect(ctx, true);
     let background = ctx.screen_rect();
     if let Some((series, id)) = app.catalog_detail() {
-        let edge = handheld_size(36.0 * s, 12.0);
         egui::CentralPanel::default()
             .frame(egui::Frame::none())
             .show(ctx, |ui| {
-                let fill = theme::ambient_shape(ui, background, None);
-                ui.painter().add(fill);
-                let rect = screen.shrink(edge);
-                column(ui, rect, "catalog-title-page", 0.0, |ui| {
+                column(ui, background, "catalog-title-page", 0.0, |ui| {
                     ui.add_enabled_ui(app.pending_resume.is_none() && !app.parental.open, |ui| {
                         super::library::show_detail_page(app, ui, series, id);
                     });
