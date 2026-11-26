@@ -684,8 +684,12 @@ fn profile_form(app: &mut App, ui: &mut Ui, scale: f32) {
         (ProfileKind::Xtream, "Xtream Codes"),
         (ProfileKind::M3u, "M3U"),
     ];
-    let method_buttons =
-        methods.map(|(kind, label)| egui::Button::new(label).selected(app.login_kind == kind));
+    let rounding = ui.visuals().widgets.inactive.rounding;
+    let method_buttons = methods.map(|(kind, label)| {
+        egui::Button::new(label)
+            .selected(app.login_kind == kind)
+            .rounding(rounding)
+    });
     for ((kind, _), response) in
         methods
             .into_iter()
@@ -765,7 +769,9 @@ fn profile_form(app: &mut App, ui: &mut Ui, scale: f32) {
         height,
         gap,
         [
-            egui::Button::new(t.text("Profil speichern", "Save profile")).selected(true),
+            egui::Button::new(t.text("Profil speichern", "Save profile"))
+                .selected(true)
+                .rounding(rounding),
             egui::Button::new(t.text("Abbrechen", "Cancel")),
         ],
     );

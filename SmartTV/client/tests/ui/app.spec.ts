@@ -1310,6 +1310,9 @@ test("catalogues keep seasons, favorites and independent section positions; live
   expect(card.width / episodesBox.width).toBeGreaterThan(0.30);
   expect(episodesBox.y + episodesBox.height).toBeLessThan(detail.y + detail.height);
   const season = (await page.locator(".season-buttons button").first().boundingBox())!;
+  expect(season.y).toBeGreaterThan(seasonBox.y);
+  expect(season.y + season.height).toBeLessThan(seasonBox.y + seasonBox.height);
+  await expect(page.locator(".season-buttons .selected")).toHaveCount(1);
   expect(season.width / seasonBox.width).toBeGreaterThan(0.22);
   const actions = await page.locator(".series-actions > button").evaluateAll(nodes =>
     nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.height]; }));

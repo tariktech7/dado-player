@@ -1230,17 +1230,13 @@ fn episode_rows(
         rail_padding,
         trailing_inset,
         |ui, index, rect| {
-            let season = seasons[index];
-            let r = ui.put(
+            season_button(
+                ui,
                 rect,
-                egui::Button::new(
-                    RichText::new(format!("{} {season}", t("Staffel", "Season")))
-                        .size((height * 0.38).clamp(14.0, 24.0)),
-                )
-                .wrap(false)
-                .selected(index == tab),
-            );
-            hit(ui, &r, tv)
+                &format!("{} {}", t("Staffel", "Season"), seasons[index]),
+                index == tab,
+                tv,
+            )
         },
     ) {
         if app.series_season != seasons[selected] {
@@ -1371,6 +1367,52 @@ fn episode_rows(
     }
 }
 
+fn season_button(ui: &mut Ui, rect: Rect, label: &str, selected: bool, tv: bool) -> bool {
+    // The rail assigns the hit rectangle. The global minimum button height
+    // and text padding must not enlarge it past the rail's vertical clip.
+    let response = ui.interact(rect, ui.id().with("season-button"), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, selected, label));
+
+    let visuals = ui.style().interact(&response);
+    let rounding = ui.visuals().widgets.inactive.rounding;
+    if ui.is_rect_visible(rect) {
+        let fill = if selected {
+            ui.visuals().selection.bg_fill
+        } else {
+            visuals.weak_bg_fill
+        };
+        let edge = if selected {
+            tokens::accent(ui)
+        } else {
+            visuals.bg_stroke.color
+        };
+        ui.painter()
+            .rect(rect, rounding, fill, egui::Stroke::new(1.0_f32, edge));
+        let label = components::wrap(
+            ui,
+            label,
+            tokens::reg((rect.height() * 0.38).clamp(14.0, 24.0)),
+            visuals.text_color(),
+            (rect.width() - 12.0).max(1.0),
+            1,
+        );
+        ui.painter().galley(
+            rect.center() - label.size() * 0.5,
+            label,
+            visuals.text_color(),
+        );
+        if response.has_focus() && !(tv && focus::active()) {
+            focus::paint_ring(ui, rect, rounding, tokens::SEL_RING);
+        }
+    }
+
+    if tv {
+        focus::clicked_with_rounding(ui, &response, rounding)
+    } else {
+        response.clicked()
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn episode_rail(
     ui: &mut Ui,
@@ -1438,5 +1480,48 @@ pub fn description_dialog(app: &mut App, ctx: &egui::Context) {
         });
     if !open || close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         app.description_open = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn focused_season_button_fits_its_rail_even_with_taller_global_controls() {
+        let ctx = egui::Context::default();
+        let frame = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.spacing_mut().interact_size.y = 62.0;
+                ui.spacing_mut().button_padding.y = 12.0;
+                let rect = Rect::from_min_size(ui.cursor().min + vec2(4.0, 4.0), vec2(90.0, 34.0));
+                ui.set_clip_rect(rect.expand(4.0));
+                ui.memory_mut(|memory| memory.request_focus(ui.id().with("season-button")));
+                season_button(ui, rect, "Staffel 14", true, false);
+            });
+        });
+
+        let buttons: Vec<_> = frame
+            .shapes
+            .iter()
+            .filter_map(|clipped| {
+                let egui::Shape::Rect(shape) = &clipped.shape else {
+                    return None;
+                };
+                (clipped.clip_rect.height() == 42.0).then_some((clipped.clip_rect, shape))
+            })
+            .collect();
+        assert_eq!(buttons.len(), 2, "one button surface and one focus outline");
+        let (clip, surface) = buttons[0];
+        let (_, ring) = buttons[1];
+        assert_eq!(surface.rect.height(), 34.0);
+        assert!(clip.contains_rect(surface.rect.expand(0.5)));
+        assert!(surface.rounding.nw > 0.0 && surface.rounding.sw > 0.0);
+        assert_eq!(ring.stroke.width, tokens::SEL_RING);
+        assert_eq!(ring.rect.expand(ring.stroke.width * 0.5), surface.rect);
+        assert_eq!(
+            ring.rounding.sw + ring.stroke.width * 0.5,
+            surface.rounding.sw
+        );
     }
 }
