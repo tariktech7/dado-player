@@ -63,6 +63,15 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
   const list = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => ordered.filter(e => (e.season ?? 1) === season), [ordered, season]);
   const frames = useEpisodeFrames(rows, list, previews, profileId);
+  const artSource = (url?: string) => (url || "").trim().split(/[?#]/, 1)[0];
+  const artCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const episode of ordered) {
+      const source = artSource(episode.preview);
+      if (source) counts.set(source, (counts.get(source) ?? 0) + 1);
+    }
+    return counts;
+  }, [ordered]);
   const watched = useMemo(() => new Map(history.map(h => [itemKey(h.item), h])), [history]);
 
   useLayoutEffect(() => {
@@ -109,7 +118,9 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
         <div ref={list} class="episode-list series-rail" role="group" aria-label={t("Folgen", "Episodes")}>
           {rows.map((e, index) => {
             const saved = watched.get(itemKey(e));
-            const image = previews ? frames.image(e) || (e.preview !== seriesCover ? e.preview : "") : "";
+            const frame = previews ? frames.image(e) : "";
+            const art = artSource(e.preview);
+            const image = frame || (previews && art && art !== artSource(seriesCover) && artCounts.get(art) === 1 ? e.preview : "");
             const active = target && itemKey(target.item) === itemKey(e);
             const progress = saved && saved.duration > 0
               ? Math.max(0, Math.min(1, saved.position / saved.duration)) : 0;
@@ -118,7 +129,12 @@ export function EpisodePicker({episodes, history, play, playDirect, t, actions, 
                 onClick={() => { frames.stop(); play(e, saved?.position || 0); }}>
                 <span class="episode-art" aria-hidden="true">
                   <span>▷</span>
-                  {image && <img src={image} alt="" loading="lazy" onError={event => { event.currentTarget.hidden = true; }} />}
+                  {image && <img key={image} src={image} alt="" loading="lazy"
+                    onLoad={event => {
+                      const img = event.currentTarget;
+                      img.hidden = !frame && img.naturalWidth < img.naturalHeight * 1.25;
+                    }}
+                    onError={event => { event.currentTarget.hidden = true; }} />}
                   {progress > 0 && <progress value={progress} max={1} />}
                 </span>
                 <strong>{t("Folge", "Episode")} {e.episode ?? 1}</strong>

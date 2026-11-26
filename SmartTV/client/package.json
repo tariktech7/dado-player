@@ -1,6 +1,6 @@
 {
   "name": "dado-player-tv",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,8 +17,7 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "preact": "10.29.8",
-    "qrcode-generator": "2.0.4"
+    "preact": "10.29.8"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

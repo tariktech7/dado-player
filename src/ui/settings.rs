@@ -400,19 +400,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                     focus::request_id(response.id);
                                 }
                                 let style = ui.style().interact(&response);
-                                let focused = response.has_focus()
-                                    || focus::focused_id() == Some(response.id);
-                                ui.painter().rect(
-                                    rect,
-                                    (super::desktop::appearance().settings_panel_radius * scale)
-                                        .max(14.0),
-                                    style.bg_fill,
-                                    if focused {
-                                        egui::Stroke::new(3.0, crate::theme::accent(ui))
-                                    } else {
-                                        style.bg_stroke
-                                    },
-                                );
+                                let radius = (super::desktop::appearance().settings_panel_radius
+                                    * scale)
+                                    .max(14.0);
+                                ui.painter()
+                                    .rect(rect, radius, style.bg_fill, style.bg_stroke);
+                                if response.has_focus() && !focus::active() {
+                                    focus::paint_ring(ui, rect, radius, 3.0);
+                                }
                                 let icon_size = (tile_height * 0.30).min(tile_width * 0.28);
                                 components::icon(
                                     ui,
@@ -452,7 +447,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                                     egui::WidgetInfo::labeled(egui::WidgetType::Button, label)
                                 });
                                 let clicked = if app.shared_remote_navigation() {
-                                    focus::clicked(ui, &response)
+                                    focus::clicked_with_rounding(ui, &response, radius)
                                 } else {
                                     response.clicked()
                                 };
@@ -1049,26 +1044,17 @@ fn panel(
                 "profiles" => profiles(app, ui),
                 "parental" => super::parental::entry(app, ui),
                 "updates" => {
-                    ui.scope(|ui| {
-                        ui.label(format!("Dado Player {}", crate::release_info::RELEASE_NAME));
-                        #[cfg(target_os = "windows")]
-                        ui.label(format!(
-                            "Installierter Build {}",
-                            crate::release_info::WINDOWS_BUILD
-                        ));
-                        #[cfg(target_os = "windows")]
-                        crate::platform::windows::update::show(ui);
-                        #[cfg(any(target_os = "ios", target_os = "android"))]
-                        super::mobile::update::show(ui);
-                        ui.add_space(10.0);
-                        crate::fonts::license(ui);
-                    });
+                    #[cfg(target_os = "windows")]
+                    crate::platform::windows::update::show(ui);
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
+                    super::mobile::update::show(ui);
                 }
                 "license" => {
                     #[cfg(target_os = "windows")]
                     crate::licensing::settings(ui);
                 }
                 "advanced" => {
+                    crate::fonts::license(ui);
                     let mut enabled = app.settings.settings_mode == SettingsMode::Expert;
                     if switch(ui, t("Expertenmodus", "Expert mode"), &mut enabled) {
                         app.settings.settings_mode = if enabled {

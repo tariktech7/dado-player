@@ -421,14 +421,32 @@ pub fn begin_modal(initial: usize) {
 /// own painting. Activation is a real pointer click OR the remote Ok key on the
 /// focused item; the pending key is consumed so exactly one item fires per press.
 pub fn clicked(ui: &Ui, resp: &Response) -> bool {
-    register_click(ui, resp, true)
+    register_click(ui, resp, Some(ui.style().interact(resp).rounding))
 }
 
 pub fn clicked_with_custom_ring(ui: &Ui, resp: &Response) -> bool {
-    register_click(ui, resp, false)
+    register_click(ui, resp, None)
 }
 
-fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
+pub fn clicked_with_rounding(ui: &Ui, resp: &Response, rounding: impl Into<Rounding>) -> bool {
+    register_click(ui, resp, Some(rounding.into()))
+}
+
+pub fn paint_ring(ui: &Ui, rect: Rect, rounding: impl Into<Rounding>, width: f32) {
+    let mut rounding = rounding.into();
+    let inset = width / 2.0;
+    rounding.nw = (rounding.nw - inset).max(0.0);
+    rounding.ne = (rounding.ne - inset).max(0.0);
+    rounding.sw = (rounding.sw - inset).max(0.0);
+    rounding.se = (rounding.se - inset).max(0.0);
+    ui.painter().rect_stroke(
+        rect.shrink(inset),
+        rounding,
+        Stroke::new(width, tokens::focus_ring(ui)),
+    );
+}
+
+fn register_click(ui: &Ui, resp: &Response, rounding: Option<Rounding>) -> bool {
     STATE.with(|cell| {
         let mut s = cell.borrow_mut();
         // Covered by a modal scrim: drop it from the focus order entirely. It
@@ -464,27 +482,8 @@ fn register_click(ui: &Ui, resp: &Response, show_focus: bool) -> bool {
                 s.idx = i;
             }
         }
-        if focused && show_focus {
-            let r = resp.rect.shrink(1.0);
-            // Two strokes: an accent halo for dark surfaces plus a crisp,
-            // theme-aware high-contrast line that stays visible on a filled
-            // accent button (where accent-on-accent would vanish). Compact TV
-            // rows use a restrained high-contrast ring that leaves the text clear.
-            let halo = if s.spatial {
-                tokens::SEL_RING + 1.5
-            } else {
-                tokens::SEL_RING + 3.0
-            };
-            let line = if s.spatial {
-                tokens::SEL_RING
-            } else {
-                tokens::SEL_RING + 1.0
-            };
-            let rounding = Rounding::same(tokens::RADIUS_SM);
-            ui.painter()
-                .rect_stroke(r, rounding, Stroke::new(halo, tokens::accent(ui)));
-            ui.painter()
-                .rect_stroke(r, rounding, Stroke::new(line, tokens::focus_ring(ui)));
+        if let Some(rounding) = rounding.filter(|_| focused) {
+            paint_ring(ui, resp.rect, rounding, tokens::SEL_RING);
             s.focus_rect = Some(resp.rect);
             if s.moved {
                 ui.scroll_to_rect(resp.rect, None);

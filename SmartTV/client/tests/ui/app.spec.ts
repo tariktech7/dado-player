@@ -22,10 +22,10 @@ async function parentalPin(page:Page,pin:string,setup=false) {
   await modal.getByRole('button',{name:setup?'PIN speichern / bestätigen':'Entsperren',exact:true}).click();
 }
 
-async function signedUpdate(page: Page, script: string) {
+async function signedUpdate(page: Page, script: string, offset = 1) {
   const installed = await page.evaluate(() => window.dadoTvBoot!.installed);
   const key = createPrivateKey({key: JSON.parse(readFileSync(process.env.DADO_LICENSE_TEST_KEYS!, 'utf8')), format: 'jwk'});
-  const payload = JSON.stringify({...installed, build: installed.build + 1, script, css: 'body { outline: 0; }'});
+  const payload = JSON.stringify({...installed, build: installed.build + offset, script, css: 'body { outline: 0; }'});
   const signature = sign('sha256', Buffer.from(signingContext + payload), {key, dsaEncoding: 'ieee-p1363'}).toString('base64url');
   return {payload, signature};
 }
@@ -37,20 +37,39 @@ test('Samsung installs a signed GitHub update and boots it again offline', async
   await page.getByRole('button', {name:'⚙ Einstellungen', exact:true}).click();
   await page.locator('.settings-sections button').filter({hasText: /Update/}).click();
   const app = readFileSync('dist/app.js', 'utf8');
-  const signed = await signedUpdate(page, app + '\n;document.title = "Dado Player OTA";');
-  const bytes = Buffer.from(JSON.stringify(signed));
+  let signed = await signedUpdate(page, app + '\n;document.title = "Dado Player OTA";');
   const pattern = 'https://api.github.com/repos/tariktech7/dado-player/contents/*';
-  await page.route(pattern, (route) => route.request().method() === 'OPTIONS'
-    ? route.fulfill({status:204, headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Accept'}})
-    : route.fulfill({headers:{'Access-Control-Allow-Origin':'*'}, json:{encoding:'base64', size:bytes.length, content:bytes.toString('base64')}}));
-  await page.getByRole('button', {name:'GitHub-Update prüfen und installieren'}).click();
+  await page.route(pattern, (route) => {
+    expect(route.request().headers()).not.toHaveProperty('authorization');
+    const bytes = Buffer.from(JSON.stringify(signed));
+    return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'}, json:{encoding:'base64', size:bytes.length, content:bytes.toString('base64')}});
+  });
+  await page.getByRole('button', {name:'App-Update prüfen und installieren'}).click();
   await expect(page).toHaveTitle('Dado Player OTA', {timeout:12_000});
+  expect(await page.evaluate(key => localStorage.getItem(key), accessStorage)).toBeNull();
   await expect.poll(() => page.evaluate(() => window.dadoTvBoot?.fromUpdate)).toBe(true);
   await page.unroute(pattern);
   await page.route(pattern, (route) => route.abort());
   await page.reload();
   await expect(page).toHaveTitle('Dado Player OTA');
   await expect(page.getByRole('button', {name:'⚙ Einstellungen', exact:true})).toBeVisible();
+  await page.unroute(pattern);
+  signed = await signedUpdate(page, app + '\n;document.title = "Dado Player New OTA";', 2);
+  await page.route(pattern, route => {
+    const bytes = Buffer.from(JSON.stringify(signed));
+    return route.fulfill({headers:{'Access-Control-Allow-Origin':'*'}, json:{encoding:'base64', size:bytes.length, content:bytes.toString('base64')}});
+  });
+  const openUpdates = async () => {
+    await page.getByRole('button', {name:'⚙ Einstellungen', exact:true}).click();
+    await openSettingsSection(page, 'updates');
+  };
+  await openUpdates();
+  await page.getByRole('button', {name:'App-Update prüfen und installieren'}).click();
+  await expect(page).toHaveTitle('Dado Player New OTA');
+  await openUpdates();
+  await page.getByRole('button', {name:'Vorherige Version wiederherstellen'}).click();
+  await expect(page).toHaveTitle('Dado Player OTA');
+
 });
 
 test('Samsung ignores a tampered bundle and rolls back a failed signed boot', async ({page}) => {
@@ -1194,7 +1213,7 @@ test("bundled test video decodes in HTML preview and controls hide then return w
   await page
     .getByRole("button", { name: "⚙ Einstellungen", exact: true })
     .click();
-  await openSettingsSection(page, "updates");
+  await openSettingsSection(page, "advanced");
   await page
     .getByRole("button", { name: "Integriertes Testvideo abspielen" })
     .click();
@@ -1286,7 +1305,8 @@ test("catalogues keep seasons, favorites and independent section positions; live
   const seasonBox = (await page.locator(".season-buttons").boundingBox())!;
   const episodesBox = (await page.locator(".episode-list").boundingBox())!;
   const card = (await page.locator(".episode-list button").first().boundingBox())!;
-  expect(seasonBox.y + seasonBox.height).toBeLessThan(episodesBox.y);
+  expect(episodesBox.y - seasonBox.y - seasonBox.height).toBeGreaterThan(5);
+  expect(Math.abs(episodesBox.x + episodesBox.width - (detail.x + detail.width))).toBeLessThan(2);
   expect(card.width / episodesBox.width).toBeGreaterThan(0.30);
   expect(episodesBox.y + episodesBox.height).toBeLessThan(detail.y + detail.height);
   const season = (await page.locator(".season-buttons button").first().boundingBox())!;
@@ -1295,6 +1315,13 @@ test("catalogues keep seasons, favorites and independent section positions; live
     nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.height]; }));
   expect(actions.length).toBeGreaterThanOrEqual(3);
   expect(actions.every(box => box[0] === actions[0][0] && box[1] === actions[0][1])).toBe(true);
+  expect(Math.abs(actions[0][1] - season.height)).toBeLessThan(1);
+  const seasonButton = page.locator(".season-buttons button").first();
+  await seasonButton.focus();
+  expect(await seasonButton.evaluate(node => {
+    const style = getComputedStyle(node);
+    return style.outlineStyle === "none" && style.boxShadow.includes("inset") && parseFloat(style.borderTopLeftRadius) > 0;
+  })).toBe(true);
   const heart = page.locator(".series-actions .favorite-toggle");
   const heartIcon = await heart.locator("svg").boundingBox();
   await heart.click();
@@ -1320,34 +1347,24 @@ test("catalogues keep seasons, favorites and independent section positions; live
 test("episode cards display a frame decoded from their media", async ({page}) => {
   await fixture(page, true, true);
   await page.goto("/");
-  const clip = await page.evaluate(async () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 160; canvas.height = 90;
-    const context = canvas.getContext("2d")!;
-    const stream = canvas.captureStream(15);
-    const recording = new MediaRecorder(stream, {mimeType: "video/webm"});
-    const pieces: Blob[] = [];
-    const complete = new Promise<void>(resolve => { recording.onstop = () => resolve(); });
-    recording.ondataavailable = event => pieces.push(event.data);
-    recording.start();
-    const paint = setInterval(() => {
-      context.fillStyle = "#44bbff"; context.fillRect(0, 0, 160, 90);
-      context.fillStyle = "#ee5511"; context.fillRect(80, 0, 80, 90);
-    }, 65);
-    await new Promise(resolve => setTimeout(resolve, 600));
-    recording.stop();
-    clearInterval(paint);
-    await complete;
-    stream.getTracks().forEach(track => track.stop());
-    return Array.from(new Uint8Array(await new Blob(pieces).arrayBuffer()));
-  });
+  const h264 = await page.evaluate(() => !!document.createElement("video")
+    .canPlayType('video/mp4; codecs="avc1.42E01E"'));
+  test.skip(!h264, "Run this test with the Edge browser to decode the bundled H.264 fixture.");
+  const clip = readFileSync("dist/test-video.mp4");
   let loads = 0;
   await page.route("https://provider.invalid/series/demo/demo/*.mp4", route => {
     loads++;
-    return route.fulfill({
-    body: Buffer.from(clip),
-    headers: {"Access-Control-Allow-Origin": "*", "Content-Type": "video/webm"},
-    });
+    const headers: Record<string, string> = {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "video/mp4",
+      "Accept-Ranges": "bytes",
+    };
+    const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers().range || "");
+    if (!range) return route.fulfill({body: clip, headers});
+    const start = Number(range[1]), end = range[2] ? Math.min(Number(range[2]), clip.length - 1) : clip.length - 1;
+    if (start >= clip.length || end < start) return route.fulfill({status: 416, headers});
+    headers["Content-Range"] = `bytes ${start}-${end}/${clip.length}`;
+    return route.fulfill({status: 206, body: clip.subarray(start, end + 1), headers});
   });
   await page.getByRole("button", {name: "▤ Serien", exact: true}).click();
   await page.getByRole("button", {name: "Demo Serie", exact: true}).click();
@@ -1357,6 +1374,7 @@ test("episode cards display a frame decoded from their media", async ({page}) =>
 
   const frames = page.locator('.episode-list img[src^="data:image/jpeg"]');
   await expect(frames).toHaveCount(2);
+  await page.screenshot({path: "test-results/series-video-previews.png"});
   const requests = loads;
   const image = await frames.first().getAttribute("src");
   await page.reload();
@@ -2061,27 +2079,6 @@ test("remote moves through each player choice before reaching save", async ({pag
   await expect(tile).toBeFocused();
 });
 
-test("the TV offers a scannable QR code and cancels the phone transfer", async ({page}) => {
-  await fixture(page, true, true, 'permanent', true);
-  const calls: string[] = [];
-  await page.route('**/v1/update-transfer/*', async route => {
-    const action = new URL(route.request().url()).pathname.split('/').pop()!;
-    calls.push(action);
-    await route.fulfill({json: action === 'poll' ? {cipher:null} : {ok:true}});
-  });
-  await page.goto("/");
-  await page.locator('.classic-actions').getByRole('button',{name:'Einstellungen',exact:true}).click();
-  await openSettingsSection(page, 'updates');
-  await page.getByRole('button',{name:'Token per Handy übertragen'}).click();
-  const qr = page.getByRole('img', {name:'QR-Code zur Token-Übertragung'});
-  await expect(qr).toBeVisible();
-  await expect.poll(() => qr.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(200);
-  await expect.poll(() => calls).toContain('poll');
-  await page.getByRole('button',{name:'Übertragung abbrechen'}).click();
-  await expect(qr).toHaveCount(0);
-  await expect.poll(() => calls).toContain('close');
-});
-
 test("header search follows the current catalogue and opens it at the first category", async ({page}) => {
   await fixture(page, true, true, 'permanent', true);
   await page.goto("/");
@@ -2262,17 +2259,20 @@ for (const classic of [false, true]) test(`menu positions and header controls in
   await expect(page.locator('.personal-main h1')).toBeVisible();
 });
 
-test("app updates separates actions and explains read-only GitHub access", async ({page}) => {
+test("app updates shows only the two public update actions", async ({page}, testInfo) => {
   await fixture(page, true, true);
   await page.goto("/");
   await page.getByRole('button', {name:'⚙ Einstellungen',exact:true}).click();
   await openSettingsSection(page, 'updates');
   const panel = page.locator('[data-settings-section="updates"]');
-  await expect(panel).toContainText('tariktech7/dado-player');
-  await expect(panel).toContainText('Read-only');
+  await expect(panel.getByRole('button')).toHaveCount(2);
+  await page.screenshot({path: testInfo.outputPath('app-updates.png')});
   const check = (await panel.getByRole('button', {name:/Update prüfen und installieren/}).boundingBox())!;
-  const play = (await panel.getByRole('button', {name:/Testvideo abspielen/}).boundingBox())!;
-  expect(play.y - check.y - check.height).toBeGreaterThanOrEqual(12);
+  const restore = panel.getByRole('button', {name:'Vorherige Version wiederherstellen'});
+  const position = (await restore.boundingBox())!;
+  expect(position.y - check.y - check.height).toBeGreaterThanOrEqual(12);
+  await restore.click();
+  await expect(panel.getByRole('status')).toContainText('Keine frühere Version');
 });
 
 test("language and time format persist and the live guide uses the selected time format", async ({page}) => {

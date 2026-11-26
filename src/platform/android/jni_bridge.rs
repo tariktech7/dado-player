@@ -662,7 +662,7 @@ pub fn copy_device_address(address: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn mobile_update(install: bool) -> anyhow::Result<()> {
+pub fn mobile_update(action: i32) -> anyhow::Result<()> {
     use anyhow::{ensure, Context};
     let app = super::entry::app_handle().context("Android-Activity fehlt")?;
     let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut jni::sys::JavaVM) }?;
@@ -672,14 +672,14 @@ pub fn mobile_update(install: bool) -> anyhow::Result<()> {
         class,
         "mobileUpdate",
         "(I)I",
-        &[jni::objects::JValue::Int(install as i32)],
+        &[jni::objects::JValue::Int(action)],
     );
     if result.is_err() {
         let _ = env.exception_clear();
     }
     ensure!(
         result?.i()? == 1,
-        "Installer oder Browser konnte nicht geöffnet werden"
+        "Paket konnte nicht an Android übergeben werden"
     );
     Ok(())
 }

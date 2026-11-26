@@ -35,9 +35,8 @@ import { Home } from "./home";
 import { FavoriteMark } from "./favorite-mark";
 import {licenseClient} from './licensing';
 import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
-import { accessStorage, readSlot, saveSlot } from './update-format';
-import { stageUpdate } from './update-client';
-import { UpdateTokenTransfer } from './update-transfer';
+import { accessStorage } from './update-format';
+import { restorePrevious, stageUpdate } from './update-client';
 import packageInfo from "../package.json";
 const APP_VERSION = window.dadoTvBoot?.running.version || packageInfo.version;
 const APP_BUILD = window.dadoTvBoot?.running.build || releaseInfo.tizenBuild;
@@ -337,10 +336,10 @@ function App() {
     [controlsVisible, setControlsVisible] = useState(true),
     [update, setUpdate] = useState(""),
     [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateToken, setUpdateToken] = useState(() => {
-    try { return localStorage.getItem(accessStorage) || ''; } catch { return ''; }
-  });
-  const [updateReady, setUpdateReady] = useState<'manual' | 'automatic' | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => {
+    try { localStorage.removeItem(accessStorage); } catch { /* Storage is optional in the browser. */ }
+  }, []);
   const updateInProgress = useRef(false);
   const aspectNoticeTimer = useRef<ReturnType<typeof setTimeout>>();
   const [, repaint] = useState(0),
@@ -1398,39 +1397,34 @@ function App() {
         </div>
       </section>
     );
-  const checkUpdates = async (manual: boolean) => {
-    if (updateInProgress.current) return;
+  const checkUpdates = async (restore = false) => {
+    if (updateInProgress.current || updateReady) return;
     updateInProgress.current = true;
     setCheckingUpdate(true);
-    if (manual) setUpdate(t("Update wird geprüft …", "Checking for updates …"));
+    setUpdate(t("Version wird geprüft …", "Checking version …"));
     try {
-      const result = await stageUpdate(updateToken);
+      const result = restore ? (await restorePrevious() ? 'ready' : 'no-backup') : await stageUpdate();
       if (result === 'ready') {
-        setUpdateReady(manual ? 'manual' : 'automatic');
-        setUpdate(t('Update geprüft und geladen. Neustart, sobald keine Wiedergabe läuft.', 'Verified update downloaded. Restart once playback is idle.'));
+        setUpdateReady(true);
+        setUpdate(t('Version geprüft. Neustart, sobald keine Wiedergabe läuft.', 'Version verified. Restarting once playback is idle.'));
       } else if (result === 'reinstall') {
         setUpdate(t('Diese Version benötigt ein neues signiertes TV-Paket vom PC.', 'This version requires a new signed TV package installed from a PC.'));
-      } else if (manual) {
+      } else {
         setUpdate(result === 'current' ? t('Du verwendest die aktuelle Version.', 'You are using the current version.') :
+          result === 'no-backup' ? t('Keine frühere Version auf diesem TV verfügbar.', 'No previous version is available on this TV.') :
           result === 'blocked' ? t('Dieses Update wurde nach einem Startfehler zurückgesetzt.', 'This update was rolled back after a startup error.') :
-          t('GitHub-Zugriff fehlt. Prüfe den Lese-Token und den Update-Kanal.', 'Check the read-only GitHub token and the update channel.'));
+          t('Der öffentliche Update-Kanal ist derzeit nicht erreichbar.', 'The public update channel is currently unavailable.'));
       }
     } catch {
-      if (manual) setUpdate(t('Update konnte nicht sicher geladen werden.', 'The update could not be downloaded safely.'));
+      setUpdate(t('Die Version konnte nicht sicher geladen werden.', 'The version could not be downloaded safely.'));
     } finally {
       updateInProgress.current = false;
       setCheckingUpdate(false);
     }
   };
   useEffect(() => {
-    if (!updateToken || !window.dadoTvBoot) return;
-    const first = setTimeout(() => void checkUpdates(false), 30_000);
-    const interval = setInterval(() => void checkUpdates(false), 6 * 3600_000);
-    return () => { clearTimeout(first); clearInterval(interval); };
-  }, [updateToken, saved.settings.language]);
-  useEffect(() => {
     if (!updateReady || busy || preview || full || resume || exit || refreshing ||
-        (view !== 'home' && !(view === 'settings' && updateReady === 'manual'))) return;
+        (view !== 'home' && view !== 'settings')) return;
     const restart = setInterval(() => {
       if (!previewRef.current && !fullRef.current &&
           !document.querySelector('.modal, input:focus:not([readonly])')) location.reload();
@@ -1635,63 +1629,17 @@ function App() {
           <p>{parental.enabled?'Aktiv · gesperrte Inhalte benötigen die Eltern-PIN':'Vierstellige PIN für Sender, Filme und Serien einrichten'}</p>
           <button onClick={manageParental}>{parental.enabled?'Elternsperre verwalten':'Eltern-PIN einrichten'}</button>
         </>;
-        case "updates": {
-          const storeUpdateToken = (value: string) => {
-            try {
-              if (value) localStorage.setItem(accessStorage, value);
-              else localStorage.removeItem(accessStorage);
-              setUpdateToken(value);
-              return true;
-            } catch {
-              setUpdate(t('Speichern fehlgeschlagen.', 'Could not save the token.'));
-              return false;
-            }
-          };
-          return <div class="settings-update-stack" data-settings-ordered>
-          <UpdateTokenTransfer t={t} onToken={storeUpdateToken} />
-          <Field label={t('GitHub-Lese-Token', 'Read-only GitHub token')}>
-            <TVInput type="password" autocomplete="off" value={updateToken}
-              onChange={(e) => {
-                storeUpdateToken(e.currentTarget.value.trim());
-              }} />
-          </Field>
-          <p class="settings-update-help muted">{t(
-            "Auf GitHub einen Fine-grained Token für tariktech7/dado-player erstellen. Unter Contents genügt Read-only.",
-            "Create a fine-grained GitHub token for tariktech7/dado-player. Set Contents to Read-only."
-          )}</p>
+        case "updates": return <div class="settings-update-stack" data-settings-ordered>
           <div class="settings-update-actions">
-          <button disabled={checkingUpdate} onClick={() => void checkUpdates(true)}>
-            {t("GitHub-Update prüfen und installieren", "Check and install GitHub update")}
-          </button>
-          {window.dadoTvBoot?.fromUpdate && <button onClick={() => {
-            try { saveSlot({ blocked: Math.max(readSlot().blocked || 0, APP_BUILD) }); location.reload(); }
-            catch { setUpdate(t('Rückkehr fehlgeschlagen.', 'Could not roll back the update.')); }
-          }}>{t('Installierte Version wiederherstellen', 'Restore installed version')}</button>}
-          <button
-            onClick={() =>
-              void start(
-                {
-                  id: "dado-diagnostic",
-                  kind: "vod",
-                  name: "Dado Wiedergabetest",
-                  category: "",
-                  logo: "",
-                  url: new URL("test-video.mp4", location.href).href,
-                },
-                true,
-              )
-            }
-          >
-            Integriertes Testvideo abspielen
-          </button>
+            <button disabled={checkingUpdate || updateReady} onClick={() => void checkUpdates()}>
+              {t("App-Update prüfen und installieren", "Check for and install app update")}
+            </button>
+            <button disabled={checkingUpdate || updateReady} onClick={() => void checkUpdates(true)}>
+              {t("Vorherige Version wiederherstellen", "Restore previous version")}
+            </button>
           </div>
           {update && <p role="status">{update}</p>}
-          <p class="muted">{t('Mit GitHub-Lesezugriff prüft Dado Player automatisch alle sechs Stunden auf signierte Web-Updates.',
-            'With read access to GitHub, Dado Player checks for signed web updates every six hours.')}</p>
-          <p class="muted">{APP_VERSION}{releaseInfo.channel === "beta" && "betaNumber" in releaseInfo
-            ? ` Beta ${releaseInfo.betaNumber}` : ""} · Build {APP_BUILD}</p>
         </div>;
-        }
         case "license": return <>
           <p><strong>{license.text}</strong></p>
           <p>Geräte-ID: <strong>{license.deviceId}</strong></p>
@@ -1709,6 +1657,24 @@ function App() {
             <TVInput type="checkbox" checked={saved.settings.expertMode}
               onChange={(e) => setting("expertMode", e.currentTarget.checked)} />
           </Field>
+
+          <button
+            onClick={() =>
+              void start(
+                {
+                  id: "dado-diagnostic",
+                  kind: "vod",
+                  name: "Dado Wiedergabetest",
+                  category: "",
+                  logo: "",
+                  url: new URL("test-video.mp4", location.href).href,
+                },
+                true,
+              )
+            }
+          >
+            Integriertes Testvideo abspielen
+          </button>
 
           {saved.settings.expertMode && <>
 

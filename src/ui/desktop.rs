@@ -394,10 +394,11 @@ pub(super) fn compact_back_button(ui: &mut Ui, label: &str, height: f32) -> egui
         })
         .inner;
     if response.has_focus() || ui::mobile::focus::focused_id() == Some(response.id) {
-        ui.painter().rect_stroke(
-            response.rect.shrink(1.5),
-            (appearance().control_radius * scale(ui.ctx()) - 1.5).max(8.5),
-            egui::Stroke::new(2.5, theme::accent(ui)),
+        ui::mobile::focus::paint_ring(
+            ui,
+            response.rect,
+            ui.style().interact(&response).rounding,
+            2.5,
         );
     }
     response

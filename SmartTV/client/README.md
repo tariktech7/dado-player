@@ -107,20 +107,15 @@ Der Build lädt keine Anwendungsskripte von einem CDN. Samsung webapis.js wird n
 
 ## Web-Updates über GitHub
 
-Ab Tizen-Build 3 lädt Dado Player kompatible Web-Updates selbst, prüft die Signatur und startet
-bei Leerlauf neu. Das zuerst installierte WGT bildet die Rückfallebene. Schlägt ein neuer Start
-fehl, lädt der TV wieder die installierte Version. Profile, Favoriten und Lizenz bleiben im
-App-Speicher. In **Einstellungen → Updates** lässt sich die installierte Version wiederherstellen.
+Unter **Einstellungen → App-Updates** sucht der Fernseher auf Knopfdruck im öffentlichen
+GitHub-Update-Kanal. Die App prüft die Signatur eines verfügbaren Updates und startet bei
+Leerlauf neu. Seit 0.8.3 erfolgt die Abfrage ohne GitHub-Token. Ältere Versionen benötigen
+für den ersten Wechsel weiterhin ihren bisher konfigurierten Token oder das signierte WGT.
 
-Das GitHub-Repository ist privat. Als Zugriff dient ein GitHub Fine-grained Token für
-`tariktech7/dado-player` mit **Contents: Read-only**. Unter **Einstellungen → App-Updates →
-Token per Handy übertragen** den QR-Code mit der Handykamera scannen, den Token einfügen und
-senden. Der QR-Code ist fünf Minuten gültig. Das Handy verschlüsselt den Token für den TV.
-Der Vermittlungsdienst hält kurzzeitig nur den verschlüsselten Inhalt und löscht ihn nach dem
-Speichern am TV. Eine manuelle Eingabe bleibt möglich. Der Token liegt im lokalen App-Speicher des TVs.
-Ohne Token gibt es keine automatische Abfrage. Der TV prüft jeweils nach dem Start und danach
-alle sechs Stunden. Änderungen am Paket, an Ressourcen, Berechtigungen oder am Startprogramm
-benötigen ein neues WGT. Dieser Updateweg ist für die Entwicklerinstallation vorgesehen.
+**Vorherige Version wiederherstellen** lädt das letzte gesicherte kompatible Web-Update.
+Fehlt eine solche Sicherung oder schlägt ein neuer Start fehl, dient das installierte WGT
+als Rückfallebene. Profile, Favoriten und Lizenz bleiben im App-Speicher. Wenn sich Ressourcen,
+Berechtigungen oder das Startprogramm ändern, ist ein neues WGT erforderlich.
 
 Für einen neuen Web-Stand zuerst `tizenBuild` in `release.json` erhöhen und
 `python scripts/release_version.py` im Repository-Stamm ausführen. Danach im TV-Client bauen und

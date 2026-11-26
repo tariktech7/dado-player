@@ -6,6 +6,7 @@ use crate::{
 };
 use egui::{pos2, vec2, Align, Color32, Layout, Rect, RichText, Sense, Ui};
 use std::{
+    collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
     sync::Arc,
 };
@@ -123,41 +124,49 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     );
     let scale = super::desktop::scale(ui.ctx());
     let inset = super::desktop::handheld_size(24.0 * scale, 14.0);
-    let content = bounds
-        .intersect(super::desktop::safe_rect(ui.ctx(), false))
-        .shrink(inset);
+    let safe = bounds.intersect(super::desktop::safe_rect(ui.ctx(), false));
+    let content = safe.shrink(inset);
     let mut top = ui.child_ui_with_id_source(content, Layout::top_down(Align::Min), "title-back");
     focus::set_zone(1);
     let back = super::desktop::back_button(&mut top, t("‹ Zurück", "‹ Back"));
-    if hit(&top, &back, app.shared_remote_navigation()) {
+    let back_clicked = if app.shared_remote_navigation() {
+        focus::clicked_with_custom_ring(&top, &back)
+    } else {
+        back.clicked()
+    };
+    if back_clicked {
         app.close_catalog_detail();
         ui.ctx().request_repaint();
         return;
     }
-    let gap = if touch { 9.0 } else { 12.0 };
-    let rail_height = (content.height() * 0.10).clamp(if touch { 40.0 } else { 32.0 }, 78.0);
-    let season_label_height = 20.0;
+    let gap = (content.height() * 0.025).clamp(9.0, 18.0);
+    let action_height = (content.height() * 0.09).clamp(34.0, 62.0);
+    let season_label_height = if touch { 17.0 } else { 22.0 };
+    let rail_padding = 4.0;
     let font_size = (bounds.height() * 0.069).clamp(if touch { 18.0 } else { 24.0 }, 54.0);
     let mut play_size = vec2(
         super::desktop::handheld_size((280.0 * scale).max(144.0), 174.0),
         super::desktop::handheld_size((96.0 * scale).max(52.0), 62.0),
     );
     if series {
-        play_size.x = play_size.x.min(content.width() * 0.31);
-        play_size.y = super::desktop::handheld_size((72.0 * scale).max(44.0), 48.0);
+        play_size = vec2(
+            (action_height * 3.2).min(content.width() * 0.36),
+            action_height,
+        );
     }
-    let season_height = season_label_height + gap + rail_height;
+    let season_height = season_label_height + gap * 0.5 + action_height + 2.0 * rail_padding;
     let episode_budget = content.bottom()
         - back.rect.bottom()
         - font_size * 1.4
         - play_size.y
         - season_height
-        - 4.0 * gap;
+        - 4.0 * gap
+        - 2.0 * rail_padding;
     let episode_height = (content.height() * 0.38)
         .min(320.0)
         .min(episode_budget.max(32.0));
     let controls_bottom = if series {
-        content.bottom() - season_height - 2.0 * gap - episode_height
+        content.bottom() - season_height - 2.0 * gap - episode_height - 2.0 * rail_padding
     } else {
         content.bottom()
     };
@@ -219,6 +228,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
     } else {
         None
     };
+    let action_font = (action_height * 0.38).clamp(14.0, 24.0);
     let caption = t("▶ Abspielen", "▶ Play");
     let tv = app.shared_remote_navigation();
     let retry = series && app.series_failed(entry.id);
@@ -237,7 +247,7 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                     caption
                 })
                 .size(if series {
-                    super::desktop::handheld_type((27.0 * scale).max(16.0), 16.0)
+                    action_font
                 } else {
                     super::desktop::handheld_type((38.0 * scale).max(20.0), 23.0)
                 })
@@ -246,7 +256,6 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 let primary = egui::Button::new(play_text)
                     .wrap(false)
                     .min_size(play_size)
-                    .rounding(egui::Rounding::same(12.0))
                     .fill(crate::theme::accent_fill(ui))
                     .stroke(egui::Stroke::new(1.5_f32, Color32::from_rgb(154, 201, 243)));
                 let play = if retry {
@@ -263,9 +272,11 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 };
                 if series && target.is_some() {
                     let shuffle = ui.add(
-                        egui::Button::new(t("Zufällige Folge", "Random episode"))
-                            .wrap(false)
-                            .min_size(vec2(0.0, play_size.y)),
+                        egui::Button::new(
+                            RichText::new(t("Zufällige Folge", "Random episode")).size(action_font),
+                        )
+                        .wrap(false)
+                        .min_size(vec2(0.0, play_size.y)),
                     );
                     random = hit(ui, &shuffle, tv);
                 }
@@ -297,9 +308,11 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
                 }
                 if series && !entry.plot.is_empty() {
                     let description = ui.add(
-                        egui::Button::new(t("Mehr lesen", "Read more"))
-                            .wrap(false)
-                            .min_size(vec2(0.0, play_size.y)),
+                        egui::Button::new(
+                            RichText::new(t("Mehr lesen", "Read more")).size(action_font),
+                        )
+                        .wrap(false)
+                        .min_size(vec2(0.0, play_size.y)),
                     );
                     if hit(ui, &description, tv) {
                         app.description_open = Some((entry.name.clone(), entry.plot.clone()));
@@ -311,7 +324,10 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
         })
         .inner;
     if series {
-        let rails = Rect::from_min_max(pos2(content.left(), controls_bottom + gap), content.max);
+        let rails = Rect::from_min_max(
+            pos2(content.left() - rail_padding, controls_bottom + gap),
+            pos2(bounds.right(), content.bottom()),
+        );
         let mut rows = ui.child_ui_with_id_source(
             rails,
             Layout::top_down(Align::Min),
@@ -323,9 +339,11 @@ fn show_title_page(app: &mut App, ui: &mut Ui, entry: Entry, series: bool) {
             &mut rows,
             entry.id,
             target.as_ref().map(|(e, _)| e),
-            vec2(rail_height, episode_height),
+            vec2(action_height, episode_height),
             gap,
             season_label_height,
+            rail_padding,
+            bounds.right() - content.right(),
             &entry.cover,
         );
         if play {
@@ -1099,6 +1117,8 @@ fn episode_rows(
     heights: egui::Vec2,
     gap: f32,
     heading_height: f32,
+    rail_padding: f32,
+    trailing_inset: f32,
     cover: &str,
 ) {
     let height = heights.x;
@@ -1116,7 +1136,9 @@ fn episode_rows(
         ui.label(t("Keine Folgen verfügbar.", "No episodes available."));
         return;
     }
-    type Cached = ((usize, usize), Arc<(Vec<Episode>, Vec<u32>)>);
+    type CachedEpisodes = (Vec<Episode>, Vec<u32>, HashSet<u32>);
+    type Cached = ((usize, usize), Arc<CachedEpisodes>);
+    let art_source = |url: &str| url.find(['?', '#']).unwrap_or(url.len());
     let signature = (source.as_ptr() as usize, source.len());
     let cache = ui.id().with("episodes");
     let sorted = ui
@@ -1128,11 +1150,28 @@ fn episode_rows(
             episodes.sort_by_key(|e| (e.season, e.episode, e.id));
             let mut seasons: Vec<_> = episodes.iter().map(|e| e.season).collect();
             seasons.dedup();
-            let sorted = Arc::new((episodes, seasons));
+            let mut counts = HashMap::new();
+            for episode in &episodes {
+                let url = episode.preview.trim();
+                *counts.entry(&url[..art_source(url)]).or_insert(0) += 1;
+            }
+            let cover = cover.trim();
+            let unique_art = episodes
+                .iter()
+                .filter_map(|episode| {
+                    let url = episode.preview.trim();
+                    let source = &url[..art_source(url)];
+                    (!source.is_empty()
+                        && source != &cover[..art_source(cover)]
+                        && counts[source] == 1)
+                        .then_some(episode.id)
+                })
+                .collect();
+            let sorted = Arc::new((episodes, seasons, unique_art));
             ui.data_mut(|data| data.insert_temp(cache, (signature, Arc::clone(&sorted))));
             sorted
         });
-    let (episodes, seasons) = sorted.as_ref();
+    let (episodes, seasons, unique_art) = sorted.as_ref();
     let profile = app
         .active_profile
         .as_ref()
@@ -1162,19 +1201,19 @@ fn episode_rows(
     }
     let tab = seasons.binary_search(&app.series_season).unwrap_or(0);
     let bounds = ui.available_rect_before_wrap();
-    let card_width = ((bounds.width() - 3.0 * gap) / 4.0).max(80.0);
+    let card_width = ((bounds.width() - rail_padding - 3.0 * gap) / 4.0).max(73.0);
     let step = card_width + gap;
     let heading = Rect::from_min_size(bounds.min, vec2(bounds.width(), heading_height));
     ui.painter().text(
-        heading.left_center(),
+        heading.left_center() + vec2(rail_padding, 0.0),
         egui::Align2::LEFT_CENTER,
         t("Staffeln", "Seasons"),
         tokens::bold(16.0),
         Color32::WHITE,
     );
     let tab_rect = Rect::from_min_size(
-        pos2(bounds.left(), heading.bottom() + gap),
-        vec2(bounds.width(), height),
+        pos2(bounds.left(), heading.bottom() + gap * 0.5),
+        vec2(bounds.width(), height + 2.0 * rail_padding),
     );
     let mut tabs =
         ui.child_ui_with_id_source(tab_rect, Layout::top_down(Align::Min), "season-tabs");
@@ -1188,6 +1227,8 @@ fn episode_rows(
         card_width,
         gap,
         tabs_offset,
+        rail_padding,
+        trailing_inset,
         |ui, index, rect| {
             let season = seasons[index];
             let r = ui.put(
@@ -1212,7 +1253,7 @@ fn episode_rows(
         ..episodes.partition_point(|e| e.season <= season)];
     let target_id = target.filter(|e| e.season == season).map(|e| e.id);
     let focus_index = returning.and_then(|e| rows.iter().position(|row| row.id == e.id));
-    let episode_width = ((bounds.width() - 2.0 * gap) / 3.0).max(100.0);
+    let episode_width = ((bounds.width() - rail_padding - 3.0 * gap) / 3.15).max(95.0);
     let episode_step = episode_width + gap;
     let offset = if let Some(index) = focus_index {
         Some(index as f32 * episode_step)
@@ -1228,7 +1269,7 @@ fn episode_rows(
     };
     let episode_rect = Rect::from_min_size(
         pos2(bounds.left(), tab_rect.bottom() + gap),
-        vec2(bounds.width(), episode_height),
+        vec2(bounds.width(), episode_height + 2.0 * rail_padding),
     );
     let mut cards =
         ui.child_ui_with_id_source(episode_rect, Layout::top_down(Align::Min), "episode-cards");
@@ -1237,10 +1278,12 @@ fn episode_rows(
         &mut cards,
         ("episodes", season),
         rows.len(),
-        episode_rect.height(),
+        episode_height,
         episode_width,
         gap,
         offset,
+        rail_padding,
+        trailing_inset,
         |ui, index, rect| {
             let e = &rows[index];
             let key = format!("ep:{sid}:{}", e.id);
@@ -1258,15 +1301,20 @@ fn episode_rows(
                     rect.max - vec2(3.0, label_height),
                 );
                 let frame_key = format!("episode-frame:{sid}:{}", e.id);
-                let fallback = if !locked && e.preview.trim() != cover.trim() {
-                    e.preview.as_str()
+                let art_key = format!("episode-art:{sid}:{}", e.id);
+                let frame = if locked {
+                    None
                 } else {
-                    ""
-                };
-                if !locked {
                     app.request_episode_frame(&frame_key, e);
-                }
-                if let Some(image) = (!locked).then(|| app.image(&frame_key)).flatten() {
+                    if app.image(&frame_key).is_none() && unique_art.contains(&e.id) {
+                        app.request_image(art_key.clone(), e.preview.trim().into());
+                    }
+                    app.image(&frame_key).or_else(|| {
+                        app.image(&art_key)
+                            .filter(|image| image.aspect_ratio() >= 1.25)
+                    })
+                };
+                if let Some(image) = frame {
                     let dimensions = image.size_vec2();
                     let ratio = (art.width() / art.height()) / (dimensions.x / dimensions.y);
                     let visible = vec2(ratio.min(1.0), ratio.recip().min(1.0));
@@ -1277,7 +1325,7 @@ fn episode_rows(
                         Color32::WHITE,
                     );
                 } else {
-                    components::thumb(app, ui, &key, fallback, art, "▶");
+                    components::thumb(app, ui, &art_key, "", art, "▶");
                 }
                 if let Some(duration) = app.durations.get(&key).filter(|duration| **duration > 0) {
                     let progress =
@@ -1310,7 +1358,11 @@ fn episode_rows(
             if r.has_focus() {
                 super::desktop::remember_favorite_target(&r, &format!("ep:{sid}:{}", e.id));
             }
-            hit(ui, &r, tv)
+            if tv {
+                focus::clicked_with_rounding(ui, &r, 8.0)
+            } else {
+                r.clicked()
+            }
         },
     );
     ui.data_mut(|data| data.insert_temp(position_key, (app.series_open_revision, season)));
@@ -1328,22 +1380,25 @@ fn episode_rail(
     width: f32,
     gap: f32,
     offset: Option<f32>,
+    padding: f32,
+    trailing_inset: f32,
     mut render: impl FnMut(&mut Ui, usize, Rect) -> bool,
 ) -> Option<usize> {
     let step = width + gap;
+    let extent = (count as f32 * step - gap).max(0.0) + padding + trailing_inset;
     let mut scroll = egui::ScrollArea::horizontal()
         .id_source(id)
-        .max_height(height)
+        .max_height(height + 2.0 * padding)
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
         .auto_shrink([false, true]);
     if let Some(offset) = offset {
-        let max = (count as f32 * step - gap - ui.available_width()).max(0.0);
+        let max = (extent - ui.available_width()).max(0.0);
         scroll = scroll.horizontal_scroll_offset(offset.min(max));
     }
     let mut selected = None;
     scroll.show_viewport(ui, |ui, viewport| {
-        let origin = ui.cursor().min;
-        ui.set_min_size(vec2((count as f32 * step - gap).max(0.0), height));
+        let origin = ui.cursor().min + vec2(padding, padding);
+        ui.set_min_size(vec2(extent, height + 2.0 * padding));
         let visible = (viewport.min.x / step) as usize;
         let end = ((viewport.max.x / step).ceil() as usize + 3).min(count);
         for index in visible.saturating_sub(3)..end {

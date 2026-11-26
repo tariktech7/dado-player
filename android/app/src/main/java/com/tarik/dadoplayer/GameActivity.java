@@ -1,11 +1,9 @@
 package com.tarik.dadoplayer;
 
 import android.app.UiModeManager;
-import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.Log;
@@ -115,22 +113,22 @@ public class GameActivity extends com.google.androidgamesdk.GameActivity {
         return true;
     }
 
-    public static int mobileUpdate(int install) {
+    public static int mobileUpdate(int action) {
         GameActivity activity = sSelf;
         if (activity == null) return 0;
         activity.runOnUiThread(() -> {
-            if (install == 1) {
-                PlayerUpdate.install(activity);
-            } else {
-                try {
-                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                            Uri.parse("https://github.com/tariktech7/dado-player/releases")));
-                } catch (ActivityNotFoundException ignored) {
-                    PlayerUpdate.status = "Auf diesem Gerät ist kein Browser verfügbar.";
-                }
-            }
+            if (action == 2) PlayerUpdate.chooseExportLocation(activity);
+            else PlayerUpdate.install(activity);
         });
         return 1;
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == PlayerUpdate.EXPORT_REQUEST && result == RESULT_OK && data != null
+                && data.getData() != null) {
+            PlayerUpdate.exportPrevious(this, data.getData());
+        }
     }
 
     public static String mobileUpdateStatus() {

@@ -25,6 +25,39 @@ public final class PlayerUpdate extends BroadcastReceiver {
         return new File(context.getFilesDir(), "updates/Dado-Player.apk");
     }
 
+    static final int EXPORT_REQUEST = 7260;
+    private static final String PREVIOUS_APK = "Dado-Player-vorherige-Version.apk";
+
+    static void chooseExportLocation(Activity activity) {
+        status = "Android sperrt Downgrades. Wähle einen Speicherort für die geprüfte ältere APK.";
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/vnd.android.package-archive")
+                .putExtra(Intent.EXTRA_TITLE, PREVIOUS_APK);
+        try {
+            activity.startActivityForResult(intent, EXPORT_REQUEST);
+        } catch (RuntimeException ignored) {
+            status = "Auf diesem Gerät ist keine Dateiauswahl zum Speichern der älteren APK verfügbar.";
+        }
+    }
+
+    static void exportPrevious(Context context, Uri destination) {
+        Context app = context.getApplicationContext();
+        new Thread(() -> {
+            try (FileInputStream input = new FileInputStream(new File(app.getFilesDir(), "updates/" + PREVIOUS_APK));
+                 OutputStream output = app.getContentResolver().openOutputStream(destination)) {
+                if (output == null) throw new IOException("No output stream");
+                byte[] buffer = new byte[128 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                output.flush();
+                status = "Ältere APK gespeichert. Die installierte App ist weiterhin verfügbar.";
+            } catch (IOException | RuntimeException ignored) {
+                status = "Die ältere APK konnte nicht gespeichert werden.";
+            }
+        }, "Dado previous APK export").start();
+    }
+
     static void install(Activity activity) {
         if (!INSTALLING.compareAndSet(false, true)) return;
         if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {

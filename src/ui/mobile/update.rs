@@ -1,4 +1,3 @@
-use super::components::{field, Kb};
 use crate::release_update::{runtime, GitHub, Update};
 #[cfg(target_os = "android")]
 use anyhow::Context;
@@ -25,11 +24,8 @@ const PACKAGE: (&str, &str, u32, &str) = (
 
 #[derive(Default)]
 struct State {
-    token: String,
-    visible: bool,
     busy: bool,
-    ready: bool,
-    available: Option<Update>,
+    ready: Option<bool>,
     message: String,
     #[cfg(target_os = "android")]
     attempted_install: bool,
@@ -50,28 +46,34 @@ fn directory() -> Result<PathBuf> {
     return Ok(std::env::temp_dir());
 }
 
-fn native(install: bool) -> Result<()> {
+fn native(previous: bool) -> Result<()> {
     #[cfg(target_os = "ios")]
     {
+        let _ = previous;
         extern "C" {
             fn dado_host_mobile_update(install: i32);
         }
         unsafe {
-            dado_host_mobile_update(install as i32);
+            dado_host_mobile_update(1);
         }
         Ok(())
     }
     #[cfg(target_os = "android")]
-    crate::platform::android::jni_bridge::mobile_update(install)
+    crate::platform::android::jni_bridge::mobile_update(if previous { 2 } else { 1 })
 }
 
-async fn stage(github: GitHub, update: Update) -> Result<()> {
+async fn stage(github: GitHub, update: Update, previous: bool) -> Result<()> {
     let dir = directory()?;
     std::fs::create_dir_all(&dir)?;
     let temp = dir.join("update.part");
+    let file = if cfg!(target_os = "android") && previous {
+        "Dado-Player-vorherige-Version.apk"
+    } else {
+        PACKAGE.3
+    };
     let result = async {
         github.download(&update, &temp).await?;
-        std::fs::rename(&temp, dir.join(PACKAGE.3))?;
+        std::fs::rename(&temp, dir.join(file))?;
         Ok(())
     }
     .await;
@@ -81,13 +83,15 @@ async fn stage(github: GitHub, update: Update) -> Result<()> {
     result
 }
 
-fn hand_off(state: &mut State) {
+fn hand_off(state: &mut State, previous: bool) {
     #[cfg(target_os = "android")]
     {
         state.attempted_install = true;
     }
-    state.message = match native(true) {
+    state.message = match native(previous) {
         Err(error) => error.to_string(),
+        #[cfg(target_os = "android")]
+        Ok(()) if previous => "Android sperrt Downgrades. Du kannst die geprüfte ältere APK speichern.".into(),
         #[cfg(target_os = "android")]
         Ok(()) => "Update geprüft. Installation wird an Android übergeben …".into(),
         #[cfg(target_os = "ios")]
@@ -96,129 +100,75 @@ fn hand_off(state: &mut State) {
 }
 
 pub fn show(ui: &mut egui::Ui) {
-    let mut s = state().lock().unwrap();
-    ui.label(format!("Installierter Build {}", PACKAGE.2));
-    ui.add_enabled_ui(!s.busy, |ui| {
-        let id = ui.id().with("update-access-expanded");
-        let mut expanded = ui
-            .data(|data| data.get_temp::<bool>(id))
-            .unwrap_or_default();
-        let access = ui.button("GitHub-Zugang für private Releases");
-        if crate::ui::settings::activate(ui, &access) {
-            expanded = !expanded;
-            ui.data_mut(|data| data.insert_temp(id, expanded));
-        }
-        if expanded {
-            ui.label("Fine-grained Token für tariktech7/dado-player · Contents: Read-only");
-            let State { token, visible, .. } = &mut *s;
-            let r = field(
-                ui,
-                "Token",
-                token,
-                "GitHub-Token mit Leserecht",
-                Kb::Password,
-                visible,
-            );
-            crate::ui::settings::edit_option(ui, &r);
-            if r.gained_focus() {
-                crate::platform::seed_ime(token);
-            }
+    let mut state = state().lock().unwrap();
+    let action = ui.add_enabled_ui(!state.busy, |ui| {
+        let check = ui.button("App-Update prüfen und installieren");
+        let restore = ui.button("Vorherige Version wiederherstellen");
+        if super::focus::clicked(ui, &check) {
+            Some(false)
+        } else if super::focus::clicked(ui, &restore) {
+            Some(true)
+        } else {
+            None
         }
     });
-    if s.busy {
-        ui.spinner();
-    } else if let Some(update) = s.available.clone() {
-        #[cfg(target_os = "android")]
-        let title = format!("{} installieren", update.version);
-        #[cfg(target_os = "ios")]
-        let title = format!("{} für AltStore vorbereiten", update.version);
-        let install = ui.button(title);
-        if super::focus::clicked(ui, &install) {
-            if s.ready {
-                hand_off(&mut s);
-            } else {
-                s.busy = true;
-                s.message = "Update wird geladen und geprüft …".into();
-                let token = s.token.clone();
-                let ctx = ui.ctx().clone();
-                std::thread::spawn(move || {
-                    let result = runtime().and_then(|rt| {
-                        let github = GitHub::new(token)?;
-                        rt.block_on(stage(github, update))
-                    });
-                    let mut s = state().lock().unwrap();
-                    s.busy = false;
-                    match result {
-                        Ok(()) => {
-                            s.token.clear();
-                            s.ready = true;
-                            hand_off(&mut s);
-                        }
-                        Err(error) => s.message = error.to_string(),
-                    }
-                    ctx.request_repaint();
-                });
-            }
-        }
-        let reset = ui.button("Erneut auf Updates prüfen");
-        if !s.busy && super::focus::clicked(ui, &reset) {
-            s.ready = false;
-            s.available = None;
-            s.message.clear();
+    if let Some(previous) = action.inner {
+        if state.ready == Some(previous) {
+            hand_off(&mut state, previous);
+        } else {
+            state.busy = true;
+            state.ready = None;
+            state.message = "Version wird gesucht, geladen und geprüft …".into();
             #[cfg(target_os = "android")]
             {
-                s.attempted_install = false;
+                state.attempted_install = false;
             }
-        }
-    } else {
-        let check = ui.button("Auf GitHub-Updates prüfen");
-        if super::focus::clicked(ui, &check) {
-            s.busy = true;
-            s.message = "GitHub wird abgefragt …".into();
-            let token = s.token.clone();
             let ctx = ui.ctx().clone();
             std::thread::spawn(move || {
                 let result = runtime().and_then(|rt| {
-                    let github = GitHub::new(token)?;
-                    rt.block_on(github.check(PACKAGE.0, PACKAGE.1, PACKAGE.2))
+                    rt.block_on(async {
+                        let github = GitHub::new()?;
+                        let update = github
+                            .check(PACKAGE.0, PACKAGE.1, PACKAGE.2, previous)
+                            .await?;
+                        if let Some(update) = update {
+                            self::state().lock().unwrap().message = format!(
+                                "Version {} · Build {} wird geladen …",
+                                update.version, update.build
+                            );
+                            ctx.request_repaint();
+                            stage(github, update, previous).await?;
+                            return Ok(true);
+                        }
+                        Ok(false)
+                    })
                 });
-                let mut s = state().lock().unwrap();
-                s.busy = false;
-                s.message = match result {
-                    Ok(Some(update)) => {
-                        let message = format!(
-                            "Version {} · Build {} verfügbar.",
-                            update.version, update.build
-                        );
-                        s.available = Some(update);
-                        message
-                    }
-                    Ok(None) => "Du verwendest die aktuelle Version.".into(),
-                    Err(error) => error.to_string(),
-                };
+                let mut state = self::state().lock().unwrap();
+                state.busy = false;
+                if matches!(result, Ok(true)) {
+                    state.ready = Some(previous);
+                    hand_off(&mut state, previous);
+                } else {
+                    state.message = crate::release_update::status(result, previous);
+                }
                 ctx.request_repaint();
             });
         }
     }
+    if state.busy {
+        ui.spinner();
+    }
     #[cfg(target_os = "android")]
-    if s.attempted_install && !s.busy {
+    if state.attempted_install && !state.busy {
         if let Ok(status) = crate::platform::android::jni_bridge::mobile_update_status() {
             if !status.is_empty() {
-                s.message = status;
+                state.message = status;
             }
         }
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(500));
     }
-    if !s.message.is_empty() {
-        ui.label(&s.message);
-    }
-    #[cfg(target_os = "ios")]
-    ui.label("AltStore Classic signiert das Update. Wähle die gespeicherte IPA dort unter „My Apps“ über + aus.");
-    let releases = ui.button("GitHub-Releases öffnen");
-    if !s.busy && super::focus::clicked(ui, &releases) {
-        if let Err(error) = native(false) {
-            s.message = error.to_string();
-        }
+    if !state.message.is_empty() {
+        ui.label(&state.message);
     }
 }

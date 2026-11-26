@@ -8,6 +8,9 @@ function readFrame(url: string, done: (image: string) => void): () => void {
   video.crossOrigin = "anonymous";
   video.muted = true;
   video.preload = "auto";
+  video.setAttribute("aria-hidden", "true");
+  video.style.cssText = "position:fixed;left:-2px;top:0;width:1px;height:1px;pointer-events:none";
+  document.body.appendChild(video);
   let finished = false;
   const finish = (image?: string) => {
     if (finished) return;
@@ -16,6 +19,7 @@ function readFrame(url: string, done: (image: string) => void): () => void {
     video.onloadedmetadata = video.onloadeddata = video.onseeked = video.onerror = null;
     video.removeAttribute("src");
     video.load();
+    video.remove();
     if (image !== undefined) done(image);
   };
   let positioned = false;

@@ -179,7 +179,12 @@ pub(super) fn show_header(app: &mut App, ui: &mut Ui, header: Rect, scale: f32, 
                     },
                     header_height - 8.0,
                 );
-                if activate(ui, &response, app.shared_remote_navigation()) {
+                let clicked = if app.shared_remote_navigation() {
+                    focus::clicked_with_custom_ring(ui, &response)
+                } else {
+                    response.clicked()
+                };
+                if clicked {
                     back(app, ui.ctx());
                 }
             }
