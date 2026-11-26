@@ -1323,7 +1323,7 @@ ersetzt, im schlechtesten Fall zusammen mit dem schließenden `“`. Der Satz en
 und ohne Prädikat — und sieht aus wie ein zu langer Name.
 
 Profilnamen sind nirgends längenbegrenzt (kein `len`/`truncate` in `login.rs`), und
-Anbieternamen wie `kunde@anbieter-beispiel.de` sind realistisch länger als 57 Zeichen.
+Anbieternamen wie `benutzer@example.invalid` sind realistisch länger als 57 Zeichen.
 
 **Regel: den variablen Teil begrenzen, nicht den Satz.** Der Name wird vor dem Formatieren
 auf 20 Zeichen gekürzt, mit `…`:

@@ -38,7 +38,7 @@ Das Eltern-TV-Paket bleibt bewusst getrennt vom veröffentlichten Standard-WGT; 
 Release wird durch diesen Testbuild nicht ersetzt. Noch keine Zusage für Tizen vor 5.0.
 Ältere Geräte und LG webOS sind noch keine freigegebenen Ziele.
 
-USB-Verteilung und aktueller Seller-Office-Stand: [USB-STATUS.md](../USB-STATUS.md).
+USB-Verteilung: [USB-STATUS.md](../USB-STATUS.md).
 Das lokale Skript `npm run usb` erstellt ohne Samsung-TMG/Lizenzdateien nur ein klar
 als nicht installierbar gekennzeichnetes Vorbereitungsarchiv.
 

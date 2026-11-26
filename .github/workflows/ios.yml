@@ -8,7 +8,7 @@ jobs:
     # a Windows runner, so they would rot silently. `--features ios-check`
     # compiles src/platform/ios/{bridge,sys}.rs and src/platform/ios/avplayer.rs on the host
     # without wiring them in. This is a *type check*, not an iOS build: producing
-    # libdadoplayer.a needs an Apple SDK (see README.iOS.md).
+    # libdadoplayer.a needs an Apple SDK (see ios/README.md).
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

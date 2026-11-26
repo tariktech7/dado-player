@@ -103,8 +103,7 @@ Filled buttons use a darker accent (`ACCENT_FILL #2f7bff`) so white labels keep 
 5. **Live programme progress bar** under the "Jetzt:" line, driven by the EPG we already fetch.
 6. **Mobile token alignment** — `src/ui/mobile/tokens.rs` now uses the shared theme helpers, so
    Android matches the desktop palette.
-7. **SmartTV plan rewritten** from IPTVnator's Tizen workflow; old `.tmg` reference archived to
-   `references/smartiptv-legacy/`.
+7. **SmartTV plan rewritten** from IPTVnator's Tizen workflow.
 8. **Channel-number quick jump** — `src/ui/live.rs`: digits typed in Live TV accumulate in a
    floating badge and zap to that channel after a 1.1 s idle (or Enter). Ignored while a text
    field has focus; clears category/search filters so the target is always reachable.

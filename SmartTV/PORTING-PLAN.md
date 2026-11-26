@@ -198,4 +198,3 @@ Each milestone must be verified on hardware before the next one is claimed done.
 - `references/iptvnator/docs/architecture/tv-application.md` — runtime/provider/persistence contract.
 - `references/iptvnator/docs/development/tv-development.md` — build and device validation.
 - `references/iptvnator/docs/development/tv-tizen-validation.md` — device acceptance results.
-- `references/smartiptv-legacy/` — the old `.tmg` reference and its licence (archived, not a build input).

@@ -10,8 +10,7 @@ LG ist noch nicht implementiert. Die bestehenden Rust-/egui-Apps bleiben erhalte
 Lokaler Checkout: references/iptvnator, Repository
 [4gray/iptvnator](https://github.com/4gray/iptvnator), Commit
 `c809c8c735b6dcaecceb6efd37ecac56b203f1e8`. Lizenz: LICENSE.md (MIT, 4gray).
-Übernommener Quellcode muss die Lizenzhinweise behalten. references/smartiptv-legacy
-enthält lediglich ein altes Binärpaket und eine Lizenzdatei, keinen Build-Quellbaum.
+Übernommener Quellcode muss die Lizenzhinweise behalten.
 
 | Datei im Referenzcheckout | Verwendung für Dado |
 | --- | --- |
