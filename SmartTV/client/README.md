@@ -14,10 +14,10 @@ Vom Repository-Stamm in PowerShell:
 ./SmartTV/client/build.ps1 -SigningProfile DadoTV -LegacySigningProfile DadoTV2019
 ```
 
-Der Einstieg baut und prüft beide Widgets derselben Produktversion. Ohne
-Signierungsprofil entstehen zwei als unsigniert gekennzeichnete Pakete. Mit Signatur
-heißen sie `Dado-Player-Tizen-<VERSION>.wgt` und `Dado-Player-Tizen5-<VERSION>.wgt`.
-Verwende je Ziel ein Samsung-Distributorzertifikat, das den jeweiligen TV enthält.
+Der Einstieg baut beide Widgets derselben Produktversion. Die öffentlichen Downloads
+tragen den Zusatz `-unsigned.wgt`. Mit einem Signierungsprofil entstehen zusätzlich
+`Dado-Player-Tizen-<VERSION>.wgt` und `Dado-Player-Tizen5-<VERSION>.wgt` für die lokale
+Installation. Das Samsung-Distributorzertifikat enthält die Geräte-ID des jeweiligen TVs.
 Mit `DADO_PACKAGE_DIR` kann ein separater Ausgabeordner gewählt werden.
 
 Für lokale Browser-Tests beider Profile im Clientordner:
@@ -126,7 +126,7 @@ npm run publish:update -- ../../Releases/Tizen-Updates
 ```
 
 `publish:update` prüft beide Signaturen, Profil und Buildnummer und veröffentlicht beide Varianten
-gemeinsam auf dem privaten Branch `tizen-updates`. Bei geändertem Kompatibilitätswert zeigt die App
+gemeinsam auf dem Branch `tizen-updates`. Bei geändertem Kompatibilitätswert zeigt die App
 den Hinweis auf das neue WGT an. Der Ablauf orientiert sich am Web-Updater von
 [APL-TV](https://github.com/Knikt/APL-TV/blob/main/app/js/updater.js).
 

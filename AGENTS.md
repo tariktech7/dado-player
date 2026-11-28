@@ -16,6 +16,8 @@ Abgenommene Release-Stände direkt nach origin/main pushen und beide Kanäle mit
 python scripts/publish_release.py <Release-Notizen> veröffentlichen.
 Bei kompatiblen Tizen-Änderungen die signierten Web-Updates für beide Profile
 gemeinsam veröffentlichen. Vorhandene Releases und deren Assets erhalten.
+Für öffentliche GitHub-Downloads beide WGT-Varianten unsigniert bereitstellen.
+Mit TV-Geräte-IDs signierte Entwicklerpakete bleiben lokal.
 
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 

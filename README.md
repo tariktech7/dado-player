@@ -13,7 +13,7 @@ Gemeinsamer Download für Windows, Android, iOS und Samsung Tizen: [**0.8.5**](h
 | Windows | `Dado-Player.exe` herunterladen und direkt starten. |
 | Android | `Dado-Player-arm64-debug.apk` herunterladen und über Android installieren. |
 | iOS | `Dado-Player-unsigned.ipa` herunterladen und für das eigene Gerät signieren. [iOS-Anleitung](ios/README.md) |
-| Samsung Tizen | Das passende signierte WGT für die Ersteinrichtung verwenden. Eine bereits installierte App prüft unter **Einstellungen → App-Updates** den TV-Kanal. [Samsung-Anleitung](SmartTV/README.md) |
+| Samsung Tizen | Das WGT für dein Modell herunterladen und mit deinem Samsung-Entwicklerzertifikat signieren. Eine installierte App prüft unter **Einstellungen → App-Updates** den TV-Kanal. [Samsung-Anleitung](SmartTV/client/README.md) |
 
 ## Funktionen
 

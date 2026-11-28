@@ -2232,11 +2232,26 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
       const controls = [...content.querySelectorAll('button,input,select')]
         .map(element => element.getBoundingClientRect())
         .filter(rect => rect.width > 0 && rect.height > 0);
-      return { count: controls.length, overflow: controls.some(rect =>
-        rect.left < box.left - 1 || rect.right > box.right + 1) };
+      const center = (rect: DOMRect) => rect.left + rect.width / 2;
+      const centerDifference = (element: Element) => Math.abs(center(element.getBoundingClientRect()) - center(box));
+      const actions = [...content.querySelectorAll(':scope > button, .settings-choices button, .settings-update-actions button')];
+      const dropdownOffsets = [...content.querySelectorAll('.tv-select')].map(button => {
+        const value = button.firstElementChild!.getBoundingClientRect();
+        const arrow = button.lastElementChild!.getBoundingClientRect();
+        return Math.abs(value.top + value.height / 2 - arrow.top - arrow.height / 2);
+      });
+      return {
+        count: controls.length, overflow: controls.some(rect => rect.left < box.left - 1 || rect.right > box.right + 1),
+        columnOffset: Math.abs(center(box) - center(content.parentElement!.getBoundingClientRect())),
+        actionOffset: Math.max(0, ...actions.map(centerDifference)),
+        dropdownOffset: Math.max(0, ...dropdownOffsets),
+      };
     });
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
+    expect(layout.columnOffset, key).toBeLessThan(2);
+    expect(layout.actionOffset, key).toBeLessThan(2);
+    expect(layout.dropdownOffset, key).toBeLessThan(2);
     if (key === 'general' || key === 'playback') {
       const fieldWidths = await panel.evaluate(element => {
         const page = element.closest('.settings-page')!;

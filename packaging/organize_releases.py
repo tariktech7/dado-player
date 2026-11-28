@@ -95,6 +95,7 @@ def main():
         ("Samsung TV", tv, f"Dado-Player-Tizen-{tv}.wgt", f"tizen-build-{release['tizenBuild']}"),
         ("Samsung TV Tizen 5 (eingerichteter Entwickler-TV)", tv, f"Dado-Player-Tizen5-{tv}.wgt", f"tizen-build-{release['tizenBuild']}"),
         ("Tizen Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen-{tv}-unsigned.wgt", None),
+        ("Tizen 5 Entwicklerpaket, unsigniert", tv, f"Dado-Player-Tizen5-{tv}-unsigned.wgt", None),
     ]:
         file = RELEASES / name
         if file.exists():

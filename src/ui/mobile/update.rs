@@ -101,18 +101,7 @@ fn hand_off(state: &mut State, previous: bool) {
 
 pub fn show(ui: &mut egui::Ui) {
     let mut state = state().lock().unwrap();
-    let action = ui.add_enabled_ui(!state.busy, |ui| {
-        let check = ui.button("App-Update prüfen und installieren");
-        let restore = ui.button("Vorherige Version wiederherstellen");
-        if super::focus::clicked(ui, &check) {
-            Some(false)
-        } else if super::focus::clicked(ui, &restore) {
-            Some(true)
-        } else {
-            None
-        }
-    });
-    if let Some(previous) = action.inner {
+    if let Some(previous) = crate::ui::settings::update_actions(ui, !state.busy) {
         if state.ready == Some(previous) {
             hand_off(&mut state, previous);
         } else {

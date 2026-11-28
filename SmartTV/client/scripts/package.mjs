@@ -40,7 +40,11 @@ async function walk(dir, prefix = "") {
 await walk("dist");
 if (!entries["config.xml"] || !entries["index.html"] || !entries["app.js"])
   throw new Error("Run npm run build first.");
-let file;
+const unsigned = path.join(release, `${packageName}-unsigned.wgt`);
+await writeFile(unsigned, zipSync(entries, { level: 9 }));
+console.log(unsigned);
+console.log("UNSIGNED: sign with your Samsung TV certificate before installation.");
+
 if (profile) {
   const cli = process.env.TIZEN_CLI || "tizen";
   const args = [
@@ -66,15 +70,8 @@ if (profile) {
   const packages = (await readdir("dist")).filter((n) => n.endsWith(".wgt"));
   if (packages.length !== 1)
     throw new Error("Expected exactly one signed widget.");
-  file = path.join(release, `${packageName}.wgt`);
+  const file = path.join(release, `${packageName}.wgt`);
   await copyFile(path.join("dist", packages[0]), file);
-} else {
-  file = path.join(release, `${packageName}-unsigned.wgt`);
-  await writeFile(file, zipSync(entries, { level: 9 }));
+  console.log(file);
+  console.log("Signed with configured certificate profile for local installation.");
 }
-console.log(file);
-console.log(
-  profile
-    ? "Signed with configured certificate profile."
-    : "UNSIGNED: build artifact only. Sign with your Samsung TV certificate before installation.",
-);

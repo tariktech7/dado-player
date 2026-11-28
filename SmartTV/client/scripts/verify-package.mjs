@@ -63,7 +63,7 @@ if (companion) {
   }
 }
 const signed = !!entries["author-signature.xml"] && !!entries["signature1.xml"];
-if (file.includes("-unsigned") && signed)
+if (file.includes("-unsigned") && names.some((name) => /^(?:author-signature|signature\d+)\.xml$/i.test(name)))
   throw new Error("Unsigned artifact contains signatures");
 console.log(
   JSON.stringify(

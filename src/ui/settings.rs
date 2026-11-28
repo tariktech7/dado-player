@@ -116,6 +116,31 @@ fn action(ui: &mut Ui, label: &str) -> bool {
     activate(ui, &response)
 }
 
+pub(crate) fn update_actions(ui: &mut Ui, enabled: bool) -> Option<bool> {
+    let size = [
+        ui.available_width().min(450.0),
+        ui.spacing().interact_size.y,
+    ];
+    ui.add_enabled_ui(enabled, |ui| {
+        let check = ui.add_sized(
+            size,
+            egui::Button::new("App-Update prüfen und installieren"),
+        );
+        let restore = ui.add_sized(
+            size,
+            egui::Button::new("Vorherige Version wiederherstellen"),
+        );
+        if activate(ui, &check) {
+            Some(false)
+        } else if activate(ui, &restore) {
+            Some(true)
+        } else {
+            None
+        }
+    })
+    .inner
+}
+
 fn choice_label(label: &str, current: bool) -> egui::RichText {
     if current {
         egui::RichText::new(format!("✓  {label}")).strong()
@@ -193,14 +218,19 @@ fn select<T: Copy + PartialEq>(
         .iter()
         .position(|(option, _)| option == value)
         .unwrap_or(0);
-    ui.label(label);
-    let response = ui.add_sized(
-        [
-            ui.available_width().min(450.0),
-            ui.spacing().interact_size.y,
-        ],
-        egui::Button::new(format!("{}  ▾", options[current].1)),
-    );
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().item_spacing.y = (ui.spacing().item_spacing.y * 0.4).max(6.0);
+            ui.label(label);
+            ui.add_sized(
+                [
+                    ui.available_width().min(450.0),
+                    ui.spacing().interact_size.y,
+                ],
+                egui::Button::new(format!("{}  ▾", options[current].1)),
+            )
+        })
+        .inner;
     let id = response.id.with("settings-dropdown");
     if activate(ui, &response) {
         if ui.memory(|memory| memory.is_popup_open(id)) {
@@ -310,8 +340,9 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                         };
                         (available.x * 0.94).min(profile_width)
                     } else {
-                        (available.x * 0.85)
-                            .min(super::desktop::appearance().settings_panel_width * scale.max(0.8))
+                        (available.x * 0.88).min(
+                            (super::desktop::appearance().settings_panel_width * scale).max(480.0),
+                        )
                     },
                     draft.with((index, app.adding_profile)),
                     if app.adding_profile {
@@ -319,6 +350,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     } else {
                         Some(300.0 * scale)
                     },
+                    egui::Align::Center,
                     |ui| {
                         panel(
                             app,
@@ -333,7 +365,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                     },
                 );
             } else {
-                centered_contents(ui, available.x * 0.95, draft.with("overview"), None, |ui| {
+                let render_overview = |ui: &mut Ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     let heading_top = ui.next_widget_position().y;
                     ui.vertical_centered(|ui| {
@@ -468,7 +500,15 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                             }
                         });
                     }
-                });
+                };
+                centered_contents(
+                    ui,
+                    available.x * 0.95,
+                    draft.with("overview"),
+                    None,
+                    egui::Align::Min,
+                    render_overview,
+                );
             }
         });
     ui.data_mut(|data| data.remove::<bool>(pending));
@@ -486,6 +526,7 @@ fn centered_contents(
     max_width: f32,
     id: egui::Id,
     estimate: Option<f32>,
+    align: egui::Align,
     draw: impl FnOnce(&mut Ui),
 ) {
     let width = (ui.available_width() - 16.0)
@@ -504,10 +545,14 @@ fn centered_contents(
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.add_space(inset);
         ui.push_id(id, |ui| {
-            ui.vertical(|ui| {
-                ui.set_width(width);
-                draw(ui);
-            })
+            ui.allocate_ui_with_layout(
+                egui::vec2(width, 0.0),
+                egui::Layout::top_down(align),
+                |ui| {
+                    ui.set_width(width);
+                    draw(ui);
+                },
+            );
         });
     });
     let actual_height = row.response.rect.height();
@@ -578,7 +623,7 @@ fn profiles(app: &mut App, ui: &mut Ui) {
     let t = app.settings.language;
     let scale = super::desktop::scale(ui.ctx());
     if app.adding_profile {
-        profile_form(app, ui, scale);
+        ui.vertical(|ui| profile_form(app, ui, scale));
         return;
     }
     let font_size = (27.0 * scale).clamp(20.0, 32.0);
@@ -813,14 +858,12 @@ fn panel(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing = egui::vec2((18.0 * scale).max(12.0), spacing);
-            ui.vertical_centered(|ui| {
-                let title = if app.adding_profile {
-                    t("Profil hinzufügen", "Add profile")
-                } else {
-                    t(&section.de, &section.en)
-                };
-                ui.heading(egui::RichText::new(title).size(heading_size));
-            });
+            let title = if app.adding_profile {
+                t("Profil hinzufügen", "Add profile")
+            } else {
+                t(&section.de, &section.en)
+            };
+            ui.heading(egui::RichText::new(title).size(heading_size));
             if !app.adding_profile {
                 ui.add_space((inset + 10.0 - spacing).max(0.0));
             }
@@ -1147,14 +1190,18 @@ fn language_field(ui: &mut Ui, label: &str, value: &mut String, language: AppLan
     if selected == languages.len() {
         let custom_label = language.text("Eigener Sprachcode", "Custom language code");
         if super::mobile::active(ui.ctx()) {
-            let response = super::mobile::components::field(
-                ui,
-                custom_label,
-                value,
-                "ISO 639",
-                super::mobile::components::Kb::Text,
-                &mut false,
-            );
+            let response = ui
+                .vertical(|ui| {
+                    super::mobile::components::field(
+                        ui,
+                        custom_label,
+                        value,
+                        "ISO 639",
+                        super::mobile::components::Kb::Text,
+                        &mut false,
+                    )
+                })
+                .inner;
             edit_option(ui, &response);
             changed |= response.changed();
         } else {
@@ -1320,4 +1367,47 @@ fn section(ui: &mut Ui, title: &str) {
             .color(color),
     ));
     ui.add_space(6.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_panel_and_option_share_the_screen_center() {
+        for width in [390.0, 1400.0] {
+            let context = egui::Context::default();
+            let _ = context.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 780.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let center = ui.available_rect_before_wrap().center().x;
+                        centered_contents(
+                            ui,
+                            840.0,
+                            egui::Id::new("settings-panel-test"),
+                            None,
+                            egui::Align::Center,
+                            |ui| {
+                                let card = egui::Frame::none()
+                                    .inner_margin(egui::Margin::same(18.0))
+                                    .show(ui, |ui| {
+                                        ui.set_width(ui.available_width());
+                                        ui.button("Oberfläche").rect
+                                    });
+                                assert!((card.response.rect.center().x - center).abs() < 1.0);
+                                assert!((card.inner.center().x - center).abs() < 1.0);
+                            },
+                        );
+                    });
+                },
+            );
+        }
+    }
 }

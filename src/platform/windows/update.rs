@@ -39,18 +39,7 @@ pub fn show(ui: &mut egui::Ui) {
         return;
     };
     let mut state = state().lock().unwrap();
-    let action = ui.add_enabled_ui(!state.busy, |ui| {
-        let check = ui.button("App-Update prüfen und installieren");
-        let restore = ui.button("Vorherige Version wiederherstellen");
-        if crate::ui::settings::activate(ui, &check) {
-            Some(false)
-        } else if crate::ui::settings::activate(ui, &restore) {
-            Some(true)
-        } else {
-            None
-        }
-    });
-    if let Some(previous) = action.inner {
+    if let Some(previous) = crate::ui::settings::update_actions(ui, !state.busy) {
         state.busy = true;
         state.message = "Version wird gesucht, geladen und geprüft …".into();
         let ctx = ui.ctx().clone();

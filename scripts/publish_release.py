@@ -1,9 +1,12 @@
 """Publish a GitHub release from the verified local release index."""
 import argparse
 import hashlib
+import io
 import json
 import os
+import re
 import subprocess
+import zipfile
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -55,28 +58,34 @@ def digest(data):
 
 
 def deliveries(release, folder=ROOT / "Releases"):
-    index = (folder / "AKTUELL.json").read_bytes()
+    index = json.loads((folder / "AKTUELL.json").read_bytes())
     expected = {
         "Dado-Player.exe": f"windows-build-{release['windowsBuild']}",
         "Dado-Player-arm64-debug.apk": f"android-build-{release['androidBuild']}",
         "Dado-Player-unsigned.ipa": f"ios-build-{release['iosBuild']}",
     }
     version = public_version(release)
-    tv_label = f"tizen-build-{release['tizenBuild']}"
-    expected[f"Dado-Player-Tizen-{version}.wgt"] = tv_label
-    expected[f"Dado-Player-Tizen5-{version}.wgt"] = tv_label
     expected[f"Dado-Player-Tizen-{version}-unsigned.wgt"] = ""
-    entries = {entry["file"]: entry for entry in json.loads(index)["packages"]}
-    if entries.keys() != expected.keys():
-        raise ValueError("The release index must contain the six current packages")
+    expected[f"Dado-Player-Tizen5-{version}-unsigned.wgt"] = ""
+    entries = {entry["file"]: entry for entry in index["packages"]}
+    if not expected.keys() <= entries.keys() or len(entries) != len(index["packages"]):
+        raise ValueError("The release index must contain each public package exactly once")
     result = {}
     for name, label in expected.items():
         item = entries[name]
         data = (folder / name).read_bytes()
         if (item["assetLabel"] or "") != label or digest(data) != f"sha256:{item['sha256']}" or len(data) != item["bytes"]:
             raise ValueError(f"The local release index does not match {name}")
+        # A Samsung developer certificate can contain a TV's device ID (DUID).
+        if name.endswith(".wgt"):
+            with zipfile.ZipFile(io.BytesIO(data)) as widget:
+                if any(re.fullmatch(r"(?:author-signature|signature\d+)\.xml", Path(entry).name, re.I)
+                       for entry in widget.namelist()):
+                    raise ValueError(f"A public TV package must be unsigned: {name}")
         result[name] = data, label
-    result["AKTUELL.json"] = index, ""
+    index["packages"] = [entry for entry in index["packages"] if entry["file"] in expected]
+    index["samsungUsb"].pop("preparationFile", None)
+    result["AKTUELL.json"] = (json.dumps(index, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), ""
     return result
 
 
