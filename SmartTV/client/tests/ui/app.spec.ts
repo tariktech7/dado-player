@@ -2236,9 +2236,11 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
       const centerDifference = (element: Element) => Math.abs(center(element.getBoundingClientRect()) - center(box));
       const actions = [...content.querySelectorAll(':scope > button, .settings-choices button, .settings-update-actions button')];
       const dropdownOffsets = [...content.querySelectorAll('.tv-select')].map(button => {
+        const label = button.closest('.field')!.firstElementChild!.getBoundingClientRect();
         const value = button.firstElementChild!.getBoundingClientRect();
         const arrow = button.lastElementChild!.getBoundingClientRect();
-        return Math.abs(value.top + value.height / 2 - arrow.top - arrow.height / 2);
+        const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
+        return Math.max(Math.abs(centerY(value) - centerY(label)), Math.abs(centerY(value) - centerY(arrow)));
       });
       return {
         count: controls.length, overflow: controls.some(rect => rect.left < box.left - 1 || rect.right > box.right + 1),
