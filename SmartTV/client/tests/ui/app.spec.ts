@@ -2234,18 +2234,22 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
         .filter(rect => rect.width > 0 && rect.height > 0);
       const center = (rect: DOMRect) => rect.left + rect.width / 2;
       const centerDifference = (element: Element) => Math.abs(center(element.getBoundingClientRect()) - center(box));
+      const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
       const actions = [...content.querySelectorAll(':scope > button, .settings-choices button, .settings-update-actions button')];
+      const choiceOffsets = [...content.querySelectorAll('.settings-choices button[data-current]')].map(button =>
+        Math.abs(centerY(button.querySelector('.settings-choice-check')!.getBoundingClientRect()) -
+          centerY(button.querySelector('.settings-choice-label')!.getBoundingClientRect())));
       const dropdownOffsets = [...content.querySelectorAll('.tv-select')].map(button => {
         const label = button.closest('.field')!.firstElementChild!.getBoundingClientRect();
         const value = button.firstElementChild!.getBoundingClientRect();
         const arrow = button.lastElementChild!.getBoundingClientRect();
-        const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
         return Math.max(Math.abs(centerY(value) - centerY(label)), Math.abs(centerY(value) - centerY(arrow)));
       });
       return {
         count: controls.length, overflow: controls.some(rect => rect.left < box.left - 1 || rect.right > box.right + 1),
         columnOffset: Math.abs(center(box) - center(content.parentElement!.getBoundingClientRect())),
         actionOffset: Math.max(0, ...actions.map(centerDifference)),
+        choiceOffset: Math.max(0, ...choiceOffsets),
         dropdownOffset: Math.max(0, ...dropdownOffsets),
       };
     });
@@ -2253,6 +2257,7 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     expect(layout.overflow, key).toBe(false);
     expect(layout.columnOffset, key).toBeLessThan(2);
     expect(layout.actionOffset, key).toBeLessThan(2);
+    expect(layout.choiceOffset, key).toBeLessThan(2);
     expect(layout.dropdownOffset, key).toBeLessThan(2);
     if (key === 'general' || key === 'playback') {
       const fieldWidths = await panel.evaluate(element => {
