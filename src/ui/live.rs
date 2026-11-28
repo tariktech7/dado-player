@@ -837,7 +837,7 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                             .request_repaint_after(std::time::Duration::from_millis(250));
                     }
                     let logo_size = if classic {
-                        (52.0 * scale).max(28.0).min(row_h - 6.0)
+                        (52.0 * scale).max(28.0)
                     } else if desktop {
                         48.0 * scale
                     } else if tv {
@@ -845,18 +845,12 @@ fn channels(app: &mut App, ui: &mut Ui, controls: bool) {
                     } else {
                         34.0
                     };
-                    let logo = Rect::from_min_size(
-                        r.rect.min
-                            + vec2(
-                                8.0 + number_width,
-                                if desktop || classic {
-                                    (row_h - logo_size) * 0.5
-                                } else if tv {
-                                    (tv_row_h - 24.0) * 0.5
-                                } else {
-                                    15.0
-                                },
-                            ),
+                    let logo_size = logo_size.min((r.rect.height() - 8.0).max(0.0));
+                    let logo = Rect::from_center_size(
+                        pos2(
+                            r.rect.left() + 8.0 + number_width + logo_size * 0.5,
+                            r.rect.center().y,
+                        ),
                         Vec2::splat(logo_size),
                     );
                     components::thumb(

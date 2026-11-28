@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from release_version import ROOT, github_release_tag
+from release_version import ROOT, github_release_tag, public_version, release_title
 
 REPOSITORY = "tariktech7/dado-player"
 API = f"https://api.github.com/repos/{REPOSITORY}/releases"
@@ -61,7 +61,7 @@ def deliveries(release, folder=ROOT / "Releases"):
         "Dado-Player-arm64-debug.apk": f"android-build-{release['androidBuild']}",
         "Dado-Player-unsigned.ipa": f"ios-build-{release['iosBuild']}",
     }
-    version = release["version"]
+    version = public_version(release)
     tv_label = f"tizen-build-{release['tizenBuild']}"
     expected[f"Dado-Player-Tizen-{version}.wgt"] = tv_label
     expected[f"Dado-Player-Tizen5-{version}.wgt"] = tv_label
@@ -90,7 +90,7 @@ def validate_asset(asset, data, label):
 def publish(release, notes, folder=ROOT / "Releases"):
     tag = github_release_tag(release)
     prerelease = release["channel"] == "beta"
-    title = f"{release['version']} Beta {release['betaNumber']}" if prerelease else release["version"]
+    title = release_title(release)
     files = deliveries(release, folder)
     source = git("rev-parse", "HEAD")
     if git("ls-remote", "origin", "refs/heads/main").partition("\t")[0] != source:

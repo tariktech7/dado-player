@@ -23,11 +23,21 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
       - run: npm run package
-      - run: npm run verify:package
+      - run: npm run test:ui
+        env:
+          DADO_TIZEN_PROFILE: '2019'
+      - run: npm run package
+        env:
+          DADO_TIZEN_PROFILE: '2019'
+      - run: |
+          version=$(node -p "require('./package.json').releaseVersion")
+          legacy="../../Releases/Dado-Player-Tizen5-$version-unsigned.wgt"
+          npm run verify:package -- "$legacy"
+          npm run verify:package -- "../../Releases/Dado-Player-Tizen-$version-unsigned.wgt" "$legacy"
       - uses: actions/upload-artifact@v4
         with:
           name: dado-tizen-unsigned
-          path: Releases/Dado-Player-Tizen-*-unsigned.wgt
+          path: Releases/Dado-Player-Tizen*-unsigned.wgt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

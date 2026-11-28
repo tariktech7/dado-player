@@ -8,7 +8,13 @@ import {
 import { zipSync } from "fflate";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-const version = JSON.parse(await readFile("package.json", "utf8")).version;
+const { version, releaseVersion } = JSON.parse(await readFile("package.json", "utf8"));
+const build = JSON.parse(await readFile("dist/version.json", "utf8"));
+const legacy = build.update.variant === "legacy";
+if (build.version !== version || build.releaseVersion !== releaseVersion || build.licenseTestBuild ||
+    legacy !== (process.env.DADO_TIZEN_PROFILE === "2019"))
+  throw new Error("Build the requested production TV profile before packaging.");
+const packageName = `Dado-Player-Tizen${legacy ? "5" : ""}-${releaseVersion}`;
 const profileIndex = process.argv.indexOf("--profile"),
   profile =
     profileIndex >= 0
@@ -60,10 +66,10 @@ if (profile) {
   const packages = (await readdir("dist")).filter((n) => n.endsWith(".wgt"));
   if (packages.length !== 1)
     throw new Error("Expected exactly one signed widget.");
-  file = path.join(release, `Dado-Player-Tizen-${version}.wgt`);
+  file = path.join(release, `${packageName}.wgt`);
   await copyFile(path.join("dist", packages[0]), file);
 } else {
-  file = path.join(release, `Dado-Player-Tizen-${version}-unsigned.wgt`);
+  file = path.join(release, `${packageName}-unsigned.wgt`);
   await writeFile(file, zipSync(entries, { level: 9 }));
 }
 console.log(file);

@@ -125,7 +125,7 @@ pub fn sheet(app: &mut App, ctx: &Context, l: &Layout) {
             ui.painter().text(
                 pos2(sheet.center().x, sheet.bottom() - l.bottom_inset - 12.0),
                 Align2::CENTER_CENTER,
-                format!("Dado-Player {}", env!("CARGO_PKG_VERSION")),
+                format!("Dado-Player {}", crate::release_info::RELEASE_NAME),
                 reg(FS_CAP),
                 muted(ui),
             );

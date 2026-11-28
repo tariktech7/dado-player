@@ -1,3 +1,4 @@
+import "./legacy-compat";
 import { clearEpisodeFrames } from "./episode-frames";
 import { animateNavigation, animatePage } from "./navigation-motion";
 import { cancelScroll } from "./scroll-motion";
@@ -38,7 +39,7 @@ import {ConnectPanel,mergeCloudProfiles,prepareCloudDevice} from './connect';
 import { accessStorage } from './update-format';
 import { restorePrevious, stageUpdate } from './update-client';
 import packageInfo from "../package.json";
-const APP_VERSION = window.dadoTvBoot?.running.version || packageInfo.version;
+const APP_VERSION = packageInfo.releaseVersion;
 const APP_BUILD = window.dadoTvBoot?.running.build || releaseInfo.tizenBuild;
 import {
   exitApp,
@@ -199,14 +200,16 @@ function Logo({ item, large = false }: { item: Item; large?: boolean }) {
 function Field({
   label,
   children,
+  checkbox = false,
 }: {
   label: string;
   children: ComponentChildren;
+  checkbox?: boolean;
 }) {
   return (
     <label class="field">
       <span>{label}</span>
-      {children}
+      {checkbox ? <span class="setting-checkbox">{children}</span> : children}
     </label>
   );
 }
@@ -780,6 +783,7 @@ function App() {
       else setMessage((e as Error).message);
     }
   }
+  const pendingViewFocus = useRef<View | null>(null);
   const go = (next: View) => {
     if (next === view || (next === "history" && !saved.settings.watchHistory)) return;
     if (view === "settings") { setSettingsSection(null); setSettingsDraft(null); profilesFromHome.current = false; }
@@ -799,6 +803,7 @@ function App() {
     stop();
     detailRequest.current++;
     const memory = memories.current[next];
+    pendingViewFocus.current = next;
     setView(next);
     const previousCategory = memory?.category === "continue" && !saved.settings.watchHistory ? undefined : memory?.category;
     setCategory(previousCategory && (classic || !["recent", "continue"].includes(previousCategory)) ? previousCategory : "all");
@@ -807,6 +812,10 @@ function App() {
     setDetail(memory?.detail || null);
     setEpisodes(memory?.episodes || []);
     setEpisodeLoad(memory?.episodeLoad || "loading");
+  };
+  useLayoutEffect(() => {
+    if (pendingViewFocus.current !== view) return;
+    pendingViewFocus.current = null;
     const entrySelector = {
       live: ".category-list",
       vod: ".category-list",
@@ -815,12 +824,12 @@ function App() {
       history: ".kind-tabs",
       favorites: ".kind-tabs",
       search: ".header-search"
-    }[next as Exclude<View, "home">];
-    if (entrySelector) requestAnimationFrame(() => {
-      const entry = document.querySelector(`.shell[data-focus-scope="${next}"] ${entrySelector}`);
+    }[view as Exclude<View, "home">];
+    if (entrySelector) {
+      const entry = document.querySelector(`.shell[data-focus-scope="${view}"] ${entrySelector}`);
       if (entry) focusables(entry)[0]?.focus({preventScroll:true});
-    });
-  };
+    }
+  }, [view]);
   const importCloudProfiles = (profiles:Profile[]) => {
     const merged=mergeCloudProfiles(savedRef.current.profiles,profiles);
     const next={...savedRef.current,profiles:merged.profiles};
@@ -1470,7 +1479,7 @@ function App() {
           aria-pressed={(settingsDraft ?? current) === value}
           onClick={() => setSettingsDraft(value)}>
           <span class="settings-choice-check" aria-hidden="true">{value === current ? "✓" : ""}</span>
-          {label}
+          <span class="settings-choice-label">{label}</span>
           {settingsDraft === value && current !== value &&
             <span class="settings-choice-pending" aria-hidden="true">{t("Noch nicht gespeichert", "Not saved yet")}</span>}
         </button>)}
@@ -1525,10 +1534,10 @@ function App() {
             <span>{t("Oberfläche", "Interface layout")}</span>
             {choose(saved.settings.interfaceLayout, (value) => setting("interfaceLayout", value === "classic" ? "classic" : "modern"), [["modern", "Modern"], ["classic", t("Klassisch", "Classic")]], t("Oberfläche", "Interface layout"))}
           </label>
-<Field label={t("App-Sprache", "App language")}>
+          <Field label={t("App-Sprache", "App language")}>
             {choose(saved.settings.language, (value) => setting("language", value as Settings["language"]), [["de", "Deutsch"], ["en", "English"]], t("App-Sprache", "App language"))}
           </Field>
-          <Field label={t("Fortsetzen und Wiedergabeverlauf", "Continue watching and watch history")}>
+          <Field checkbox label={t("Fortsetzen und Wiedergabeverlauf", "Continue watching and watch history")}>
             <TVInput type="checkbox" checked={saved.settings.watchHistory}
               onChange={(event) => setting("watchHistory", event.currentTarget.checked)} />
           </Field>
@@ -1571,7 +1580,7 @@ function App() {
               ],
             )}
           </Field>
-          <Field label={t("Letzten Titel beim Start abspielen", "Open the last channel at startup")}>
+          <Field checkbox label={t("Letzten Titel beim Start abspielen", "Open the last channel at startup")}>
             <TVInput
               type="checkbox"
               disabled={!saved.settings.watchHistory}
@@ -1583,7 +1592,7 @@ function App() {
         case "audio": return <>
           {playbackLanguage("audioLanguage", t("Bevorzugte Audiosprache", "Preferred audio language"))}
           {playbackLanguage("subtitleLanguage", t("Untertitelsprache", "Subtitle language"))}
-          <Field label={t("Untertitel automatisch", "Enable subtitles automatically")}>
+          <Field checkbox label={t("Untertitel automatisch", "Enable subtitles automatically")}>
             <TVInput
               type="checkbox"
               checked={saved.settings.subtitles}
@@ -1653,7 +1662,7 @@ function App() {
           <p class="muted">Nach manueller Freischaltung einmal abrufen. Unlimited-Lizenzen werden anschließend offline genutzt.</p>
         </>;
         case "advanced": return <>
-          <Field label={t("Expertenmodus", "Expert mode")}>
+          <Field checkbox label={t("Expertenmodus", "Expert mode")}>
             <TVInput type="checkbox" checked={saved.settings.expertMode}
               onChange={(e) => setting("expertMode", e.currentTarget.checked)} />
           </Field>

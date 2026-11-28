@@ -124,6 +124,34 @@ test('catalogue opens a title page and restores the unchanged poster grid', asyn
   await expect(page.locator('.preview-panel')).toBeVisible();
 });
 
+for (const layout of ['classic', 'modern']) {
+  test(`Live logos stay centered inside compact rows in ${layout}`, async ({page}) => {
+    await fixture(page);
+    await page.addInitScript((layout) => {
+      const saved = JSON.parse(localStorage.getItem('dado.tv.v1')!);
+      saved.settings.interfaceLayout = layout;
+      saved.settings.density = 'compact';
+      localStorage.setItem('dado.tv.v1', JSON.stringify(saved));
+    }, layout);
+    await page.goto('/');
+    await page.locator(`${layout === 'classic' ? '.classic-primary' : '.navigation'} [data-focus-key="live"]`).click();
+    const rows = page.locator('.channel');
+    for (const index of [0, 1]) {
+      const row = rows.nth(index);
+      const logo = row.locator('.logo');
+      const img = logo.locator('img');
+      await expect.poll(() => img.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      const outer = (await row.boundingBox())!;
+      const box = (await logo.boundingBox())!;
+      expect(Math.abs(box.y + box.height / 2 - outer.y - outer.height / 2)).toBeLessThan(1);
+      expect(box.y - outer.y).toBeGreaterThanOrEqual(3);
+      expect(outer.y + outer.height - box.y - box.height).toBeGreaterThanOrEqual(3);
+      expect(await img.evaluate(element => getComputedStyle(element).objectFit)).toBe('contain');
+    }
+    await page.screenshot({path: `test-results/live-logos-${layout}.png`, animations: 'disabled'});
+  });
+}
+
 test('saved titles ask at one minute and show the full playback timestamp', async ({ page }) => {
   await fixture(page, true, true);
   await page.goto('/');
@@ -2158,6 +2186,7 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
       height: box.height / parent.height,
       lastTileFits: [...element.querySelectorAll("button")].every(tile =>
         tile.getBoundingClientRect().bottom <= element.closest("main")!.getBoundingClientRect().bottom),
+      tileHeights: [...element.querySelectorAll("button")].map(tile => tile.getBoundingClientRect().height),
     };
   });
   expect(coverage.topInset).toBeGreaterThanOrEqual(0);
@@ -2166,6 +2195,7 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
   expect(coverage.width).toBeGreaterThan(.9);
   expect(coverage.height).toBeGreaterThan(.8);
   expect(coverage.lastTileFits).toBe(true);
+  expect(Math.max(...coverage.tileHeights) - Math.min(...coverage.tileHeights)).toBeLessThan(1);
   const back = page.locator('.classic-header .classic-back');
   if (!classic) await expect(back).toHaveCount(0);
   const backTop = (await page.locator('.classic-header').boundingBox())!.y;
@@ -2173,7 +2203,9 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     nodes.map(node => (node as HTMLElement).dataset.focusKey!));
   expect(keys).toHaveLength(12);
   for (const key of keys) {
-    await openSettingsSection(page, key);
+    const tile = page.locator(`.settings-sections [data-focus-key="${key}"]`);
+    await tile.focus();
+    await page.keyboard.press('Enter');
     const panel = page.locator(`[data-settings-section="${key}"]`);
     await expect(panel.getByRole('heading', {level:2})).toBeVisible();
     await expect(panel.locator('button:not([disabled]):not([tabindex="-1"]):visible, input:not([disabled]):visible, select:not([disabled]):visible').first()).toBeFocused();
@@ -2206,13 +2238,27 @@ for (const classic of [false, true]) test(`all settings submenus stay centered i
     expect(layout.count, key).toBeGreaterThan(0);
     expect(layout.overflow, key).toBe(false);
     if (key === 'general' || key === 'playback') {
-      const gaps = await panel.locator('.settings-content > .field').evaluateAll(fields =>
-        fields.slice(1).map((field, i) => field.getBoundingClientRect().top - fields[i].getBoundingClientRect().bottom));
+      const fieldWidths = await panel.evaluate(element => {
+        const page = element.closest('.settings-page')!;
+        return element.getBoundingClientRect().width / page.getBoundingClientRect().width;
+      });
+      await page.setViewportSize({width: 1280, height: 720});
+      await expect.poll(() => panel.evaluate(element =>
+        element.getBoundingClientRect().width / element.closest('.settings-page')!.getBoundingClientRect().width,
+      )).toBeCloseTo(fieldWidths, 2);
+      await page.setViewportSize({width: 1920, height: 1080});
+      const gaps = await panel.locator('.settings-content > .field').evaluateAll(fields => {
+        const stage = document.getElementById('app')!;
+        const scale = stage.getBoundingClientRect().height / stage.offsetHeight;
+        return fields.slice(1).map((field, i) =>
+          (field.getBoundingClientRect().top - fields[i].getBoundingClientRect().bottom) / scale);
+      });
       expect(gaps).toHaveLength(key === 'general' ? 4 : 1);
       expect(Math.min(...gaps)).toBeGreaterThan(30);
       await page.screenshot({path: testInfo.outputPath('settings-' + key + '.png')});
     }
-    await page.locator('.classic-header').getByRole('button', {name:'‹ Alle Einstellungen'}).click();
+    await page.keyboard.press('Escape');
+    await expect(tile).toBeFocused();
   }
 });
 

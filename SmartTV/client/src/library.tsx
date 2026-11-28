@@ -238,9 +238,20 @@ function PosterGrid({
       setHeight(el.clientHeight);
     };
     resize();
-    const obs = new ResizeObserver(resize);
-    obs.observe(el);
-    return () => obs.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(resize);
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
+    // The navigation changes the grid width without resizing the TV viewport.
+    const observer = new MutationObserver(resize);
+    const shell = el.closest(".shell");
+    if (shell) observer.observe(shell, { attributes: true, attributeFilter: ["class"] });
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
   useLayoutEffect(() => {
     if (root.current) root.current.scrollTop = 0;

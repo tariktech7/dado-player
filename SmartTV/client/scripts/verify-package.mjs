@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { unzipSync } from "fflate";
 import { createHash } from "node:crypto";
-const version = JSON.parse(await readFile("package.json", "utf8")).version;
+const { version, releaseVersion } = JSON.parse(await readFile("package.json", "utf8"));
 const file =
-  process.argv[2] || `../../Releases/Dado-Player-Tizen-${version}-unsigned.wgt`;
+  process.argv[2] || `../../Releases/Dado-Player-Tizen-${releaseVersion}-unsigned.wgt`;
 const data = await readFile(file);
 if (data.length > 20_000_000) throw new Error("Unexpected widget size");
 const entries = unzipSync(data),
@@ -43,6 +43,25 @@ const hasSamsungLoader = metadata.update
   : index.includes('$WEBAPIS/webapis/webapis.js');
 if (!hasSamsungLoader)
   throw new Error("Missing Samsung API loader");
+const companion = process.argv[3];
+if (companion) {
+  const other = unzipSync(await readFile(companion));
+  const otherMetadata = JSON.parse(new TextDecoder().decode(other["version.json"]));
+  const variants = [metadata.update.variant, otherMetadata.update.variant].sort().join(",");
+  if (variants !== "legacy,modern" || metadata.version !== otherMetadata.version ||
+      metadata.releaseVersion !== otherMetadata.releaseVersion ||
+      metadata.update.build !== otherMetadata.update.build || otherMetadata.licenseTestBuild) {
+    throw new Error("TV packages must target both generations at the same production build.");
+  }
+  const profileFiles = /^(?:config\.xml|version\.json|boot\.js|build-meta\.json|author-signature\.xml|signature\d+\.xml)$/;
+  const appFiles = new Set([...names, ...Object.keys(other)]);
+  for (const name of appFiles) {
+    if (name.endsWith("/") || profileFiles.test(name)) continue;
+    if (!entries[name] || !other[name] || !Buffer.from(entries[name]).equals(Buffer.from(other[name]))) {
+      throw new Error(`TV packages contain different application files: ${name}`);
+    }
+  }
+}
 const signed = !!entries["author-signature.xml"] && !!entries["signature1.xml"];
 if (file.includes("-unsigned") && signed)
   throw new Error("Unsigned artifact contains signatures");

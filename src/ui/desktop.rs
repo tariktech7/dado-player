@@ -1352,7 +1352,7 @@ fn navigation(app: &mut App, ui: &mut Ui, rect: Rect, s: f32, visibility: f32, i
                 .size(18.0 * s),
         );
         footer_ui.label(
-            egui::RichText::new(format!("Version {}", crate::release_info::VERSION))
+            egui::RichText::new(format!("Version {}", crate::release_info::RELEASE_NAME))
                 .color(muted.gamma_multiply(label_alpha))
                 .size(16.0 * s),
         );

@@ -2,7 +2,7 @@
 
 Ein IPTV-Player für eigene M3U-Playlists und Xtream-Codes. Live-TV, Filme und Serien bleiben in einer Bibliothek organisiert.
 
-Gemeinsamer Download für Windows, Android, iOS und Samsung Tizen: [**0.8.4**](https://github.com/tariktech7/dado-player/releases/tag/v0.8.4).
+Gemeinsamer Download für Windows, Android, iOS und Samsung Tizen: [**0.8.5**](https://github.com/tariktech7/dado-player/releases/tag/v0.8.5).
 
 ![Dado Player im Demo-Modus mit den Bereichen Live-TV, Filme und Serien](docs/screenshots/dashboard.png)
 

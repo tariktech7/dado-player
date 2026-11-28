@@ -8,9 +8,14 @@ die ausdrücklich vereinbarte Ausnahme von der Windows-/TV-Kaufsperre.
 
 Jede neue Produktversion (zum Beispiel 0.8.1 oder 0.8.2) als reguläres GitHub-Release
 mit dem Tag v<VERSION> veröffentlichen. Dafür in release.json den Kanal auf stable setzen.
+Stabile Korrekturen nach der Basisversion verwenden revision von 1 bis 9, zum Beispiel
+v0.8.5.1. Die Plattform-Buildnummern auch dabei erhöhen. Cargo, das iOS-Manifest und
+die Tizen-Widgetversion verwenden die dreiteilige Basisversion.
 Größere Beta-Änderungen erhöhen betaNumber und werden als eigene GitHub-Prereleases veröffentlicht.
-Beide Kanäle mit python scripts/publish_release.py <Release-Notizen> veröffentlichen.
-Vorhandene Releases und deren Assets erhalten.
+Abgenommene Release-Stände direkt nach origin/main pushen und beide Kanäle mit
+python scripts/publish_release.py <Release-Notizen> veröffentlichen.
+Bei kompatiblen Tizen-Änderungen die signierten Web-Updates für beide Profile
+gemeinsam veröffentlichen. Vorhandene Releases und deren Assets erhalten.
 
 Diese Regeln gelten vom Repository-Stamm aus für Windows, Android und iOS.
 
@@ -55,7 +60,7 @@ Build-/Installationswege stehen in SmartTV/client/README.md. LG noch nicht als f
 
 - Windows, Android, iOS und Samsung sind ein gemeinsamer Release. UI-, Geometrie-,
   Bedienungs- und Player-Änderungen auf allen vier Builds umsetzen, prüfen und
-  gemeinsam veröffentlichen, sofern Tarik eine Plattform ausdrücklich ausnimmt.
+  gemeinsam veröffentlichen. Plattformausnahmen gelten auf ausdrücklichen Wunsch von Tarik.
   Die Windows-Abnahme mit der fertigen `Releases/Dado-Player.exe` wiederholen
   und die betroffenen Ansichten tatsächlich öffnen. Den gemeinsamen Download
   über den nummerierten Release-Tag verlinken.

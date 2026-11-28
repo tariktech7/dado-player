@@ -5,6 +5,11 @@ Buildnummern bleiben eigenständig monoton steigend. Größere Beta-Stände erha
 eine eigene GitHub-Veröffentlichung wie `v0.8.0-beta.2`. Nach Änderungen
 `python scripts/release_version.py` ausführen; alle Build-Einstiege prüfen auf Abweichungen.
 
+Kleine Korrektur-Releases verwenden optional `revision` von 1 bis 9 in `release.json`.
+Damit entsteht ein stabiler GitHub-Tag wie `v0.8.5.1`. Die vier Plattform-Buildnummern
+steigen auch bei diesen Releases. Cargo, iOS-Manifest und Widget behalten die Basisversion.
+0.8.5 ist die erste Version, deren Updater vierteilige GitHub-Tags erkennt.
+
 ## Verbindliche Abläufe
 
 | Funktion | Gemeinsamer Vertrag |

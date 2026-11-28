@@ -52,5 +52,10 @@ export async function animateNavigation(shell: HTMLElement | null, collapsed: bo
     }
   });
   running.set(shell, animations);
-  await Promise.all(animations.map((animation) => animation.finished.catch(() => {})));
+  await Promise.all(animations.map((animation) => animation.finished
+    ? animation.finished.catch(() => {})
+    : new Promise<void>((resolve) => {
+        animation.onfinish = () => resolve();
+        animation.oncancel = () => resolve();
+      })));
 }

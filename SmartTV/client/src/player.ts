@@ -4,7 +4,7 @@ import { licenseClient } from "./licensing";
 import {languageKey} from './languages';
 export function resolvePackagedMedia(
   url: string,
-  filesystem: any = (globalThis as any).tizen?.filesystem,
+  filesystem: any = (typeof window !== "undefined" ? (window as any).tizen : undefined)?.filesystem,
 ): Promise<string> {
   if (
     !url.startsWith("file:") ||

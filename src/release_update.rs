@@ -135,17 +135,24 @@ pub fn runtime() -> Result<tokio::runtime::Runtime> {
         .build()?)
 }
 
-fn version(value: &str) -> Option<[u32; 3]> {
+fn version(value: &str) -> Option<[u32; 4]> {
     let mut parts = value.split('.');
-    let parsed = [
+    let mut parsed = [
         parts.next()?.parse().ok()?,
         parts.next()?.parse().ok()?,
         parts.next()?.parse().ok()?,
+        0,
     ];
+    if let Some(revision) = parts.next() {
+        let [digit @ b'1'..=b'9'] = revision.as_bytes() else {
+            return None;
+        };
+        parsed[3] = u32::from(*digit - b'0');
+    }
     parts.next().is_none().then_some(parsed)
 }
 
-fn release_version(tag: &str) -> Option<(&str, [u32; 3])> {
+fn release_version(tag: &str) -> Option<(&str, [u32; 4])> {
     let tag = tag.strip_prefix('v')?;
     let number = if let Some((number, suffix)) = tag.split_once('-') {
         if suffix != "beta" {
@@ -159,14 +166,18 @@ fn release_version(tag: &str) -> Option<(&str, [u32; 3])> {
     } else {
         tag
     };
-    Some((number, version(number)?))
+    let parsed = version(number)?;
+    if parsed[3] != 0 && number != tag {
+        return None;
+    }
+    Some((number, parsed))
 }
 
 fn select(
     releases: Vec<Release>,
     file: &str,
     label: &str,
-    current_version: [u32; 3],
+    current_version: [u32; 4],
     current_build: u32,
     previous: bool,
 ) -> Option<Update> {
@@ -219,7 +230,7 @@ mod tests {
             {"tag_name":"v0.7.9-beta.0","draft":false,"assets":[{"name":"file","browser_download_url":"https://github.com/tariktech7/dado-player/releases/download/test/7","size":42,"label":"build-99"}]},
             {"tag_name":"v0.7.9","draft":false,"assets":[{"name":"file","browser_download_url":"https://github.com/tariktech7/dado-player/releases/download/test/5","size":42,"label":"build-30"}]}
         ])).unwrap();
-        let update = select(releases, "file", "build-", [0, 7, 9], 30, false).unwrap();
+        let update = select(releases, "file", "build-", [0, 7, 9, 0], 30, false).unwrap();
         assert_eq!(update.version, "0.7.9");
         assert_eq!(update.build, 32);
         assert!(update.asset.browser_download_url.ends_with("/6"));
@@ -231,11 +242,45 @@ mod tests {
             }],
             "file",
             "build-",
-            [0, 8, 0],
+            [0, 8, 0, 0],
             33,
             true,
         )
         .unwrap();
         assert_eq!(older.build, 32);
+    }
+
+    #[test]
+    fn stable_revisions_upgrade_and_roll_back_in_order() {
+        let releases = || {
+            [
+                ("v0.8.5", 23),
+                ("v0.8.5.1", 24),
+                ("v0.8.5.9", 25),
+                ("v0.8.5.10", 30),
+                ("v0.8.5.01", 31),
+                ("v0.8.5.0", 32),
+                ("v0.8.5.2-beta", 33),
+            ]
+            .into_iter()
+            .map(|(tag, build)| Release {
+                tag_name: tag.into(),
+                draft: false,
+                assets: vec![Asset {
+                    name: "file".into(),
+                    label: Some(format!("build-{build}")),
+                    browser_download_url: String::new(),
+                    size: 42,
+                    digest: None,
+                }],
+            })
+            .collect()
+        };
+        let next = select(releases(), "file", "build-", [0, 8, 5, 0], 23, false).unwrap();
+        assert_eq!((next.version.as_str(), next.build), ("0.8.5.9", 25));
+        let previous = select(releases(), "file", "build-", [0, 8, 5, 9], 25, true).unwrap();
+        assert_eq!((previous.version.as_str(), previous.build), ("0.8.5.1", 24));
+        assert!(select(releases(), "file", "build-", [0, 8, 5, 9], 25, false).is_none());
+        assert!(version("0.8.5.9").unwrap() < version("0.8.6").unwrap());
     }
 }

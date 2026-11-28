@@ -28,8 +28,9 @@ function Get-ReleasePackage([string]$Directory) {
   $releases = Invoke-RestMethod -Uri "${repoApi}?per_page=30" -Headers $headers -UserAgent 'DadoPlayer-Tizen-Update' -TimeoutSec 30
   $prefix = if ($Tizen5) { 'Dado-Player-Tizen5-' } else { 'Dado-Player-Tizen-' }
   $selected = foreach ($release in $releases) {
-    if ($release.draft -or $release.tag_name -notmatch '^v(\d+\.\d+\.\d+)(?:-beta(?:\.[1-9][0-9]*)?)?$') { continue }
+    if ($release.draft -or $release.tag_name -notmatch '^v(\d+\.\d+\.\d+(?:\.[1-9])?)(?:-beta(?:\.[1-9][0-9]*)?)?$') { continue }
     $version = [version]$Matches[1]
+    if ($version.Revision -ge 0 -and $release.tag_name.Contains('-beta')) { continue }
     $name = "$prefix$version.wgt"
     foreach ($asset in $release.assets) {
       if ($asset.name -eq $name -and $asset.label -match '^tizen-build-(\d+)$') {
@@ -59,6 +60,7 @@ function Get-ReleasePackage([string]$Directory) {
 }
 
 $downloadDir = $null
+$previousProfile = $env:DADO_TIZEN_PROFILE
 Push-Location $PSScriptRoot
 try {
   if(Test-Path tizen.local.json){$local=Get-Content tizen.local.json -Raw | ConvertFrom-Json;if(!$SdkRoot){$SdkRoot=$local.sdkRoot};if(!$TvIp){$TvIp=$local.tvIp}}
@@ -73,12 +75,20 @@ try {
     New-Item -ItemType Directory -Path $downloadDir | Out-Null
     $package = Get-ReleasePackage $downloadDir
   } else {
+    $prefix = if ($Tizen5) {
+      $env:DADO_TIZEN_PROFILE = '2019'
+      'Dado-Player-Tizen5-'
+    } else {
+      Remove-Item Env:DADO_TIZEN_PROFILE -ErrorAction SilentlyContinue
+      'Dado-Player-Tizen-'
+    }
     & npm.cmd run build
     if($LASTEXITCODE){throw 'Web build failed'}
     & npm.cmd run package -- --profile $SigningProfile
     if($LASTEXITCODE){throw 'Samsung certificate signing failed'}
-    $version=(Get-Content package.json -Raw | ConvertFrom-Json).version
-    $package=(Resolve-Path "../../Releases/Dado-Player-Tizen-$version.wgt").Path
+    $version=(Get-Content package.json -Raw | ConvertFrom-Json).releaseVersion
+    $packageDir = if ($env:DADO_PACKAGE_DIR) { $env:DADO_PACKAGE_DIR } else { "../../Releases" }
+    $package = (Resolve-Path -LiteralPath (Join-Path $packageDir "$prefix$version.wgt")).Path
   }
   & $tizen install -s "${TvIp}:26101" -n (Split-Path $package -Leaf) -- (Split-Path $package -Parent)
   if($LASTEXITCODE){throw 'Installation failed. Check certificate DUID, Developer Mode and permit-to-install.'}
@@ -91,5 +101,6 @@ try {
     Get-ChildItem -LiteralPath $downloadDir -File | Remove-Item -Force
     Remove-Item -LiteralPath $downloadDir
   }
+  $env:DADO_TIZEN_PROFILE = $previousProfile
   Pop-Location
 }

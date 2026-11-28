@@ -8,7 +8,11 @@ const legacy = process.env.DADO_TIZEN_PROFILE === '2019';
 const root = fileURLToPath(new URL("..", import.meta.url));
 process.chdir(root);
 const release = JSON.parse(await readFile('../../release.json', 'utf8'));
-if (JSON.parse(await readFile('package.json', 'utf8')).version !== release.version) throw new Error('Run python scripts/release_version.py before building');
+const pkg = JSON.parse(await readFile("package.json", "utf8"));
+const publicVersion = release.revision === undefined ? release.version : `${release.version}.${release.revision}`;
+if (pkg.version !== release.version || pkg.releaseVersion !== publicVersion) {
+  throw new Error("Run python scripts/release_version.py before building");
+}
 const out = path.resolve("dist");
 const testKeyPlugin = testConfig ? [{ name: 'test-update-key', setup(b) {
   b.onLoad({ filter: /tizen[\\/]update-key\.json$/ }, async () => ({
@@ -19,11 +23,12 @@ if (out !== path.join(root, "dist")) throw new Error("Unexpected output path");
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await build({
-  entryPoints: [legacy ? "src/legacy-entry.ts" : "src/app.tsx"],
+  // Both packages run exactly the same application and target the oldest supported TV.
+  entryPoints: ["src/app.tsx"],
   bundle: true,
   outfile: "dist/app.js",
   format: "iife",
-  target: [legacy ? "chrome63" : "chrome85"],
+  target: ["chrome63"],
   jsx: "automatic",
   jsxImportSource: "preact",
   minify: true,
@@ -49,7 +54,6 @@ await cp("../../ios/Resources/Playback.mp4", "dist/test-video.mp4");
 await cp("../../assets/icon.png", "dist/icon.png");
 await cp("../../assets/fonts/LICENSE.md", "dist/FONT-LICENSE.md");
 await cp("node_modules/preact/LICENSE", "dist/PREACT-LICENSE.txt");
-const pkg = JSON.parse(await readFile("package.json", "utf8"));
 await writeFile(
   "dist/config.xml",
   (await readFile("tizen/config.xml", "utf8")).replace('required_version="6.5"',legacy?'required_version="5.0"':'required_version="6.5"').replace(
@@ -70,16 +74,17 @@ for (const name of ['src/boot.ts','src/update-format.ts','tizen/update-key.json'
 const installed = { version: release.version, build: release.tizenBuild,
   variant: legacy ? 'legacy' : 'modern', compatibility: fingerprint.digest('hex') };
 await build({entryPoints:['src/boot.ts'], bundle:true, outfile:'dist/boot.js', format:'iife',
-  target:[legacy ? 'chrome63' : 'chrome85'], minify:true, plugins:testKeyPlugin, define:{INSTALLED:JSON.stringify(installed)}});
+  target:["chrome63"], minify:true, plugins:testKeyPlugin, define:{INSTALLED:JSON.stringify(installed)}});
 await writeFile(
   "dist/version.json",
   JSON.stringify(
     {
       name: "Dado Player",
       version: pkg.version,
+      releaseVersion: pkg.releaseVersion,
       platform: "Samsung Tizen",
       minimumTizen: legacy ? "5.0" : "6.5",
-      browserTarget: legacy ? "chrome63" : "chrome85",
+      browserTarget: "chrome63",
       licenseTestBuild: !!testConfig,
       update: installed,
     },
@@ -87,4 +92,4 @@ await writeFile(
     2,
   ),
 );
-console.log(`Dado Player Tizen ${pkg.version}: ${out}`);
+console.log(`Dado Player Tizen ${pkg.releaseVersion}: ${out}`);

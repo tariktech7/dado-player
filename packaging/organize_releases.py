@@ -59,9 +59,9 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--install-windows":
         install_windows(sys.argv[2])
     release = json.loads((ROOT / "release.json").read_text(encoding="utf-8"))
-    tv = json.loads((ROOT / "SmartTV/client/package.json").read_text())["version"]
+    tv = json.loads((ROOT / "SmartTV/client/package.json").read_text())["releaseVersion"]
     for file in RELEASES.glob("Dado-Player-Tizen*.wgt"):
-        version = re.fullmatch(r"Dado-Player-Tizen(?:5)?-(\d+\.\d+\.\d+)(?:-unsigned)?\.wgt", file.name)
+        version = re.fullmatch(r"Dado-Player-Tizen(?:5)?-(\d+\.\d+\.\d+(?:\.[1-9])?)(?:-unsigned)?\.wgt", file.name)
         if version and version[1] != tv:
             archive(file, "Samsung-Tizen", version[1])
     ipa = RELEASES / "Dado-Player-unsigned.ipa"
@@ -102,7 +102,7 @@ def main():
                                 sha256=hashlib.sha256(file.read_bytes()).hexdigest(), assetLabel=label))
     if current_ipa:
         current.append(dict(platform="iOS (AltStore/Sideloadly)",
-                            version=f"{ios['version']} / Build {ios['build']}", file=ipa.name,
+                            version=f"{tv} / Build {ios['build']}", file=ipa.name,
                             bytes=ipa.stat().st_size, sha256=hashlib.sha256(ipa.read_bytes()).hexdigest(),
                             assetLabel=f"ios-build-{ios['build']}"))
     usb_preparation = RELEASES / f"Dado-Player-Samsung-USB-Vorbereitung-{tv}.zip"

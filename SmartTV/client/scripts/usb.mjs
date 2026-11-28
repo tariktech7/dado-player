@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {zipSync} from 'fflate';
-const version=JSON.parse(await readFile('../../release.json','utf8')).version;
+const version=JSON.parse(await readFile('package.json','utf8')).releaseVersion;
 const release=path.resolve('../../Releases'),source=path.join(release,`Dado-Player-Tizen-${version}.wgt`);
 const wgt=await readFile(source),hash=data=>createHash('sha256').update(data).digest('hex');
 const arg=name=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1];};

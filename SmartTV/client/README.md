@@ -1,42 +1,36 @@
 # Dado Player für Samsung Tizen
 
-Eigenständige TV-Web-App, gemeinsamer Beta-Stand **0.7.5**. Standardziel: Tizen **6.5+**
-(Chromium 85). Für 2019-Geräte mit Tizen 5.0/Chromium 63 gibt es ein separates Buildprofil.
-Der Standard-Test-TV GQ77S94CATXZG meldet Tizen 9.0; ein GQ55Q60RGTXZG mit Tizen 5.0
-wurde am 18. November 2026 mit dem älteren Profil erfolgreich installiert und gestartet.
+Beide Samsung-Pakete verwenden dieselbe TV-Web-App, dieselben Ressourcen und
+dasselbe für Chromium 63 übersetzte JavaScript. Die Paketprofile deklarieren Tizen
+**5.0+** (Modelljahr 2019) bzw. **6.5+**. Die vorhandenen App- und Update-Identitäten
+bleiben pro Paketprofil erhalten.
 
-## Tizen 5.0 / Modelljahr 2019
+## Beide Samsung-Pakete bauen
 
-In PowerShell im Clientordner:
+Vom Repository-Stamm in PowerShell:
 
 ```powershell
-$env:DADO_TIZEN_PROFILE='2019'
-npm run check
+./SmartTV/client/build.ps1
+./SmartTV/client/build.ps1 -SigningProfile DadoTV -LegacySigningProfile DadoTV2019
+```
+
+Der Einstieg baut und prüft beide Widgets derselben Produktversion. Ohne
+Signierungsprofil entstehen zwei als unsigniert gekennzeichnete Pakete. Mit Signatur
+heißen sie `Dado-Player-Tizen-<VERSION>.wgt` und `Dado-Player-Tizen5-<VERSION>.wgt`.
+Verwende je Ziel ein Samsung-Distributorzertifikat, das den jeweiligen TV enthält.
+Mit `DADO_PACKAGE_DIR` kann ein separater Ausgabeordner gewählt werden.
+
+Für lokale Browser-Tests beider Profile im Clientordner:
+
+```powershell
 npm run test:ui
-$env:DADO_PACKAGE_DIR='../../Releases/Tests/Samsung-Tizen5'
-npm run package -- --profile DEIN_SAMSUNG_TV_PROFIL
+$env:DADO_TIZEN_PROFILE='2019'
+npm run test:ui
+Remove-Item Env:DADO_TIZEN_PROFILE
 ```
 
-`TIZEN_CLI` muss wie beim Standardbuild auf die SDK-CLI zeigen. Das Samsung-Distributor-
-Zertifikat muss diesen TV enthalten; bestehende Autorenzertifikate und andere Geräteprofile
-behalten. Paket anschließend mit `tizen install -s TV_IP:26101 -n Dado-Player-Tizen-0.7.9.wgt -- PAKETORDNER`
-installieren und `tizen run -s TV_IP:26101 -p DadoPlayTV.Player` starten.
-
-Das Profil setzt die deklarierte Mindestversion auf 5.0 und übersetzt JavaScript für Chrome 63.
-Es ergänzt fehlende replaceAll/flatMap/UUID-/ResizeObserver-APIs und abbrechbare Netzwerkanfragen
-über XMLHttpRequest. Fokus ohne automatische Scrollsprünge bleibt erhalten. Browsertests
-entfernen die betreffenden modernen APIs gezielt; tatsächliche TV-Wiedergabe separat prüfen.
-
-Danach die Variablen entfernen und den Standard-Build wiederherstellen:
-
-```powershell
-Remove-Item Env:DADO_TIZEN_PROFILE,Env:DADO_PACKAGE_DIR -ErrorAction SilentlyContinue
-npm run build
-```
-
-Das Eltern-TV-Paket bleibt bewusst getrennt vom veröffentlichten Standard-WGT; der normale
-Release wird durch diesen Testbuild nicht ersetzt. Noch keine Zusage für Tizen vor 5.0.
-Ältere Geräte und LG webOS sind noch keine freigegebenen Ziele.
+Die Browser-Tests simulieren Samsung-APIs und fehlende Chromium-Funktionen.
+Installation, Wiedergabe und Fernbedienung auf dem Gerät separat prüfen.
 
 USB-Verteilung: [USB-STATUS.md](../USB-STATUS.md).
 Das lokale Skript `npm run usb` erstellt ohne Samsung-TMG/Lizenzdateien nur ein klar
@@ -87,9 +81,7 @@ Node 24 und npm, vom Repository-Stamm:
 ```
 
 Der Einstieg führt `npm ci`, TypeScript-Prüfung, Unit-Tests und esbuild aus und erzeugt
-`Releases/Dado-Player-Tizen-0.6.0-unsigned.wgt`. **Unsigniert bedeutet: noch nicht auf einem
-echten Samsung-TV installierbar.** Das Paket ist kein mit einem Emulatorzertifikat
-fälschlich als gerätegeeignet ausgewiesener Build.
+beide Pakete. **Unsignierte Pakete sind auf Samsung-TVs nicht installierbar.**
 
 Für Entwicklung im Unterordner:
 
